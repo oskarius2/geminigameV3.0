@@ -779,6 +779,7 @@ export default function App() {
           const tangent = samplePathTangent(corrLevel, progress, next.world.width, next.world.height);
           const normal = { x: -tangent.y, y: tangent.x };
           next.campaignCameraPos = camPos;
+          next.campaignZoom = Math.min(0.75, Math.max(0.2, (dimensions.width * 0.85) / (corrLevel.corridorHalfWidth * 2)));
 
           const hw = corrLevel.corridorHalfWidth;
           const dx = player.pos.x - camPos.x;
@@ -792,6 +793,7 @@ export default function App() {
         }
       } else {
         next.campaignCameraPos = null;
+        next.campaignZoom = null;
       }
 
       const fireIntervalBase = 120; // Super rapid fire base
@@ -1152,7 +1154,7 @@ export default function App() {
       }
 
       // Camera follow
-      const zoom = isMobile ? 0.5 : 0.5;
+      const zoom = next.campaignZoom ?? 0.5;
       const viewW = dimensions.width / zoom;
       const viewH = dimensions.height / zoom;
       const camFocus = next.campaignCameraPos ?? player.pos;

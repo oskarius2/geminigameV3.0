@@ -91,7 +91,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
   ctx.save();
   ctx.translate(offsetX, offsetY);
 
-  const zoom = 0.5; // Fixed zoom
+  const zoom = state.campaignZoom ?? 0.5;
   const width = safeScreenWidth / zoom;
   const height = safeScreenHeight / zoom;
 

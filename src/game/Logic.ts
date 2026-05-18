@@ -237,6 +237,7 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
     campaignLevelId: null,
     campaignDialogQueue: [],
     campaignCameraPos: null,
+    campaignZoom: null,
     equippedArtifacts: {
       CANNON_A: null,
       CANNON_B: null,
