@@ -798,14 +798,13 @@ export default function App() {
           const nearest = next.enemies[Math.floor(Math.random() * next.enemies.length)];
           if (nearest && nearest.pos.distanceTo(player.pos) < 400) {
             nearest.health -= 50;
-            next.particles.push(...createImpact(nearest.pos, '#60a5fa', 5));
+            if (next.qualityLevel === 'high') next.particles.push(...createImpact(nearest.pos, '#60a5fa', 2));
             if (next.passives.includes('chain_god')) {
               let chains = 0;
               for (const other of next.enemies) {
                 if (chains >= 2) break;
                 if (other.id !== nearest.id && other.health > 0 && other.pos.distanceTo(nearest.pos) < 180) {
                   other.health -= 40;
-                  next.particles.push(...createImpact(other.pos, '#38bdf8', 4));
                   chains++;
                 }
               }
@@ -954,8 +953,9 @@ export default function App() {
       updateHazards(next, dt);
       updateEnemies(next, dt);
       next.particles = updateParticles(next.particles, dt, next.player.pos);
-      if (next.qualityLevel === 'low' && next.particles.length > 150) {
-        next.particles.splice(0, next.particles.length - 150);
+      const PARTICLE_CAP = next.qualityLevel === 'low' ? 20 : 30;
+      if (next.particles.length > PARTICLE_CAP) {
+        next.particles.splice(0, next.particles.length - PARTICLE_CAP);
       }
 
       // Stage Transition Logic
@@ -1086,7 +1086,7 @@ export default function App() {
         for (const obs of next.obstacles) {
           if (checkProjectileObstacleCollision(p, obs)) {
             hitObs = true;
-            next.particles.push(...createImpact(p.pos, p.color, 2));
+            if (next.qualityLevel === 'high') next.particles.push(...createImpact(p.pos, p.color, 2));
             break;
           }
         }
@@ -1099,8 +1099,7 @@ export default function App() {
         if (p.ownerId !== 'player') {
           if (checkCollision(p, player)) {
             if (next.dashIFrameTimer > 0 || next.playerIFrameTimer > 0) {
-              // Just visual impact if ignoring damage
-              next.particles.push(...createImpact(player.pos, '#ffffff', 2));
+              if (next.qualityLevel === 'high') next.particles.push(...createImpact(player.pos, '#ffffff', 2));
               p.health = 0;
               continue;
             }
@@ -1263,12 +1262,11 @@ export default function App() {
                   const pNorm = p.velocity.magnitude() > 0.01 ? p.velocity.normalize() : new Vector2(1, 0);
                   e.knockback = new Vector2(pNorm.x * kbForce, pNorm.y * kbForce);
 
-                  if (isCrit) {
-                    next.particles.push(...createExplosion(e.pos, '#ffffff', 5, 2));
-                  }
-
                   const chaosFactor = Math.max(1, next.enemies.length / 50);
                   const isKill = e.health <= 0;
+                  const isHeavy = e.enemyType === EnemyType.BOSS || e.enemyType === EnemyType.TANK || e.enemyType === EnemyType.ELITE;
+
+                  // Damage numbers always — particles only on light enemies at low chaos
                   spawnDamageNumber(
                     next.damageTexts,
                     e.pos.clone(),
@@ -1279,8 +1277,8 @@ export default function App() {
                     isKill
                   );
 
-                  if (next.qualityLevel === 'high' && Math.random() > (1 - 0.2/chaosFactor)) {
-                    next.particles.push(...createImpact(p.pos, p.color || '#ffffff', isCrit ? 6 : 1));
+                  if (!isHeavy && next.qualityLevel === 'high' && Math.random() > (1 - 0.2/chaosFactor)) {
+                    next.particles.push(...createImpact(p.pos, p.color || '#ffffff', 1));
                   }
 
                   if (e.health <= 0) {
@@ -1323,16 +1321,25 @@ export default function App() {
                     }
                     
                     const rarityColor = e.enemyType === EnemyType.BOSS ? '#fbbf24' : e.color;
-                    next.particles.push(...createImplosion(e.pos, rarityColor, Math.max(3, 8 / chaosFactor)));
-                    const explCount = e.enemyType === EnemyType.BOSS ? 40 : (10 / chaosFactor);
-                    next.particles.push(...createExplosion(e.pos, e.color, Math.max(2, explCount), 1.5));
+                    if (e.enemyType === EnemyType.BOSS) {
+                      // Boss death: keep full explosion, it's a moment
+                      next.particles.push(...createImplosion(e.pos, rarityColor, 4));
+                      next.particles.push(...createExplosion(e.pos, e.color, 8, 1.5));
+                    } else if (!isHeavy) {
+                      // Light enemies: small pop, capped by chaosFactor
+                      if (Math.random() < 1 / chaosFactor) {
+                        next.particles.push(...createExplosion(e.pos, e.color, Math.max(1, Math.floor(3 / chaosFactor)), 1.5));
+                      }
+                    }
+                    // TANK/ELITE: no particles, just screenshake
                     next.experience += 25;
-                    
+
                     // Reduced screenshake in high chaos
                     const shakeMult = 1 / Math.sqrt(chaosFactor);
                     next.screenshake = Math.min(next.screenshake + (e.enemyType === EnemyType.BOSS ? 8 : 2) * shakeMult, 15);
-                    
+
                     if (e.enemyType !== EnemyType.BOSS) {
+                      // 1-frame flash only — not a value ramp
                       next.screenFlash = Math.max(next.screenFlash, 1);
                       // Give scrap reward
                       const scrapReward = Math.random() < 0.3 ? (next.activeTraits.includes('scavenger') ? 2 : 1) : 0;
