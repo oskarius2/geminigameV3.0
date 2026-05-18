@@ -14,6 +14,15 @@ export interface PathWaypoint {
   y: number;
 }
 
+/** Obstacle placed along the level path. Coords normalized 0–1. */
+export interface ObstacleSpec {
+  x: number;
+  y: number;
+  type: 'CIRCLE' | 'RECT';
+  radius: number;  // world-space (not normalized) — same scale as corridorHalfWidth
+  color: string;
+}
+
 export const PORTAL_TRIGGER_RADIUS = 180; // world-space pixels
 
 export interface CampaignLevel {
@@ -31,6 +40,7 @@ export interface CampaignLevel {
   portalPos: PathWaypoint;   // convenience alias = path[path.length - 1]
   spawnRadius: number;       // world-space radius around active waypoint to spawn enemies
   corridorHalfWidth: number; // world-space half-width of the on-rails corridor
+  obstacles: ObstacleSpec[]; // static hazards placed along the corridor
 }
 
 // typeOverride reference (from spawnEnemy switch):
@@ -67,6 +77,12 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     portalPos: { x: 0.75, y: 0.22 },
     spawnRadius: 700,
     corridorHalfWidth: 550,
+    obstacles: [
+      { x: 0.57, y: 0.45, type: 'CIRCLE', radius: 90,  color: 'rgba(100,120,140,0.7)' },
+      { x: 0.62, y: 0.36, type: 'CIRCLE', radius: 70,  color: 'rgba(80,100,120,0.7)'  },
+      { x: 0.70, y: 0.30, type: 'RECT',   radius: 110, color: 'rgba(90,110,130,0.7)'  },
+      { x: 0.67, y: 0.24, type: 'CIRCLE', radius: 60,  color: 'rgba(100,120,140,0.7)' },
+    ],
   },
 
   {
@@ -100,6 +116,13 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     portalPos: { x: 0.80, y: 0.25 },
     spawnRadius: 750,
     corridorHalfWidth: 480,
+    obstacles: [
+      { x: 0.63, y: 0.57, type: 'CIRCLE', radius: 80,  color: 'rgba(120,80,40,0.7)'  },
+      { x: 0.68, y: 0.52, type: 'CIRCLE', radius: 60,  color: 'rgba(100,60,30,0.7)'  },
+      { x: 0.72, y: 0.44, type: 'RECT',   radius: 100, color: 'rgba(110,70,35,0.7)'  },
+      { x: 0.76, y: 0.36, type: 'CIRCLE', radius: 75,  color: 'rgba(120,80,40,0.7)'  },
+      { x: 0.74, y: 0.28, type: 'CIRCLE', radius: 55,  color: 'rgba(100,60,30,0.7)'  },
+    ],
   },
 
   {
@@ -135,6 +158,13 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     portalPos: { x: 0.22, y: 0.50 },
     spawnRadius: 700,
     corridorHalfWidth: 400,
+    obstacles: [
+      { x: 0.39, y: 0.58, type: 'CIRCLE', radius: 95,  color: 'rgba(60,180,160,0.5)' },
+      { x: 0.35, y: 0.65, type: 'RECT',   radius: 120, color: 'rgba(40,160,140,0.5)' },
+      { x: 0.29, y: 0.68, type: 'CIRCLE', radius: 70,  color: 'rgba(60,180,160,0.5)' },
+      { x: 0.24, y: 0.62, type: 'CIRCLE', radius: 85,  color: 'rgba(40,160,140,0.5)' },
+      { x: 0.24, y: 0.55, type: 'RECT',   radius: 90,  color: 'rgba(60,180,160,0.5)' },
+    ],
   },
 
   {
@@ -172,6 +202,13 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     portalPos: { x: 0.60, y: 0.32 },
     spawnRadius: 800,
     corridorHalfWidth: 600,
+    obstacles: [
+      { x: 0.41, y: 0.44, type: 'CIRCLE', radius: 100, color: 'rgba(80,40,120,0.6)'  },
+      { x: 0.32, y: 0.35, type: 'RECT',   radius: 130, color: 'rgba(60,20,100,0.6)'  },
+      { x: 0.36, y: 0.26, type: 'CIRCLE', radius: 80,  color: 'rgba(80,40,120,0.6)'  },
+      { x: 0.45, y: 0.22, type: 'CIRCLE', radius: 70,  color: 'rgba(60,20,100,0.6)'  },
+      { x: 0.54, y: 0.27, type: 'RECT',   radius: 110, color: 'rgba(80,40,120,0.6)'  },
+    ],
   },
 
   {
@@ -214,6 +251,14 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     portalPos: { x: 0.22, y: 0.22 },
     spawnRadius: 900,
     corridorHalfWidth: 420,
+    obstacles: [
+      { x: 0.44, y: 0.44, type: 'CIRCLE', radius: 85,  color: 'rgba(200,60,40,0.6)'  },
+      { x: 0.38, y: 0.38, type: 'RECT',   radius: 110, color: 'rgba(180,40,20,0.6)'  },
+      { x: 0.32, y: 0.32, type: 'CIRCLE', radius: 75,  color: 'rgba(200,60,40,0.6)'  },
+      { x: 0.27, y: 0.27, type: 'CIRCLE', radius: 90,  color: 'rgba(180,40,20,0.6)'  },
+      { x: 0.30, y: 0.23, type: 'RECT',   radius: 100, color: 'rgba(200,60,40,0.6)'  },
+      { x: 0.24, y: 0.28, type: 'CIRCLE', radius: 65,  color: 'rgba(180,40,20,0.6)'  },
+    ],
   },
 ];
 

@@ -268,6 +268,14 @@ export default function App() {
     initialState.gameMode = 'CAMPAIGN';
     initialState.campaignLevelId = levelId;
     initialState.enemiesToKill = level.enemiesToKill;
+    initialState.obstacles = level.obstacles.map((spec, i) => ({
+      id: `camp_obs_${i}`,
+      type: spec.type,
+      pos: new Vector2(spec.x * initialState.world.width, spec.y * initialState.world.height),
+      size: new Vector2(spec.radius, spec.radius),
+      rotation: 0,
+      color: spec.color,
+    }));
     initialState.qualityLevel = 'high';
     initialState.threatLevel = computeThreatLevel(initialState);
     initialState.threatPeak = initialState.threatLevel;
@@ -765,7 +773,17 @@ export default function App() {
 
       player.pos = player.pos.add(player.velocity);
       player.aimDir = aimDir;
+      const preObsPos = player.pos.clone();
       resolveObstacleCollision(player, next.obstacles);
+      // If push-out moved the player, they were touching an obstacle → damage
+      if (next.gameMode === 'CAMPAIGN' && next.playerIFrameTimer <= 0) {
+        const pushed = player.pos.sub(preObsPos).magnitude();
+        if (pushed > 0.5) {
+          player.health -= 8;
+          next.playerIFrameTimer = 40;
+          next.screenshake = 4;
+        }
+      }
       player.pos.x = Math.max(player.radius, Math.min(next.world.width - player.radius, player.pos.x));
       player.pos.y = Math.max(player.radius, Math.min(next.world.height - player.radius, player.pos.y));
 
