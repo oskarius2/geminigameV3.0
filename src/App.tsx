@@ -18,7 +18,7 @@ import { getActiveSynergies, countTag } from './game/buffs/synergies';
 import { SynergyBar } from './game/controls/SynergyBar';
 import { RunSummary } from './game/controls/RunSummary';
 import { PASSIVE_BUFFS } from './game/content/buffs';
-import { getCampaignLevel, pickCampaignEnemyType } from './game/content/campaignLevels';
+import { getCampaignLevel, pickCampaignEnemyType, getSpawnPosAlongPath, PORTAL_TRIGGER_RADIUS } from './game/content/campaignLevels';
 import { CampaignSelect, markLevelComplete } from './game/controls/CampaignSelect';
 import { BuffRarity } from './game/types';
 import { Vector2 } from './game/utils/vector';
@@ -1010,6 +1010,24 @@ export default function App() {
       }
       }
 
+      // Campaign portal-trigger detection
+      if (next.gameMode === 'CAMPAIGN' && next.campaignLevelId && !next.bossActive) {
+        const portalLevel = getCampaignLevel(next.campaignLevelId);
+        if (portalLevel && next.enemiesToKill <= 0) {
+          const pw = portalLevel.portalPos;
+          const portalWorldX = pw.x * next.world.width;
+          const portalWorldY = pw.y * next.world.height;
+          const dx = next.player.pos.x - portalWorldX;
+          const dy = next.player.pos.y - portalWorldY;
+          if (Math.sqrt(dx * dx + dy * dy) < PORTAL_TRIGGER_RADIUS) {
+            next.bossActive = true;
+            next.screenshake = 8;
+            next.screenFlash = 6;
+            playSfx('augment');
+          }
+        }
+      }
+
       // Spawning logic
       if (next.gameMode === 'AIM_TRAINER') {
         if (next.enemies.length < 15) {
@@ -1060,9 +1078,14 @@ export default function App() {
         // Spawn chance ramps up heavily with progress and threat
         const spawnChance = Math.min(mobile ? 0.35 : 0.85, 0.01 + (progressToBoss * 0.4) + (threatFactor * 0.2));
 
-        const spawnOne = () => campaignLevel
-          ? spawnEnemy(next, pickCampaignEnemyType(campaignLevel, 1 - next.enemiesToKill / totalToKill))
-          : spawnEnemy(next);
+        const spawnOne = () => {
+          if (campaignLevel) {
+            const typeOv = pickCampaignEnemyType(campaignLevel, 1 - next.enemiesToKill / totalToKill);
+            const posOv = getSpawnPosAlongPath(campaignLevel, next.enemiesToKill, next.world.width, next.world.height);
+            return spawnEnemy(next, typeOv, posOv);
+          }
+          return spawnEnemy(next);
+        };
 
         if (!next.bossActive && next.enemiesToKill > next.enemies.length && next.enemies.length < maxEnemies) {
           if (Math.random() < spawnChance) {
