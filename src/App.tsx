@@ -778,7 +778,6 @@ export default function App() {
           const camPos = samplePath(corrLevel, progress, next.world.width, next.world.height);
           const tangent = samplePathTangent(corrLevel, progress, next.world.width, next.world.height);
           const normal = { x: -tangent.y, y: tangent.x };
-          next.campaignCameraPos = camPos;
           next.campaignZoom = Math.min(0.75, Math.max(0.2, (dimensions.width * 0.85) / (corrLevel.corridorHalfWidth * 2)));
 
           const hw = corrLevel.corridorHalfWidth;
@@ -790,6 +789,8 @@ export default function App() {
           const cForward = Math.max(-hw, Math.min(hw * 1.5, forward));
           player.pos.x = camPos.x + cLateral * normal.x + cForward * tangent.x;
           player.pos.y = camPos.y + cLateral * normal.y + cForward * tangent.y;
+          // Center camera on player (after clamp), not on path waypoint
+          next.campaignCameraPos = { x: player.pos.x, y: player.pos.y };
         }
       } else {
         next.campaignCameraPos = null;
