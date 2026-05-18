@@ -807,10 +807,12 @@ export default function App() {
           player.pos.y = corrCenter.y + clampedLateral * corrNormal.y + forward * corrTangent.y;
 
           next.campaignCameraPos = { x: player.pos.x, y: player.pos.y };
+          next.campaignCameraAngle = Math.atan2(corrTangent.y, corrTangent.x);
         }
       } else {
         next.campaignCameraPos = null;
         next.campaignZoom = null;
+        next.campaignCameraAngle = null;
       }
 
       const fireIntervalBase = 120; // Super rapid fire base

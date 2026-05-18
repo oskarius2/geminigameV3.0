@@ -97,6 +97,15 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
 
   ctx.scale(zoom, zoom);
 
+  // Campaign: rotate world around screen center to align path tangent upward
+  if (state.campaignCameraAngle !== null && state.campaignCameraAngle !== undefined) {
+    const cx = safeScreenWidth / 2 / zoom;
+    const cy = safeScreenHeight / 2 / zoom;
+    ctx.translate(cx, cy);
+    ctx.rotate(-(state.campaignCameraAngle));
+    ctx.translate(-cx, -cy);
+  }
+
   // Campaign: clip all world rendering to corridor polygon — dark background shows outside
   if (state.gameMode === 'CAMPAIGN' && state.campaignLevelId) {
     const clipLevel = getCampaignLevel(state.campaignLevelId);

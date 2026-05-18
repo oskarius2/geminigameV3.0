@@ -231,6 +231,7 @@ export interface GameState {
   campaignDialogQueue: string[];
   campaignCameraPos: { x: number; y: number } | null;
   campaignZoom: number | null;
+  campaignCameraAngle: number | null;
   equippedArtifacts: Record<ArtifactSlot, string | null>;
   activeWeaponSlot: 'CANNON_A' | 'CANNON_B';
   cardTimer: number;
