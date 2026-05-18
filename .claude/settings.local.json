@@ -5,7 +5,8 @@
       "Bash(npm run *)",
       "Bash(node_modules\\\\.bin\\\\vite build *)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\oskar\\\\Desktop\\\\geminigameV3.0-main\\\\geminigameV3.0-main\\\\src\" -Recurse -Include \"*.ts\",\"*.tsx\")",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(.\\\\node_modules\\\\.bin\\\\tsc.cmd --noEmit)"
     ]
   }
 }
