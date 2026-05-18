@@ -664,7 +664,7 @@ export default function App() {
       if (aimMag > joystickDeadZone) {
         aimDir = new Vector2(controls.current.aim.x, controls.current.aim.y).normalize();
       } else {
-        const zoom = isMobile ? 0.5 : 0.5;
+        const zoom = next.campaignZoom ?? 0.5;
         const playerScreenX = (player.pos.x - next.camera.x) * zoom;
         const playerScreenY = (player.pos.y - next.camera.y) * zoom;
         aimDir = new Vector2(
