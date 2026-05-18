@@ -1,0 +1,8 @@
+{
+  "name": "spacehero.io",
+  "description": "A refined, high-octane neon arcade shooter with twin-stick controls, rebalanced difficulty for smooth progression, and optimized performance.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
