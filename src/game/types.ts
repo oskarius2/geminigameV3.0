@@ -229,6 +229,7 @@ export interface GameState {
   gameMode: 'NORMAL' | 'SURVIVAL' | 'AIM_TRAINER' | 'CAMPAIGN';
   campaignLevelId: string | null;
   campaignDialogQueue: string[];
+  campaignCameraPos: { x: number; y: number } | null;
   equippedArtifacts: Record<ArtifactSlot, string | null>;
   activeWeaponSlot: 'CANNON_A' | 'CANNON_B';
   cardTimer: number;

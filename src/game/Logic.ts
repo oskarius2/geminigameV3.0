@@ -236,6 +236,7 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
     gameMode: 'NORMAL',
     campaignLevelId: null,
     campaignDialogQueue: [],
+    campaignCameraPos: null,
     equippedArtifacts: {
       CANNON_A: null,
       CANNON_B: null,
@@ -551,7 +552,7 @@ export function updateParticles(particles: Particle[], dt: number = 1, playerPos
   });
 }
 
-export function spawnEnemy(state: GameState, typeOverride?: number): Entity {
+export function spawnEnemy(state: GameState, typeOverride?: number, posOverride?: { x: number; y: number }): Entity {
   const worldWidth = state.world.width;
   const worldHeight = state.world.height;
   const playerPos = state.player.pos;
@@ -559,20 +560,24 @@ export function spawnEnemy(state: GameState, typeOverride?: number): Entity {
   const stage = state.stage;
   const threatMult = getThreatMult(state);
 
-  const angle = Math.random() * Math.PI * 2;
-  const distance = 1000 + Math.random() * 300;
-
-  let pos = new Vector2(
-    playerPos.x + Math.cos(angle) * distance,
-    playerPos.y + Math.sin(angle) * distance
-  );
-
-  pos.x = Math.max(0, Math.min(worldWidth, pos.x));
-  pos.y = Math.max(0, Math.min(worldHeight, pos.y));
-
-  // Spread to avoid stacking when multiple enemies spawn simultaneously
-  pos.x = Math.max(0, Math.min(worldWidth, pos.x + (Math.random() - 0.5) * 200));
-  pos.y = Math.max(0, Math.min(worldHeight, pos.y + (Math.random() - 0.5) * 200));
+  let pos: Vector2;
+  if (posOverride) {
+    pos = new Vector2(
+      Math.max(0, Math.min(worldWidth, posOverride.x + (Math.random() - 0.5) * 200)),
+      Math.max(0, Math.min(worldHeight, posOverride.y + (Math.random() - 0.5) * 200))
+    );
+  } else {
+    const angle = Math.random() * Math.PI * 2;
+    const distance = 1000 + Math.random() * 300;
+    pos = new Vector2(
+      playerPos.x + Math.cos(angle) * distance,
+      playerPos.y + Math.sin(angle) * distance
+    );
+    pos.x = Math.max(0, Math.min(worldWidth, pos.x));
+    pos.y = Math.max(0, Math.min(worldHeight, pos.y));
+    pos.x = Math.max(0, Math.min(worldWidth, pos.x + (Math.random() - 0.5) * 200));
+    pos.y = Math.max(0, Math.min(worldHeight, pos.y + (Math.random() - 0.5) * 200));
+  }
 
   const skillFactor = Math.sqrt(state.score / 3500 + 1);
   const powerFactor = state.threatLevel / 100;

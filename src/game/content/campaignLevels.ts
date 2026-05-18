@@ -7,6 +7,15 @@ export interface EnemySpawnRule {
   startAt: number;      // 0.0–1.0 progress through level before type appears
 }
 
+// Normalized 0–1 coords, multiplied by world.width / world.height at runtime.
+// Player always starts near (0.5, 0.5). Portal is the final waypoint.
+export interface PathWaypoint {
+  x: number;
+  y: number;
+}
+
+export const PORTAL_TRIGGER_RADIUS = 180; // world-space pixels
+
 export interface CampaignLevel {
   id: string;
   number: number;
@@ -18,6 +27,10 @@ export interface CampaignLevel {
   enemyComposition: EnemySpawnRule[];
   bossType: EnemyType;
   backgroundTheme: 0 | 1 | 2 | 3 | 4;
+  path: PathWaypoint[];      // [start ≈ player spawn, ...intermediates, portal]
+  portalPos: PathWaypoint;   // convenience alias = path[path.length - 1]
+  spawnRadius: number;       // world-space radius around active waypoint to spawn enemies
+  corridorHalfWidth: number; // world-space half-width of the on-rails corridor
 }
 
 // typeOverride reference (from spawnEnemy switch):
@@ -44,6 +57,16 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     ],
     bossType: EnemyType.BOSS,
     backgroundTheme: 0,
+    // Gentle arc sweeping north-east — introductory, readable
+    path: [
+      { x: 0.50, y: 0.50 },
+      { x: 0.55, y: 0.38 },
+      { x: 0.65, y: 0.28 },
+      { x: 0.75, y: 0.22 },
+    ],
+    portalPos: { x: 0.75, y: 0.22 },
+    spawnRadius: 700,
+    corridorHalfWidth: 550,
   },
 
   {
@@ -66,6 +89,17 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     ],
     bossType: EnemyType.BOSS,
     backgroundTheme: 1,
+    // S-curve — weaves through the swarm zone
+    path: [
+      { x: 0.50, y: 0.50 },
+      { x: 0.60, y: 0.60 },
+      { x: 0.70, y: 0.50 },
+      { x: 0.78, y: 0.38 },
+      { x: 0.80, y: 0.25 },
+    ],
+    portalPos: { x: 0.80, y: 0.25 },
+    spawnRadius: 750,
+    corridorHalfWidth: 480,
   },
 
   {
@@ -90,6 +124,17 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     ],
     bossType: EnemyType.BOSS,
     backgroundTheme: 2,
+    // Deep dive south then curve up to crystal chamber
+    path: [
+      { x: 0.50, y: 0.50 },
+      { x: 0.42, y: 0.62 },
+      { x: 0.32, y: 0.70 },
+      { x: 0.25, y: 0.62 },
+      { x: 0.22, y: 0.50 },
+    ],
+    portalPos: { x: 0.22, y: 0.50 },
+    spawnRadius: 700,
+    corridorHalfWidth: 400,
   },
 
   {
@@ -115,6 +160,18 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     ],
     bossType: EnemyType.BOSS,
     backgroundTheme: 3,
+    // Spiral inward — disorienting, void-like
+    path: [
+      { x: 0.50, y: 0.50 },
+      { x: 0.35, y: 0.40 },
+      { x: 0.28, y: 0.28 },
+      { x: 0.38, y: 0.20 },
+      { x: 0.52, y: 0.22 },
+      { x: 0.60, y: 0.32 },
+    ],
+    portalPos: { x: 0.60, y: 0.32 },
+    spawnRadius: 800,
+    corridorHalfWidth: 600,
   },
 
   {
@@ -146,11 +203,114 @@ export const CAMPAIGN_LEVELS: CampaignLevel[] = [
     ],
     bossType: EnemyType.BOSS,
     backgroundTheme: 4,
+    // Long diagonal gauntlet — no shortcuts, straight to the architect
+    path: [
+      { x: 0.50, y: 0.50 },
+      { x: 0.42, y: 0.42 },
+      { x: 0.34, y: 0.34 },
+      { x: 0.27, y: 0.27 },
+      { x: 0.22, y: 0.22 },
+    ],
+    portalPos: { x: 0.22, y: 0.22 },
+    spawnRadius: 900,
+    corridorHalfWidth: 420,
   },
 ];
 
 export function getCampaignLevel(id: string): CampaignLevel | undefined {
   return CAMPAIGN_LEVELS.find((l) => l.id === id);
+}
+
+/** Convert a normalized PathWaypoint to world-space pixels. */
+export function waypointToWorld(wp: PathWaypoint, worldW: number, worldH: number): { x: number; y: number } {
+  return { x: wp.x * worldW, y: wp.y * worldH };
+}
+
+/**
+ * Catmull-Rom spline sample.
+ * Given four control points p0–p3, returns the interpolated point at t (0–1).
+ */
+export function catmullRom(
+  p0: PathWaypoint, p1: PathWaypoint, p2: PathWaypoint, p3: PathWaypoint, t: number
+): PathWaypoint {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  return {
+    x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2*p0.x - 5*p1.x + 4*p2.x - p3.x) * t2 + (-p0.x + 3*p1.x - 3*p2.x + p3.x) * t3),
+    y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2*p0.y - 5*p1.y + 4*p2.y - p3.y) * t2 + (-p0.y + 3*p1.y - 3*p2.y + p3.y) * t3),
+  };
+}
+
+/**
+ * Returns the index of the active waypoint (look-ahead of 1) based on
+ * how many enemies remain vs total to kill.
+ */
+export function activeWaypointIndex(level: CampaignLevel, enemiesToKill: number): number {
+  const progress = Math.max(0, 1 - enemiesToKill / level.enemiesToKill);
+  const raw = Math.floor(progress * (level.path.length - 1));
+  return Math.min(raw + 1, level.path.length - 1);
+}
+
+/**
+ * Returns a world-space spawn position scattered around the active
+ * waypoint ahead of the player. Used by App.tsx to override spawnEnemy pos.
+ */
+export function getSpawnPosAlongPath(
+  level: CampaignLevel,
+  enemiesToKill: number,
+  worldW: number,
+  worldH: number
+): { x: number; y: number } {
+  const idx = activeWaypointIndex(level, enemiesToKill);
+  const wp = level.path[idx];
+  const r = level.spawnRadius;
+  const angle = Math.random() * Math.PI * 2;
+  const dist = r * 0.3 + Math.random() * r * 0.7; // inner 30%–100% of radius
+  return {
+    x: Math.max(0, Math.min(worldW, wp.x * worldW + Math.cos(angle) * dist)),
+    y: Math.max(0, Math.min(worldH, wp.y * worldH + Math.sin(angle) * dist)),
+  };
+}
+
+/**
+ * Samples a continuous world-space position along the full path at t (0–1).
+ * Uses Catmull-Rom between segments; clamps p0/p3 at edges.
+ */
+export function samplePath(
+  level: CampaignLevel,
+  t: number,
+  worldW: number,
+  worldH: number
+): { x: number; y: number } {
+  const pts = level.path;
+  const N = pts.length;
+  if (N === 1) return waypointToWorld(pts[0], worldW, worldH);
+  const clamped = Math.max(0, Math.min(1, t));
+  const total = N - 1;
+  const scaled = clamped * total;
+  const i = Math.min(Math.floor(scaled), total - 1);
+  const localT = scaled - i;
+  const p0 = pts[Math.max(0, i - 1)];
+  const p1 = pts[i];
+  const p2 = pts[Math.min(N - 1, i + 1)];
+  const p3 = pts[Math.min(N - 1, i + 2)];
+  return waypointToWorld(catmullRom(p0, p1, p2, p3, localT), worldW, worldH);
+}
+
+/** Returns the normalized tangent direction along the path at t (0–1). */
+export function samplePathTangent(
+  level: CampaignLevel,
+  t: number,
+  worldW: number,
+  worldH: number
+): { x: number; y: number } {
+  const eps = 0.01;
+  const a = samplePath(level, Math.max(0, t - eps), worldW, worldH);
+  const b = samplePath(level, Math.min(1, t + eps), worldW, worldH);
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  return { x: dx / len, y: dy / len };
 }
 
 export function pickCampaignEnemyType(

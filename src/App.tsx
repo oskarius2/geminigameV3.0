@@ -18,7 +18,7 @@ import { getActiveSynergies, countTag } from './game/buffs/synergies';
 import { SynergyBar } from './game/controls/SynergyBar';
 import { RunSummary } from './game/controls/RunSummary';
 import { PASSIVE_BUFFS } from './game/content/buffs';
-import { getCampaignLevel, pickCampaignEnemyType, getSpawnPosAlongPath, PORTAL_TRIGGER_RADIUS } from './game/content/campaignLevels';
+import { getCampaignLevel, pickCampaignEnemyType, getSpawnPosAlongPath, samplePath, samplePathTangent, PORTAL_TRIGGER_RADIUS } from './game/content/campaignLevels';
 import { CampaignSelect, markLevelComplete } from './game/controls/CampaignSelect';
 import { BuffRarity } from './game/types';
 import { Vector2 } from './game/utils/vector';
@@ -677,7 +677,7 @@ export default function App() {
       
       // Dash Initiation
       const dashCost = Math.max(12, 30 - next.dashEnergyDiscount);
-      if (controls.current.wantDash && next.energy >= dashCost && !next.isDashing) {
+      if (next.gameMode !== 'CAMPAIGN' && controls.current.wantDash && next.energy >= dashCost && !next.isDashing) {
         next.isDashing = true;
         next.dashDuration = 10;
         next.energy -= dashCost;
@@ -768,7 +768,32 @@ export default function App() {
       resolveObstacleCollision(player, next.obstacles);
       player.pos.x = Math.max(player.radius, Math.min(next.world.width - player.radius, player.pos.x));
       player.pos.y = Math.max(player.radius, Math.min(next.world.height - player.radius, player.pos.y));
-      
+
+      // Campaign corridor: clamp player to path corridor and advance camera
+      if (next.gameMode === 'CAMPAIGN' && next.campaignLevelId) {
+        const corrLevel = getCampaignLevel(next.campaignLevelId);
+        if (corrLevel) {
+          const corrTotalToKill = corrLevel.enemiesToKill;
+          const progress = Math.max(0, 1 - next.enemiesToKill / corrTotalToKill);
+          const camPos = samplePath(corrLevel, progress, next.world.width, next.world.height);
+          const tangent = samplePathTangent(corrLevel, progress, next.world.width, next.world.height);
+          const normal = { x: -tangent.y, y: tangent.x };
+          next.campaignCameraPos = camPos;
+
+          const hw = corrLevel.corridorHalfWidth;
+          const dx = player.pos.x - camPos.x;
+          const dy = player.pos.y - camPos.y;
+          const lateral = dx * normal.x + dy * normal.y;
+          const forward = dx * tangent.x + dy * tangent.y;
+          const cLateral = Math.max(-hw, Math.min(hw, lateral));
+          const cForward = Math.max(-hw, Math.min(hw * 1.5, forward));
+          player.pos.x = camPos.x + cLateral * normal.x + cForward * tangent.x;
+          player.pos.y = camPos.y + cLateral * normal.y + cForward * tangent.y;
+        }
+      } else {
+        next.campaignCameraPos = null;
+      }
+
       const fireIntervalBase = 120; // Super rapid fire base
       let fireInterval = hasPermanentOverdrive(next) ? fireIntervalBase * 0.4 : fireIntervalBase;
       if (next.buffs.overdrive > 0 && !next.permanentOverdrive) fireInterval *= 0.4;
@@ -1130,10 +1155,15 @@ export default function App() {
       const zoom = isMobile ? 0.5 : 0.5;
       const viewW = dimensions.width / zoom;
       const viewH = dimensions.height / zoom;
-      const targetCamX = player.pos.x - viewW / 2;
-      const targetCamY = player.pos.y - viewH / 2;
-      next.camera.x += (targetCamX - next.camera.x) * 0.4 * dt;
-      next.camera.y += (targetCamY - next.camera.y) * 0.4 * dt;
+      const camFocus = next.campaignCameraPos ?? player.pos;
+      const targetCamX = camFocus.x - viewW / 2;
+      const targetCamY = camFocus.y - viewH / 2;
+      next.camera.x = targetCamX; // snap in campaign; lerp otherwise handled below
+      next.camera.y = targetCamY;
+      if (!next.campaignCameraPos) {
+        next.camera.x += (targetCamX - next.camera.x) * 0.4 * dt;
+        next.camera.y += (targetCamY - next.camera.y) * 0.4 * dt;
+      }
       next.camera.x = Math.max(0, Math.min(next.world.width - viewW, next.camera.x));
       next.camera.y = Math.max(0, Math.min(next.world.height - viewH, next.camera.y));
 

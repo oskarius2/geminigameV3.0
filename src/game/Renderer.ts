@@ -1,4 +1,14 @@
 import { GameState, Entity, EntityType, ItemType, EnemyType } from './types';
+import {
+  getCampaignLevel,
+  catmullRom,
+  waypointToWorld,
+  activeWaypointIndex,
+  samplePath,
+  samplePathTangent,
+  PathWaypoint,
+  PORTAL_TRIGGER_RADIUS,
+} from './content/campaignLevels';
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWidth: number, screenHeight: number, options: { isMobile?: boolean; debug?: boolean } = {}) {
   // Ensure screen dimensions are finite to avoid canvas errors
@@ -309,6 +319,188 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
 
     ctx.restore();
   });
+
+  // --- Campaign Path + Portal ---
+  if (state.gameMode === 'CAMPAIGN' && state.campaignLevelId) {
+    const level = getCampaignLevel(state.campaignLevelId);
+    if (level && level.path.length >= 2) {
+      const now = Date.now() / 1000;
+      const ww = state.world.width;
+      const wh = state.world.height;
+      const pts = level.path;
+
+      // Progress: how far player has cleared (0–1)
+      const progress = Math.max(0, 1 - state.enemiesToKill / level.enemiesToKill);
+      const clearedUpTo = activeWaypointIndex(level, state.enemiesToKill);
+      const portalOpen = state.enemiesToKill <= 0 && !state.bossActive;
+
+      // Helper: world→screen
+      const wx = (wp: PathWaypoint) => wp.x * ww - camera.x;
+      const wy = (wp: PathWaypoint) => wp.y * wh - camera.y;
+
+      // Build full spline point list (Catmull-Rom, ~8 samples per segment)
+      const SAMPLES = 8;
+      const splinePoints: { x: number; y: number; t: number }[] = [];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p0 = pts[Math.max(0, i - 1)];
+        const p1 = pts[i];
+        const p2 = pts[i + 1];
+        const p3 = pts[Math.min(pts.length - 1, i + 2)];
+        for (let s = 0; s < SAMPLES; s++) {
+          const t = s / SAMPLES;
+          const sp = catmullRom(p0, p1, p2, p3, t);
+          const globalT = (i + t) / (pts.length - 1);
+          splinePoints.push({ x: sp.x * ww - camera.x, y: sp.y * wh - camera.y, t: globalT });
+        }
+      }
+      // Add final point
+      const last = pts[pts.length - 1];
+      splinePoints.push({ x: last.x * ww - camera.x, y: last.y * wh - camera.y, t: 1 });
+
+      ctx.save();
+
+      // 1. Uncleared path — dim dashed line
+      ctx.setLineDash([24, 16]);
+      ctx.lineDashOffset = -(now * 40) % 40; // slow animated march
+      ctx.lineWidth = isMobile ? 5 : 3;
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.18)';
+      ctx.beginPath();
+      splinePoints.forEach((p, i) => {
+        if (p.t < progress) return; // skip cleared section
+        i === 0 || splinePoints[i - 1].t < progress
+          ? ctx.moveTo(p.x, p.y)
+          : ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+
+      // 2. Cleared path — bright solid trail behind player
+      ctx.setLineDash([]);
+      ctx.lineDashOffset = 0;
+      ctx.lineWidth = isMobile ? 6 : 4;
+      ctx.strokeStyle = 'rgba(34, 211, 238, 0.55)';
+      ctx.shadowBlur = isMobile ? 0 : 10;
+      ctx.shadowColor = 'rgba(34, 211, 238, 0.4)';
+      ctx.beginPath();
+      let clearedStarted = false;
+      splinePoints.forEach((p) => {
+        if (p.t > progress) return;
+        if (!clearedStarted) { ctx.moveTo(p.x, p.y); clearedStarted = true; }
+        else ctx.lineTo(p.x, p.y);
+      });
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+
+      // 3. Waypoint dots
+      pts.forEach((wp, i) => {
+        if (i === pts.length - 1) return; // skip portal (drawn separately)
+        const sx = wx(wp);
+        const sy = wy(wp);
+        if (sx < -cullMargin || sx > width + cullMargin || sy < -cullMargin || sy > height + cullMargin) return;
+        const cleared = i < clearedUpTo;
+        ctx.beginPath();
+        ctx.arc(sx, sy, isMobile ? 10 : 7, 0, Math.PI * 2);
+        ctx.fillStyle = cleared ? 'rgba(34, 211, 238, 0.7)' : 'rgba(148, 163, 184, 0.25)';
+        ctx.fill();
+      });
+
+      // 4. Portal
+      const portal = level.portalPos;
+      const px = portal.x * ww - camera.x;
+      const py = portal.y * wh - camera.y;
+      if (px > -400 && px < width + 400 && py > -400 && py < height + 400) {
+        const pulse = 0.7 + Math.sin(now * 3) * 0.3;
+        const outerR = PORTAL_TRIGGER_RADIUS * 0.9;
+
+        if (portalOpen) {
+          // Open: bright cyan with strong glow
+          ctx.globalCompositeOperation = 'lighter';
+          const portalGrad = createSafeRadialGradient(px, py, 0, px, py, outerR);
+          if (portalGrad) {
+            portalGrad.addColorStop(0, `rgba(34, 211, 238, ${0.35 * pulse})`);
+            portalGrad.addColorStop(0.5, `rgba(6, 182, 212, ${0.15 * pulse})`);
+            portalGrad.addColorStop(1, 'transparent');
+            ctx.fillStyle = portalGrad;
+            ctx.beginPath();
+            ctx.arc(px, py, outerR, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.globalCompositeOperation = 'source-over';
+          // Outer ring
+          ctx.beginPath();
+          ctx.arc(px, py, outerR, 0, Math.PI * 2);
+          ctx.strokeStyle = `rgba(34, 211, 238, ${0.8 * pulse})`;
+          ctx.lineWidth = isMobile ? 5 : 3;
+          ctx.setLineDash([]);
+          ctx.shadowBlur = isMobile ? 0 : 24;
+          ctx.shadowColor = 'rgba(34, 211, 238, 0.8)';
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          // Inner ring
+          ctx.beginPath();
+          ctx.arc(px, py, outerR * 0.45, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pulse);
+          ctx.strokeStyle = 'rgba(224, 242, 254, 0.9)';
+          ctx.lineWidth = isMobile ? 4 : 2;
+          ctx.stroke();
+          // Label
+          ctx.font = `bold ${isMobile ? 20 : 14}px monospace`;
+          ctx.fillStyle = 'rgba(224, 242, 254, 0.9)';
+          ctx.textAlign = 'center';
+          ctx.fillText('[ ENTER ]', px, py + outerR + (isMobile ? 28 : 20));
+        } else {
+          // Locked: dim, no glow
+          ctx.beginPath();
+          ctx.arc(px, py, outerR, 0, Math.PI * 2);
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.2)';
+          ctx.lineWidth = isMobile ? 4 : 2;
+          ctx.setLineDash([12, 10]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          // Enemies remaining label
+          if (state.enemiesToKill > 0) {
+            ctx.font = `bold ${isMobile ? 18 : 12}px monospace`;
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.5)';
+            ctx.textAlign = 'center';
+            ctx.fillText(`${state.enemiesToKill} remaining`, px, py + outerR + (isMobile ? 26 : 18));
+          }
+        }
+        ctx.textAlign = 'left';
+      }
+
+      // 5. Corridor walls — parallel lines offset ±corridorHalfWidth from path
+      {
+        const hw = level.corridorHalfWidth;
+        const WALL_STEPS = 60;
+        const leftPts: { x: number; y: number }[] = [];
+        const rightPts: { x: number; y: number }[] = [];
+        for (let s = 0; s <= WALL_STEPS; s++) {
+          const t = s / WALL_STEPS;
+          const wp = samplePath(level, t, ww, wh);
+          const tang = samplePathTangent(level, t, ww, wh);
+          const nx = -tang.y;
+          const ny = tang.x;
+          leftPts.push({ x: wp.x - camera.x + nx * hw, y: wp.y - camera.y + ny * hw });
+          rightPts.push({ x: wp.x - camera.x - nx * hw, y: wp.y - camera.y - ny * hw });
+        }
+
+        const drawWall = (pts: { x: number; y: number }[]) => {
+          ctx.beginPath();
+          pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+          ctx.stroke();
+        };
+
+        ctx.setLineDash([]);
+        ctx.lineWidth = isMobile ? 4 : 2;
+        ctx.strokeStyle = 'rgba(6, 182, 212, 0.35)';
+        ctx.shadowBlur = isMobile ? 0 : 8;
+        ctx.shadowColor = 'rgba(6, 182, 212, 0.4)';
+        drawWall(leftPts);
+        drawWall(rightPts);
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.restore();
+    }
+  }
 
   // Render Hazards
   state.hazards.forEach(h => {
