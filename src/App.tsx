@@ -18,7 +18,7 @@ import { getActiveSynergies, countTag } from './game/buffs/synergies';
 import { SynergyBar } from './game/controls/SynergyBar';
 import { RunSummary } from './game/controls/RunSummary';
 import { PASSIVE_BUFFS } from './game/content/buffs';
-import { getCampaignLevel, pickCampaignEnemyType, getSpawnPosAlongPath, PORTAL_TRIGGER_RADIUS } from './game/content/campaignLevels';
+import { getCampaignLevel, pickCampaignEnemyType, getSpawnPosAlongPath, samplePath, samplePathTangent, PORTAL_TRIGGER_RADIUS } from './game/content/campaignLevels';
 import { CampaignSelect, markLevelComplete } from './game/controls/CampaignSelect';
 import { BuffRarity } from './game/types';
 import { Vector2 } from './game/utils/vector';
@@ -769,11 +769,25 @@ export default function App() {
       player.pos.x = Math.max(player.radius, Math.min(next.world.width - player.radius, player.pos.x));
       player.pos.y = Math.max(player.radius, Math.min(next.world.height - player.radius, player.pos.y));
 
-      // Campaign corridor: zoom + camera (visual only, no position clamp)
+      // Campaign corridor: hard lateral clamp + zoom + camera
       if (next.gameMode === 'CAMPAIGN' && next.campaignLevelId) {
         const corrLevel = getCampaignLevel(next.campaignLevelId);
         if (corrLevel) {
           next.campaignZoom = Math.min(0.75, Math.max(0.2, (dimensions.width * 0.85) / (corrLevel.corridorHalfWidth * 2)));
+
+          // Hard lateral clamp: player cannot cross visual walls
+          const corrProgress = Math.max(0, 1 - next.enemiesToKill / corrLevel.enemiesToKill);
+          const corrCenter = samplePath(corrLevel, corrProgress, next.world.width, next.world.height);
+          const corrTangent = samplePathTangent(corrLevel, corrProgress, next.world.width, next.world.height);
+          const corrNormal = { x: -corrTangent.y, y: corrTangent.x };
+          const offX = player.pos.x - corrCenter.x;
+          const offY = player.pos.y - corrCenter.y;
+          const lateral = offX * corrNormal.x + offY * corrNormal.y;
+          const forward = offX * corrTangent.x + offY * corrTangent.y;
+          const clampedLateral = Math.max(-corrLevel.corridorHalfWidth, Math.min(corrLevel.corridorHalfWidth, lateral));
+          player.pos.x = corrCenter.x + clampedLateral * corrNormal.x + forward * corrTangent.x;
+          player.pos.y = corrCenter.y + clampedLateral * corrNormal.y + forward * corrTangent.y;
+
           next.campaignCameraPos = { x: player.pos.x, y: player.pos.y };
         }
       } else {

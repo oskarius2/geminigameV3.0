@@ -97,6 +97,31 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
 
   ctx.scale(zoom, zoom);
 
+  // Campaign: clip all world rendering to corridor polygon — dark background shows outside
+  if (state.gameMode === 'CAMPAIGN' && state.campaignLevelId) {
+    const clipLevel = getCampaignLevel(state.campaignLevelId);
+    if (clipLevel) {
+      const ww = state.world.width, wh = state.world.height;
+      const hw = clipLevel.corridorHalfWidth;
+      const CLIP_STEPS = 60;
+      const leftPts: { x: number; y: number }[] = [];
+      const rightPts: { x: number; y: number }[] = [];
+      for (let s = 0; s <= CLIP_STEPS; s++) {
+        const t = s / CLIP_STEPS;
+        const wp = samplePath(clipLevel, t, ww, wh);
+        const tang = samplePathTangent(clipLevel, t, ww, wh);
+        const nx = -tang.y, ny = tang.x;
+        leftPts.push({ x: wp.x - camera.x + nx * hw, y: wp.y - camera.y + ny * hw });
+        rightPts.push({ x: wp.x - camera.x - nx * hw, y: wp.y - camera.y - ny * hw });
+      }
+      ctx.beginPath();
+      leftPts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+      rightPts.slice().reverse().forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.closePath();
+      ctx.clip();
+    }
+  }
+
   // --- MAP / BACKGROUND RENDERING ---
   
   // 1. Distant Orientation Marker (Large Sun/Planet)
