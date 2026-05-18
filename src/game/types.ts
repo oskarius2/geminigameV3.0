@@ -226,7 +226,9 @@ export interface GameState {
   damageTexts: DamageText[];
   combo: number;
   comboTimer: number;
-  gameMode: 'NORMAL' | 'AIM_TRAINER';
+  gameMode: 'NORMAL' | 'SURVIVAL' | 'AIM_TRAINER' | 'CAMPAIGN';
+  campaignLevelId: string | null;
+  campaignDialogQueue: string[];
   equippedArtifacts: Record<ArtifactSlot, string | null>;
   activeWeaponSlot: 'CANNON_A' | 'CANNON_B';
   cardTimer: number;

@@ -234,6 +234,8 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
     combo: 0,
     comboTimer: 0,
     gameMode: 'NORMAL',
+    campaignLevelId: null,
+    campaignDialogQueue: [],
     equippedArtifacts: {
       CANNON_A: null,
       CANNON_B: null,

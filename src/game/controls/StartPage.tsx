@@ -1,11 +1,12 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Play, Sparkles, Swords, Shield, Zap, Wind } from 'lucide-react';
+import { Play, Sparkles, Swords, Shield, Zap, Wind, Map } from 'lucide-react';
 import { ArtifactSlot, Artifact, Trait } from '../types';
 import { ARTIFACTS } from '../Logic';
 
 interface StartPageProps {
   onStart: () => void;
+  onCampaign: () => void;
   onOpenGear: () => void;
   onOpenInventory: () => void;
   relicCount: number;
@@ -24,10 +25,11 @@ const SlotIcon = ({ slot, size = 16 }: { slot: ArtifactSlot; size?: number }) =>
   }
 };
 
-export const StartPage: React.FC<StartPageProps> = ({ 
-  onStart, 
-  onOpenGear, 
-  onOpenInventory, 
+export const StartPage: React.FC<StartPageProps> = ({
+  onStart,
+  onCampaign,
+  onOpenGear,
+  onOpenInventory,
   relicCount,
   equippedArtifactIds,
   activeTraits
@@ -113,12 +115,19 @@ export const StartPage: React.FC<StartPageProps> = ({
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-black/10 to-transparent -translate-x-[200%] group-hover:animate-[shimmer_1.5s_infinite]" />
                 <Play size={20} fill="currentColor" /> INITIATE BOOT
             </button>
-            
+
+            <button
+                onClick={onCampaign}
+                className="group relative bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 hover:border-cyan-500/60 text-cyan-300 font-display font-bold py-4 px-8 rounded-xl text-base md:text-lg flex items-center justify-center gap-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
+            >
+                <Map size={18} /> CAMPAIGN
+            </button>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
               <button onClick={onOpenGear} className="group relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-sans font-medium py-4 rounded-xl text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] backdrop-blur-md">
                   <Swords size={18} className="text-white/60 group-hover:text-white transition-colors" /> LOADOUT
               </button>
-              
+
               <button onClick={onOpenInventory} className="group relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-sans font-medium py-4 rounded-xl text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] backdrop-blur-md">
                   <Sparkles size={18} className="text-white/60 group-hover:text-amber-400 transition-colors" /> VAULT ({relicCount})
               </button>

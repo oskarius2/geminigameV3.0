@@ -18,6 +18,8 @@ import { getActiveSynergies, countTag } from './game/buffs/synergies';
 import { SynergyBar } from './game/controls/SynergyBar';
 import { RunSummary } from './game/controls/RunSummary';
 import { PASSIVE_BUFFS } from './game/content/buffs';
+import { getCampaignLevel, pickCampaignEnemyType } from './game/content/campaignLevels';
+import { CampaignSelect, markLevelComplete } from './game/controls/CampaignSelect';
 import { BuffRarity } from './game/types';
 import { Vector2 } from './game/utils/vector';
 import { Artifact, ArtifactSlot, PassiveBuff, EntityType, GameState, ItemType, EnemyType, Entity, Hazard, RandomEvent } from './game/types';
@@ -98,7 +100,7 @@ export default function App() {
   } | null>(null);
 
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
-  const [screen, setScreen] = useState<'MENU' | 'GAME'>('MENU');
+  const [screen, setScreen] = useState<'MENU' | 'CAMPAIGN_SELECT' | 'GAME'>('MENU');
   const [isGearOpen, setIsGearOpen] = useState(false);
   const [isPauseMenuOpen, setIsPauseMenuOpen] = useState(false);
   
@@ -256,6 +258,31 @@ export default function App() {
 
     // Prepare traits for the run AFTER this one
     setNextRunTraits(pickRandomTraits());
+  };
+
+  const startCampaignLevel = (levelId: string) => {
+    const level = getCampaignLevel(levelId);
+    if (!level) return;
+    const initialState = INITIAL_STATE(dimensions.width, dimensions.height);
+    applyHangarLoadout(initialState, equippedArtifactIds);
+    initialState.gameMode = 'CAMPAIGN';
+    initialState.campaignLevelId = levelId;
+    initialState.enemiesToKill = level.enemiesToKill;
+    initialState.qualityLevel = 'high';
+    initialState.threatLevel = computeThreatLevel(initialState);
+    initialState.threatPeak = initialState.threatLevel;
+    initialState.runStartTime = Date.now();
+    initialState.runArtifactsUnlockedThisRun = [];
+    initialState.cardTimer = 30;
+    gameStateRef.current = initialState;
+    setNewUnlockIds([]);
+    setShowArtifactUnlock(false);
+    setArtifactUnlockChoices([]);
+    syncUi();
+    setScreen('GAME');
+    setIsPauseMenuOpen(false);
+    resumeAudio();
+    if (!musicMuted) startMusic();
   };
 
   const syncUi = () => {
@@ -1010,7 +1037,13 @@ export default function App() {
         const mobile = typeof window !== 'undefined' && window.innerWidth < 768;
         const threatFactor = next.threatLevel / 100;
 
-        let totalToKill = 150 + (next.stage * 100);
+        const campaignLevel = next.gameMode === 'CAMPAIGN' && next.campaignLevelId
+          ? getCampaignLevel(next.campaignLevelId)
+          : null;
+
+        let totalToKill = campaignLevel
+          ? campaignLevel.enemiesToKill
+          : 150 + (next.stage * 100);
         let progressToBoss = Math.max(0, 1.0 - (next.enemiesToKill / totalToKill));
         if (next.bossActive || next.gameMode === 'SURVIVAL') progressToBoss = 1.0 + (next.survivalTime / 600);
 
@@ -1019,7 +1052,7 @@ export default function App() {
         // Start very low, scale massively by combining progress and threat
         const baseEnemies = 5 + (progressToBoss * progressToBoss * 150) + ((next.stage - 1) * 40);
         const powerEnemies = threatFactor * (mobile ? 100 : 200);
-        const maxEnemiesLimit = mobile ? 50 : 120; // Hard cap physics objects to prevent lag
+        const maxEnemiesLimit = mobile ? 50 : 120;
         const maxEnemies = isRamping
           ? Math.min(10, maxEnemiesLimit)
           : Math.min(maxEnemiesLimit, baseEnemies + powerEnemies);
@@ -1027,20 +1060,24 @@ export default function App() {
         // Spawn chance ramps up heavily with progress and threat
         const spawnChance = Math.min(mobile ? 0.35 : 0.85, 0.01 + (progressToBoss * 0.4) + (threatFactor * 0.2));
 
+        const spawnOne = () => campaignLevel
+          ? spawnEnemy(next, pickCampaignEnemyType(campaignLevel, 1 - next.enemiesToKill / totalToKill))
+          : spawnEnemy(next);
+
         if (!next.bossActive && next.enemiesToKill > next.enemies.length && next.enemies.length < maxEnemies) {
           if (Math.random() < spawnChance) {
-              next.enemies.push(spawnEnemy(next));
+            next.enemies.push(spawnOne());
           }
 
           if (!isRamping) {
             if (spawnChance > 0.15 && Math.random() < spawnChance * 0.5 && next.enemies.length < maxEnemies) {
-                next.enemies.push(spawnEnemy(next));
+              next.enemies.push(spawnOne());
             }
             if (spawnChance > 0.3 && Math.random() < spawnChance * 0.4 && next.enemies.length < maxEnemies) {
-                next.enemies.push(spawnEnemy(next));
-                next.enemies.push(spawnEnemy(next));
+              next.enemies.push(spawnOne());
+              next.enemies.push(spawnOne());
             }
-            if (progressToBoss > 0.6 && Math.random() < 0.03 && next.enemies.length < maxEnemies) {
+            if (!campaignLevel && progressToBoss > 0.6 && Math.random() < 0.03 && next.enemies.length < maxEnemies) {
               const fastCount = next.enemies.filter(e => e.enemyType === EnemyType.FAST).length;
               if (fastCount < 10) {
                 for (let h = 0; h < 2 + Math.floor(threatFactor * 4); h++) next.enemies.push(spawnEnemy(next, 9));
@@ -1388,10 +1425,14 @@ export default function App() {
                       missionController.notifyEvent('enemy_killed', e.enemyType);
                       if (e.enemyType === EnemyType.BOSS) {
                         next.bossActive = false;
-                        next.stageTransition = 300; 
-                        next.hitStop = 15; 
+                        next.stageTransition = 300;
+                        next.hitStop = 15;
                         next.screenshake = 10;
-                        next.screenFlash = 5; 
+                        next.screenFlash = 5;
+
+                        if (next.gameMode === 'CAMPAIGN' && next.campaignLevelId) {
+                          markLevelComplete(next.campaignLevelId);
+                        }
                         
                         if (next.runArtifactUnlocks < 2) {
                           const choices = pickArtifactUnlockChoices(unlockedArtifactIds, 2);
@@ -1593,13 +1634,20 @@ export default function App() {
     <div className={`fixed inset-0 bg-[#0c0c0e] overflow-hidden select-none touch-none ${screen === 'GAME' ? 'cursor-crosshair' : 'cursor-default'}`}>
       <AnimatePresence>
         {screen === 'MENU' && (
-          <StartPage 
-            onStart={startGame} 
+          <StartPage
+            onStart={startGame}
+            onCampaign={() => setScreen('CAMPAIGN_SELECT')}
             onOpenGear={() => setIsGearOpen(true)}
             onOpenInventory={() => setIsInventoryOpen(true)}
             relicCount={unlockedArtifactIds.length}
             equippedArtifactIds={equippedArtifactIds}
             activeTraits={nextRunTraits.map(id => TRAITS[id])}
+          />
+        )}
+        {screen === 'CAMPAIGN_SELECT' && (
+          <CampaignSelect
+            onStartLevel={startCampaignLevel}
+            onBack={() => setScreen('MENU')}
           />
         )}
       </AnimatePresence>
