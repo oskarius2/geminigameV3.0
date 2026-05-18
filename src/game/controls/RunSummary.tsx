@@ -52,31 +52,31 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
       >
         <div className="text-center">
           <p className="text-4xl font-black text-white">{state.score.toLocaleString()}</p>
-          <p className="text-white/40 text-[10px] uppercase font-bold tracking-widest">Poäng</p>
+          <p className="text-white/40 text-[10px] uppercase font-bold tracking-widest">Score</p>
         </div>
 
         <motion.div className="grid grid-cols-2 gap-2 text-sm">
           <div className="bg-white/5 p-3 rounded-xl">
-            <p className="text-white/40 text-[10px] uppercase font-bold">Tid</p>
+            <p className="text-white/40 text-[10px] uppercase font-bold">Time</p>
             <p className="text-white font-mono font-bold">{mins}:{secs}</p>
           </div>
           <motion.div className="bg-white/5 p-3 rounded-xl">
-            <p className="text-white/40 text-[10px] uppercase font-bold">Sektor</p>
+            <p className="text-white/40 text-[10px] uppercase font-bold">Sector</p>
             <p className="text-amber-400 font-black">{state.stage}</p>
           </motion.div>
           <motion.div className="bg-white/5 p-3 rounded-xl">
-            <p className="text-white/40 text-[10px] uppercase font-bold">Våg</p>
+            <p className="text-white/40 text-[10px] uppercase font-bold">Wave</p>
             <p className="text-white font-black">{state.wave}</p>
           </motion.div>
           <motion.div className="bg-white/5 p-3 rounded-xl">
-            <p className="text-white/40 text-[10px] uppercase font-bold">Toppvärme</p>
+            <p className="text-white/40 text-[10px] uppercase font-bold">Peak Heat</p>
             <p className="text-rose-400 font-black">{state.threatPeak}%</p>
           </motion.div>
         </motion.div>
 
         {topBuffs.length > 0 && (
           <motion.div>
-            <p className="text-white/30 text-[10px] uppercase font-black tracking-widest mb-2">Toppförstärkningar</p>
+            <p className="text-white/30 text-[10px] uppercase font-black tracking-widest mb-2">Top Augments</p>
             <ul className="space-y-1">
               {topBuffs.map((b) => (
                 <li key={b.id} className="text-xs text-white/80 flex justify-between">

@@ -24,17 +24,17 @@ export function getActiveSynergies(state: GameState): SynergyLine[] {
   const economy = countTag(state, 'economy');
 
   if (dmg >= 2 && fire >= 1) {
-    lines.push({ id: 'heat_chain', text: 'VÄRME ×' + dmg + ' — nästa skott sprider eld' });
+    lines.push({ id: 'heat_chain', text: 'HEAT ×' + dmg + ' — next shot spreads fire' });
   } else if (dmg >= 3) {
-    lines.push({ id: 'overload', text: 'ÖVERLADDNING — +' + dmg * 25 + '% skada i kedja' });
+    lines.push({ id: 'overload', text: 'OVERCHARGE — +' + dmg * 25 + '% chained damage' });
   }
 
   if (defense >= 2 && state.buffs.shield > 0) {
-    lines.push({ id: 'bulwark', text: 'BÅLVERK — skölden håller längre' });
+    lines.push({ id: 'bulwark', text: 'BULWARK — shield lasts longer' });
   }
 
   if (mobility >= 2) {
-    lines.push({ id: 'afterburn', text: 'EFTERBRÄNNARE — snabbare dash-återhämtning' });
+    lines.push({ id: 'afterburn', text: 'AFTERBURNER — faster dash recovery' });
   }
 
   if (economy >= 2) {
@@ -42,15 +42,15 @@ export function getActiveSynergies(state: GameState): SynergyLine[] {
   }
 
   if (state.burnOnCrit) {
-    lines.push({ id: 'burn_crit', text: 'BRÄNNKRIT — kritiska träffar eldar' });
+    lines.push({ id: 'burn_crit', text: 'BURNCRIT — critical hits ignite' });
   }
 
   if (state.permanentPiercing || state.hasInfinityPierce) {
-    lines.push({ id: 'pierce', text: 'GENOMBORRNING — skott passerar fiender' });
+    lines.push({ id: 'pierce', text: 'PIERCING — shots pass through enemies' });
   }
 
   if (state.chainCritBonus > 0.1) {
-    lines.push({ id: 'chain_crit', text: 'KEDJEKRIT — krit föder krit' });
+    lines.push({ id: 'chain_crit', text: 'CHAINCRIT — crits breed crits' });
   }
 
   return lines.slice(0, 2);
