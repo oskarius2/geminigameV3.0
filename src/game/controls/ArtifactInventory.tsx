@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Lock, Sparkles } from 'lucide-react';
+import { SpaceBackground } from '../../components/ui/SpaceBackground';
 import { ArtifactSlot } from '../types';
 import { ARTIFACTS, artifactPowerScore } from '../content/artifacts';
 import { ALL_ARTIFACT_SLOTS } from '../content/artifactsExtra';
@@ -40,15 +41,29 @@ export const ArtifactInventory: React.FC<ArtifactInventoryProps> = ({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 z-[700] bg-black/90 backdrop-blur-2xl flex flex-col pointer-events-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] px-4"
+      className="absolute inset-0 z-[700] overflow-hidden flex flex-col pointer-events-auto"
+      style={{
+        background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(217,70,239,0.07) 0%, transparent 70%), #020617',
+        paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right))',
+      }}
     >
-      <div className="flex flex-col h-full max-w-6xl mx-auto w-full">
+      <SpaceBackground />
+      <div className="relative z-10 flex flex-col h-full max-w-6xl mx-auto w-full">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4 shrink-0">
           <div>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-white uppercase tracking-tight">
+            <h2
+              className="font-display font-bold tracking-[0.15em] text-white uppercase"
+              style={{
+                fontSize: 'clamp(1.5rem, 5vw, 2.5rem)',
+                textShadow: '0 0 40px rgba(217,70,239,0.5), 0 0 80px rgba(217,70,239,0.2)',
+              }}
+            >
               Relic Vault
             </h2>
-            <p className="text-fuchsia-400/80 text-xs font-mono uppercase tracking-widest mt-1">
+            <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-fuchsia-400/60 mt-1">
               {ownedCount} / {all.length} · {metaScrap.toLocaleString()} scrap
             </p>
           </div>

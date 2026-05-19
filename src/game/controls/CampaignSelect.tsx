@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Lock, CheckCircle, ChevronRight, ArrowLeft } from 'lucide-react';
 import { CAMPAIGN_LEVELS, CampaignLevel } from '../content/campaignLevels';
+import { SpaceBackground, HudCorner } from '../../components/ui/SpaceBackground';
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -73,13 +74,17 @@ const LevelCard: React.FC<LevelCardProps> = ({ level, unlocked, completed, index
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: index * 0.07 }}
-        className="relative flex items-center gap-4 rounded-xl border border-white/10 bg-white/5 p-4 opacity-50 cursor-not-allowed select-none"
+        className="relative flex items-center gap-4 rounded-xl p-4 opacity-40 cursor-not-allowed select-none"
+        style={{
+          background: 'rgba(15,23,42,0.4)',
+          border: '1px solid rgba(255,255,255,0.06)',
+        }}
       >
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/5 border border-white/10">
           <Lock size={18} className="text-white/40" />
         </div>
         <div className="min-w-0">
-          <p className="text-[10px] uppercase tracking-widest text-white/30 font-bold">
+          <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-white/30">
             Sector {level.number}
           </p>
           <p className="text-white/20 font-bold truncate">— Locked —</p>
@@ -96,16 +101,28 @@ const LevelCard: React.FC<LevelCardProps> = ({ level, unlocked, completed, index
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
       onClick={() => onSelect(level.id)}
-      className={`relative w-full text-left flex items-center gap-4 rounded-xl border ${theme.border} bg-white/5 p-4 shadow-lg ${theme.glow} hover:bg-white/10 transition-colors focus:outline-none`}
+      className={`relative w-full text-left flex items-center gap-4 rounded-xl p-4 focus:outline-none transition-colors`}
+      style={{
+        background: 'rgba(15,23,42,0.55)',
+        backdropFilter: 'blur(20px)',
+        border: `1px solid ${theme.border.replace('border-', '').replace('/60', '')}`,
+        boxShadow: `inset 0 0 20px rgba(6,182,212,0.03), 0 8px 32px rgba(0,0,0,0.4)`,
+      }}
     >
+      <HudCorner position="tl" />
+      <HudCorner position="br" />
+
       {/* Level number bubble */}
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border ${theme.border} bg-black/30`}>
+      <div
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-black/30"
+        style={{ borderColor: 'inherit' }}
+      >
         <span className={`text-lg font-black ${theme.text}`}>{level.number}</span>
       </div>
 
       {/* Text */}
       <div className="min-w-0 flex-1">
-        <p className="text-[10px] uppercase tracking-widest text-white/40 font-bold">
+        <p className="font-mono text-[10px] uppercase tracking-[0.25em] text-white/40">
           Sector {level.number}
         </p>
         <p className="text-white font-bold truncate">{level.name}</p>
@@ -117,7 +134,7 @@ const LevelCard: React.FC<LevelCardProps> = ({ level, unlocked, completed, index
       {/* Badges / chevron */}
       <div className="flex shrink-0 flex-col items-end gap-1">
         {completed && (
-          <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${theme.badge}`}>
+          <span className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-mono font-bold uppercase tracking-wider ${theme.badge}`}>
             <CheckCircle size={10} />
             Done
           </span>
@@ -154,61 +171,89 @@ export const CampaignSelect: React.FC<CampaignSelectProps> = ({ onStartLevel, on
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[500] bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] flex flex-col items-center justify-start overflow-y-auto p-4 md:p-8"
+      className="absolute inset-0 z-[500] overflow-hidden flex flex-col"
+      style={{
+        background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(6,182,212,0.07) 0%, transparent 70%), #020617',
+        paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right))',
+      }}
     >
-      {/* Header */}
-      <div className="w-full max-w-lg">
-        <motion.button
-          initial={{ opacity: 0, x: -10 }}
-          animate={{ opacity: 1, x: 0 }}
-          onClick={onBack}
-          className="flex items-center gap-2 text-white/40 hover:text-white/80 transition-colors text-sm mb-8 focus:outline-none"
-        >
-          <ArrowLeft size={16} />
-          Back
-        </motion.button>
+      <SpaceBackground />
 
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-          className="mb-8"
-        >
-          <h1 className="text-4xl font-display font-black tracking-tight text-white">
-            CAMPAIGN
-          </h1>
-          <p className="text-white/40 text-sm mt-1">
-            {completedCount === 0
-              ? 'Five sectors stand between you and the source.'
-              : completedCount === CAMPAIGN_LEVELS.length
-              ? 'All sectors cleared.'
-              : `${completedCount} / ${CAMPAIGN_LEVELS.length} sectors cleared.`}
-          </p>
-        </motion.div>
+      <div className="relative z-10 flex flex-col items-center overflow-y-auto flex-1 px-4 md:px-8 pb-8">
+        <div className="w-full max-w-lg">
+          {/* Header bar */}
+          <motion.div
+            initial={{ opacity: 0, y: -12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex items-center justify-between pt-2 pb-6"
+          >
+            <motion.button
+              initial={{ opacity: 0, x: -10 }}
+              animate={{ opacity: 1, x: 0 }}
+              onClick={onBack}
+              className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.2em] text-cyan-400/60 hover:text-cyan-300 transition-colors focus:outline-none"
+            >
+              <ArrowLeft size={14} />
+              Back
+            </motion.button>
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(6,182,212,0.8)]" />
+              <span className="font-mono text-[10px] uppercase tracking-[0.25em] text-cyan-400/70">Campaign</span>
+            </div>
+          </motion.div>
 
-        {/* Level list */}
-        <div className="flex flex-col gap-3">
-          {CAMPAIGN_LEVELS.map((level, i) => (
-            <LevelCard
-              key={level.id}
-              level={level}
-              unlocked={level.number <= save.highestLevelUnlocked}
-              completed={save.completedLevels.includes(level.id)}
-              index={i}
-              onSelect={onStartLevel}
-            />
-          ))}
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.05 }}
+            className="mb-8"
+          >
+            <h1
+              className="font-display font-bold tracking-[0.1em] text-white"
+              style={{
+                fontSize: 'clamp(2rem, 6vw, 3rem)',
+                textShadow: '0 0 40px rgba(6,182,212,0.5), 0 0 80px rgba(6,182,212,0.2)',
+              }}
+            >
+              CAMPAIGN
+            </h1>
+            <p className="font-mono text-[11px] uppercase tracking-[0.3em] text-cyan-400/50 mt-1">
+              {completedCount === 0
+                ? 'Five sectors stand between you and the source.'
+                : completedCount === CAMPAIGN_LEVELS.length
+                ? 'All sectors cleared.'
+                : `${completedCount} / ${CAMPAIGN_LEVELS.length} sectors cleared.`}
+            </p>
+          </motion.div>
+
+          {/* Level list */}
+          <div className="flex flex-col gap-3">
+            {CAMPAIGN_LEVELS.map((level, i) => (
+              <LevelCard
+                key={level.id}
+                level={level}
+                unlocked={level.number <= save.highestLevelUnlocked}
+                completed={save.completedLevels.includes(level.id)}
+                index={i}
+                onSelect={onStartLevel}
+              />
+            ))}
+          </div>
+
+          {/* Footer hint */}
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="text-center font-mono text-[10px] uppercase tracking-[0.3em] text-white/20 mt-8"
+          >
+            Complete each sector to unlock the next
+          </motion.p>
         </div>
-
-        {/* Footer hint */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="text-center text-white/20 text-[10px] uppercase tracking-widest mt-8"
-        >
-          Complete each sector to unlock the next
-        </motion.p>
       </div>
     </motion.div>
   );

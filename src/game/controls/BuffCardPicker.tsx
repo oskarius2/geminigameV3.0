@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Zap, Target, Shield, Flame, Magnet, Activity, HeartPulse, ShieldCheck, Bomb, Swords, CircleIcon, MoveRight, RotateCcw, Trophy, ChevronLeft, ChevronRight } from 'lucide-react';
+import { SpaceBackground } from '../../components/ui/SpaceBackground';
 import { PassiveBuff, BuffRarity } from '../types';
 import { getBuffStacksForDisplay } from '../buffs/pickBuffs';
 import type { ViewportProfile } from './mobileLayout';
@@ -199,8 +200,11 @@ export const BuffCardPicker: React.FC<BuffCardPickerProps> = ({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="absolute inset-0 bg-black/85 backdrop-blur-2xl z-[200] flex flex-col items-center justify-center p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] pointer-events-auto overflow-y-auto"
+          className="absolute inset-0 z-[200] overflow-hidden flex flex-col items-center justify-center p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] pointer-events-auto overflow-y-auto"
+          style={{ background: 'rgba(2,6,23,0.92)' }}
         >
+          <SpaceBackground />
+          <div className="relative z-10 w-full flex flex-col items-center">
           <motion.div
             initial={{ y: -24, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -233,6 +237,7 @@ export const BuffCardPicker: React.FC<BuffCardPickerProps> = ({
               </motion.div>
             ))}
           </motion.div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

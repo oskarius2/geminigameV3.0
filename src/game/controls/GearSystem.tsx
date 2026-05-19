@@ -10,6 +10,7 @@ import {
   Activity,
   AlertCircle,
 } from "lucide-react";
+import { SpaceBackground } from '../../components/ui/SpaceBackground';
 import { Artifact, ArtifactSlot, BuffRarity } from "../types";
 import {
   formatArtifactStats,
@@ -77,21 +78,41 @@ export const GearSystem: React.FC<GearSystemProps> = ({
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="absolute inset-0 z-[700] bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] backdrop-blur-2xl flex flex-col pointer-events-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] px-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] p-4 sm:p-8"
+      className="absolute inset-0 z-[700] overflow-hidden flex flex-col pointer-events-auto"
+      style={{
+        background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(6,182,212,0.07) 0%, transparent 70%), #020617',
+        paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
+        paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right))',
+      }}
     >
+      <SpaceBackground />
+
+      <div className="relative z-10 flex flex-col flex-1 overflow-hidden p-4 sm:p-8">
       <div className="flex flex-row justify-between items-center gap-4 mb-4 sm:mb-6 shrink-0">
         <div className="flex flex-col min-w-0">
-          <h2 className="text-xl sm:text-4xl font-black text-white italic uppercase tracking-tighter leading-none drop-shadow-[0_0_15px_rgba(255,255,255,0.2)] truncate">
+          <h2
+            className="font-display font-bold tracking-[0.15em] text-white truncate"
+            style={{
+              fontSize: 'clamp(1.25rem, 4vw, 2.5rem)',
+              textShadow: '0 0 40px rgba(6,182,212,0.5), 0 0 80px rgba(6,182,212,0.2)',
+            }}
+          >
             HANGAR
           </h2>
-          <span className="text-cyan-500/50 text-[8px] sm:text-xs font-bold uppercase tracking-widest mt-0.5 truncate">
-            NANO-TECH INTEGRATION
+          <span className="font-mono text-[9px] uppercase tracking-[0.3em] text-cyan-400/50 mt-0.5 truncate">
+            Nano-Tech Integration
           </span>
-          <span className="text-amber-400/80 text-[10px] font-mono mt-1">{metaScrap.toLocaleString()} scrap</span>
+          <span className="font-mono text-[10px] text-amber-400/80 mt-1">{metaScrap.toLocaleString()} scrap</span>
         </div>
         <button
           onClick={onClose}
-          className="px-4 py-2 sm:px-6 sm:py-3 bg-rose-900/40 hover:bg-rose-800/60 text-white border border-rose-500/50 hover:border-rose-400 rounded uppercase font-bold text-[10px] sm:text-xs transition-all shrink-0"
+          className="px-4 py-2 sm:px-6 sm:py-3 rounded-xl font-mono text-[10px] sm:text-xs uppercase tracking-[0.2em] text-white/70 transition-all shrink-0"
+          style={{
+            background: 'rgba(255,255,255,0.04)',
+            border: '1px solid rgba(255,255,255,0.12)',
+          }}
         >
           Exit
         </button>
@@ -243,6 +264,7 @@ export const GearSystem: React.FC<GearSystemProps> = ({
             </div>
           )}
         </div>
+      </div>
       </div>
     </motion.div>
   );

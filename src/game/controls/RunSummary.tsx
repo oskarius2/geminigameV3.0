@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
 import { RotateCcw, Sparkles } from 'lucide-react';
+import { SpaceBackground, HudCorner } from '../../components/ui/SpaceBackground';
 import { GameState } from '../types';
 import { ARTIFACTS } from '../content/artifacts';
 import { getBuildName, getTopPassives } from '../meta/buildName';
@@ -42,18 +43,44 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className={`absolute inset-0 z-[100] ${victory ? 'bg-gradient-to-br from-[#020617] via-[#1e1b4b] to-[#020617]' : 'bg-gradient-to-br from-[#020617] via-[#4c0519] to-[#020617]'} backdrop-blur-xl flex flex-col items-center justify-center p-6 overflow-y-auto`}
+      className="absolute inset-0 z-[100] overflow-hidden flex flex-col items-center justify-center p-6 overflow-y-auto"
+      style={{
+        background: victory
+          ? 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(6,182,212,0.1) 0%, transparent 70%), #020617'
+          : 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(217,70,239,0.08) 0%, transparent 70%), #020617',
+      }}
     >
-      <h2 className="text-4xl md:text-6xl font-black text-white italic tracking-tighter uppercase mb-2 drop-shadow-[0_0_15px_rgba(255,255,255,0.3)]">
+      <SpaceBackground />
+
+      <div className="relative z-10 flex flex-col items-center w-full">
+      <h2
+        className="font-display font-bold tracking-[0.1em] text-white uppercase mb-2 text-center"
+        style={{
+          fontSize: 'clamp(2rem, 8vw, 4rem)',
+          textShadow: victory
+            ? '0 0 40px rgba(6,182,212,0.6), 0 0 80px rgba(6,182,212,0.2)'
+            : '0 0 40px rgba(217,70,239,0.6), 0 0 80px rgba(217,70,239,0.2)',
+        }}
+      >
         {victory ? 'SECTOR CLEARED' : 'SIGNAL LOST'}
       </h2>
-      <p className="text-cyan-400/80 font-mono text-xs uppercase tracking-widest mb-6">{buildName}</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.35em] text-cyan-400/70 mb-6">{buildName}</p>
 
       <motion.div
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
-        className="w-full max-w-md bg-slate-950/60 border border-slate-700 rounded-lg p-6 mb-8 space-y-4 shadow-[0_0_20px_rgba(0,0,0,0.5)]"
+        className="relative w-full max-w-md rounded-xl p-6 mb-8 space-y-4"
+        style={{
+          background: 'rgba(15,23,42,0.55)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(6,182,212,0.15)',
+          boxShadow: 'inset 0 0 20px rgba(6,182,212,0.04), 0 8px 32px rgba(0,0,0,0.5)',
+        }}
       >
+        <HudCorner position="tl" />
+        <HudCorner position="tr" />
+        <HudCorner position="bl" />
+        <HudCorner position="br" />
         <div className="text-center">
           <p className="text-4xl font-black text-white">{state.score.toLocaleString()}</p>
           <p className="text-white/40 text-[10px] uppercase font-bold tracking-widest">Score</p>
@@ -126,24 +153,53 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
         </motion.div>
       </motion.div>
 
-      <motion.div className="flex flex-col gap-4 w-full max-w-sm px-4">
-        <button
+      <motion.div className="flex flex-col gap-3 w-full max-w-sm px-4">
+        <motion.button
           type="button"
           onClick={onRestart}
-          className="group relative min-h-16 bg-cyan-900/60 hover:bg-cyan-800/80 border border-cyan-500 hover:border-cyan-400 text-cyan-50 font-black py-5 rounded flex items-center justify-center gap-3 pointer-events-auto shadow-[0_0_20px_rgba(6,182,212,0.3)] hover:shadow-[0_0_30px_rgba(6,182,212,0.6)] transition-all duration-300 hover:scale-[1.02] active:scale-95"
+          className="relative overflow-hidden min-h-[3rem] w-full rounded-xl font-display font-bold uppercase tracking-[0.2em] text-sm text-white pointer-events-auto"
+          style={{
+            background: 'linear-gradient(135deg, rgba(6,182,212,0.9) 0%, rgba(14,165,233,0.8) 100%)',
+            boxShadow: '0 0 32px rgba(6,182,212,0.4), 0 0 64px rgba(6,182,212,0.15), inset 0 1px 0 rgba(255,255,255,0.15)',
+            border: '1px solid rgba(6,182,212,0.5)',
+          }}
+          whileHover={{ scale: 1.02, boxShadow: '0 0 48px rgba(6,182,212,0.6), 0 0 80px rgba(6,182,212,0.2)' }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.15 }}
         >
-          <div className="absolute inset-0 bg-cyan-400/10 opacity-0 group-hover:opacity-100 group-hover:animate-pulse transition-opacity rounded" />
-          <RotateCcw size={24} className="text-cyan-400" /> INITIALIZE NEW RUN
-        </button>
-        <button
+          <span className="flex items-center justify-center gap-2.5">
+            <RotateCcw size={16} />
+            New Run
+          </span>
+          <motion.span
+            className="absolute inset-y-0 w-12 bg-gradient-to-r from-transparent via-white/20 to-transparent pointer-events-none"
+            animate={{ left: ['-20%', '120%'] }}
+            transition={{ duration: 2.5, repeat: Infinity, repeatDelay: 3, ease: 'easeInOut' }}
+          />
+        </motion.button>
+        <motion.button
           type="button"
           onClick={onVault}
-          className="group relative min-h-16 bg-fuchsia-900/40 hover:bg-fuchsia-800/60 border border-fuchsia-500/50 hover:border-fuchsia-400 text-fuchsia-100 font-bold py-5 rounded flex items-center justify-center gap-2 pointer-events-auto transition-all active:scale-95 hover:shadow-[0_0_15px_rgba(217,70,239,0.4)]"
+          className="relative min-h-[3rem] w-full rounded-xl font-display font-semibold uppercase tracking-[0.15em] text-sm text-fuchsia-300 pointer-events-auto"
+          style={{
+            background: 'rgba(217,70,239,0.06)',
+            border: '1px solid rgba(217,70,239,0.25)',
+            backdropFilter: 'blur(12px)',
+          }}
+          whileHover={{
+            background: 'rgba(217,70,239,0.12)',
+            borderColor: 'rgba(217,70,239,0.5)',
+          }}
+          whileTap={{ scale: 0.97 }}
+          transition={{ duration: 0.15 }}
         >
-          <div className="absolute inset-0 bg-fuchsia-500/10 opacity-0 group-hover:opacity-100 transition-opacity rounded" />
-          <Sparkles size={20} className="text-fuchsia-400" /> RELIC VAULT
-        </button>
+          <span className="flex items-center justify-center gap-2.5">
+            <Sparkles size={14} />
+            Relic Vault
+          </span>
+        </motion.button>
       </motion.div>
+      </div>
     </motion.div>
   );
 };
