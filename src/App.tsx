@@ -1206,6 +1206,7 @@ export default function App() {
         next.enemies = [];
         next.projectiles = [];
         next.items = [];
+        next.spawnRampTimer = 0;
         next.screenFlash = Math.max(next.screenFlash, 15);
         playSfx('augment');
       }
@@ -1721,7 +1722,7 @@ export default function App() {
                           );
                           next.runScrapEarned += 15;
                         }
-                        next.stageTransition = 300;
+                        next.stageTransition = 90;
                         next.hitStop = 15;
                         next.screenshake = 10;
                         next.screenFlash = 5;
@@ -1983,11 +1984,10 @@ export default function App() {
         </div>
       )}
 
-      {screen === 'GAME' && uiState && (uiState.bossArenaTransition > 0 || gameStateRef.current?.inBossArena) && (
+      {screen === 'GAME' && uiState && uiState.bossArenaTransition > 0 && (
         <BossWarpOverlay
           bossId={uiState.activeBossId}
           bossArenaTransition={uiState.bossArenaTransition}
-          inBossArena={gameStateRef.current?.inBossArena ?? false}
         />
       )}
 

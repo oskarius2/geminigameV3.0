@@ -16,6 +16,7 @@ import {
   isTypeAtCap,
 } from './balance/spawnComposition';
 import { BOSS_DEFINITIONS, pickBossForStage } from './content/bosses';
+import { getBossSpawnPosition } from './content/bossArenas';
 import { getViewportProfile, useReducedEffects } from './controls/mobileLayout';
 
 export { ARTIFACTS, artifactPowerScore } from './content/artifacts';
@@ -669,8 +670,15 @@ export function spawnEnemy(
   if (isBoss) {
     const boss =
       BOSS_DEFINITIONS.find((b) => b.id === state.activeBossId) ?? pickBossForStage(stage);
-    radius = 100 + stage * 10;
-    health = (3500 * Math.pow(1.5, stage - 1)) * dynamicHealthFactor * boss.hpMult;
+    if (state.inBossArena && state.activeBossId) {
+      const spawn = getBossSpawnPosition(state.activeBossId, worldWidth, worldHeight);
+      pos = new Vector2(
+        spawn.x + (Math.random() - 0.5) * 80,
+        spawn.y + (Math.random() - 0.5) * 80
+      );
+    }
+    radius = 100 + stage * 12;
+    health = (6000 * Math.pow(1.52, stage - 1)) * dynamicHealthFactor * boss.hpMult;
     speed = (0.8 + stage * 0.1) * speedScale * boss.speedMult;
     color = '#991b1b';
     enemyType = EnemyType.BOSS;

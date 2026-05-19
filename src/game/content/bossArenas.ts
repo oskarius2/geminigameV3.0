@@ -137,24 +137,49 @@ function layoutVoidCardinal(w: number, h: number): Obstacle[] {
   const cx = w / 2;
   const cy = h / 2;
   const o: Obstacle[] = [];
-  const wallW = w * 0.14;
+  const wallW = w * 0.12;
   o.push(
-    obs('wall_l', 'RECT', w * 0.12, cy, wallW, h * 0.85, 0, 'rgba(88, 28, 135, 0.88)'),
-    obs('wall_r', 'RECT', w * 0.88, cy, wallW, h * 0.85, 0, 'rgba(88, 28, 135, 0.88)'),
-    obs('bend_top', 'RECT', cx, h * 0.18, w * 0.5, h * 0.1, 0.35, 'rgba(109, 40, 217, 0.75)'),
-    obs('bend_bot', 'RECT', cx, h * 0.82, w * 0.5, h * 0.1, -0.35, 'rgba(109, 40, 217, 0.75)')
+    obs('wall_l', 'RECT', w * 0.1, cy, wallW, h * 0.78, 0, 'rgba(88, 28, 135, 0.88)'),
+    obs('wall_r', 'RECT', w * 0.9, cy, wallW, h * 0.78, 0, 'rgba(88, 28, 135, 0.88)'),
+    obs('bend_top', 'RECT', cx, h * 0.14, w * 0.42, h * 0.08, 0.35, 'rgba(109, 40, 217, 0.75)'),
+    obs('bend_bot', 'RECT', cx, h * 0.86, w * 0.42, h * 0.08, -0.35, 'rgba(109, 40, 217, 0.75)')
   );
-  for (let i = 0; i < 8; i++) {
-    const y = h * 0.25 + (i / 7) * h * 0.5;
-    const side = i % 2 === 0 ? w * 0.28 : w * 0.72;
+  for (let i = 0; i < 6; i++) {
+    const y = h * 0.28 + (i / 5) * h * 0.44;
+    const side = i % 2 === 0 ? w * 0.22 : w * 0.78;
     o.push(
-      obs(`rift_${i}`, 'CIRCLE', side, y, 55 + (i % 3) * 15, 0, 0, 'rgba(167, 139, 250, 0.4)')
+      obs(`rift_${i}`, 'CIRCLE', side, y, 38 + (i % 2) * 10, 0, 0, 'rgba(167, 139, 250, 0.35)')
     );
   }
-  o.push(
-    obs('core', 'CIRCLE', cx, cy, 90, 0, 0, 'rgba(139, 92, 246, 0.2)')
-  );
   return o;
+}
+
+/** Player spawn per arena — keeps start clear of boss lane */
+export function getArenaPlayerSpawn(bossId: string, width: number, height: number): Vector2 {
+  switch (bossId) {
+    case 'void_cardinal':
+      return new Vector2(width * 0.5, height * 0.72);
+    case 'hive_regent':
+      return new Vector2(width * 0.5, height * 0.58);
+    default:
+      return new Vector2(width / 2, height / 2);
+  }
+}
+
+/** Boss spawn per arena — opposite end of the lane from the player */
+export function getBossSpawnPosition(bossId: string, width: number, height: number): Vector2 {
+  switch (bossId) {
+    case 'void_cardinal':
+      return new Vector2(width * 0.5, height * 0.2);
+    case 'salvage_hauler':
+      return new Vector2(width * 0.5, height * 0.28);
+    case 'hive_regent':
+      return new Vector2(width * 0.5, height * 0.32);
+    case 'crimson_tyrant':
+      return new Vector2(width * 0.5, height * 0.35);
+    default:
+      return new Vector2(width / 2, height * 0.25);
+  }
 }
 
 function layoutCrimsonTyrant(w: number, h: number): Obstacle[] {
@@ -260,10 +285,11 @@ export function applyBossArenaWarp(
 
   state.world = { width, height };
   state.obstacles = buildBossArenaLayout(bossId, width, height);
-  state.player.pos = new Vector2(width / 2, height / 2);
+  const playerSpawn = getArenaPlayerSpawn(bossId, width, height);
+  state.player.pos = playerSpawn;
   state.player.velocity = new Vector2(0, 0);
-  state.camera.x = width / 2 - viewWidth / 2;
-  state.camera.y = height / 2 - viewHeight / 2;
+  state.camera.x = playerSpawn.x - viewWidth / 2;
+  state.camera.y = playerSpawn.y - viewHeight / 2;
   state.enemies = [];
   state.projectiles = [];
   state.items = [];

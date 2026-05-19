@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildBossArenaLayout,
+  getArenaPlayerSpawn,
   getBossArenaWorldSize,
+  getBossSpawnPosition,
   pickRandomBoss,
   BOSS_WARP_DURATION,
 } from './bossArenas';
@@ -33,5 +35,15 @@ describe('bossArenas', () => {
 
   it('warp duration is long enough for animation', () => {
     expect(BOSS_WARP_DURATION).toBeGreaterThanOrEqual(3);
+  });
+
+  it('void cardinal arena has clear lane without center blocker', () => {
+    const w = 1200;
+    const h = 2000;
+    const layout = buildBossArenaLayout('void_cardinal', w, h);
+    expect(layout.some((o) => o.id.includes('core'))).toBe(false);
+    const player = getArenaPlayerSpawn('void_cardinal', w, h);
+    const boss = getBossSpawnPosition('void_cardinal', w, h);
+    expect(player.y).toBeGreaterThan(boss.y);
   });
 });

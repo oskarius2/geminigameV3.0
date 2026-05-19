@@ -6,15 +6,13 @@ import { BOSS_WARP_DURATION, getBossWarpProgress } from '../content/bossArenas';
 interface BossWarpOverlayProps {
   bossId: string | null;
   bossArenaTransition: number;
-  inBossArena: boolean;
 }
 
 export const BossWarpOverlay: React.FC<BossWarpOverlayProps> = ({
   bossId,
   bossArenaTransition,
-  inBossArena,
 }) => {
-  if (bossArenaTransition <= 0 && !inBossArena) return null;
+  if (bossArenaTransition <= 0) return null;
 
   const progress = bossArenaTransition > 0 ? 1 - bossArenaTransition / BOSS_WARP_DURATION : 1;
   const boss = BOSS_DEFINITIONS.find((b) => b.id === bossId);

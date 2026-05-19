@@ -109,7 +109,7 @@ function handleEnemyDeath(ctx: BeamHitContext, e: Entity, chaosFactor: number): 
   if (e.enemyType === EnemyType.BOSS) {
     next.bossActive = false;
     next.pendingArenaRestore = true;
-    next.stageTransition = 300;
+    next.stageTransition = 90;
     next.screenFlash = 25;
     onBossKill();
   } else if (
