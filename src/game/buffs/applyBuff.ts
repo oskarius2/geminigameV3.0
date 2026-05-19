@@ -1,6 +1,7 @@
 import { PASSIVE_BUFFS } from '../content/buffs';
 import { BuffRarity, GameState } from '../types';
 import { computeThreatLevel } from '../balance/threat';
+import { grantExtraLife } from '../balance/extraLife';
 import { countPassiveStacks } from './pickBuffs';
 
 export function applyBuff(state: GameState, choiceId: string): void {
@@ -43,7 +44,7 @@ export function applyBuff(state: GameState, choiceId: string): void {
       state.lifeSteal += 0.08;
       break;
     case 'shield_up':
-      state.shieldTimer = 1;
+      grantExtraLife(state);
       break;
     case 'explosive':
       state.explosiveChance += 0.15;
@@ -97,7 +98,7 @@ export function applyBuff(state: GameState, choiceId: string): void {
       state.buffs.scoreX = Math.max(state.buffs.scoreX, 600);
       break;
     case 'emergency_shield':
-      state.hasEmergencyShield = true;
+      grantExtraLife(state);
       break;
     case 'ricochet_plus':
       state.smartRicochet = true;
@@ -174,6 +175,23 @@ export function applyBuff(state: GameState, choiceId: string): void {
       state.permanentOverdrive = true;
       state.player.speed *= 1.35;
       state.baseDamage *= 2;
+      break;
+    case 'boss_slayer':
+      state.baseDamage *= 1.12;
+      break;
+    case 'arena_stabilizer':
+      state.player.maxHealth += 80;
+      state.player.health = Math.min(state.player.maxHealth, state.player.health + 80);
+      state.regen += 5;
+      break;
+    case 'hive_bulwark':
+      state.dashEnergyDiscount = Math.min(0.6, state.dashEnergyDiscount + 0.15);
+      break;
+    case 'void_hunter':
+      state.critChance += 0.18;
+      break;
+    case 'crimson_overdrive':
+      state.buffs.overdrive = Math.max(state.buffs.overdrive, 480);
       break;
     default:
       break;

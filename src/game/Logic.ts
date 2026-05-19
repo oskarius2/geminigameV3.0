@@ -7,7 +7,16 @@ import {
   getSeparationForce,
   finalizeEnemyMovement,
 } from './ai/enemyBehaviors';
-import { pickEnemyTypeForThreat, getThreatMult } from './balance/threat';
+import { getAugmentTier, getTierModifiers } from './balance/augmentTiers';
+import { getThreatMult } from './balance/threat';
+import { getStageQuota } from './balance/spawnCurve';
+import {
+  pickEnemyTypeForThreat,
+  getEnemyTypeForPick,
+  isTypeAtCap,
+} from './balance/spawnComposition';
+import { BOSS_DEFINITIONS, pickBossForStage } from './content/bosses';
+import { getViewportProfile, useReducedEffects } from './controls/mobileLayout';
 
 export { ARTIFACTS, artifactPowerScore } from './content/artifacts';
 export { PASSIVE_BUFFS } from './content/buffs';
@@ -109,11 +118,11 @@ export const TRAITS: Record<string, Trait> = {
   'agile': { id: 'agile', name: 'Agile Frame', description: '+20% Move Speed', type: 'POSITIVE', isPositive: true },
   'hard_hitter': { id: 'hard_hitter', name: 'Hard Hitter', description: '+25% Damage', type: 'POSITIVE', isPositive: true },
   'scavenger': { id: 'scavenger', name: 'Scavenger', description: '+50% Scrap gain', type: 'POSITIVE', isPositive: true },
-  'efficient': { id: 'efficient', name: 'Efficient Engine', description: 'Fuel drains 30% slower', type: 'POSITIVE', isPositive: true },
+  'efficient': { id: 'efficient', name: 'Efficient Salvage', description: '+20% scrap gain', type: 'POSITIVE', isPositive: true },
   'hull_plating': { id: 'hull_plating', name: 'Hull Plating', description: '+150 Max Health', type: 'POSITIVE', isPositive: true },
   
   'frail': { id: 'frail', name: 'Frail Hull', description: '-100 Max Health', type: 'NEGATIVE', isPositive: false },
-  'fuel_leak': { id: 'fuel_leak', name: 'Fuel Leak', description: 'Fuel drains 25% faster', type: 'NEGATIVE', isPositive: false },
+  'fuel_leak': { id: 'fuel_leak', name: 'Leaky Cargo', description: '-15% scrap gain', type: 'NEGATIVE', isPositive: false },
   'clunky': { id: 'clunky', name: 'Clunky Systems', description: '-15% Move Speed', type: 'NEGATIVE', isPositive: false },
   'glass_cannon': { id: 'glass_cannon', name: 'Glass Cannon', description: '-30% Health, but +15% Damage', type: 'NEGATIVE', isPositive: false },
   'bad_radar': { id: 'bad_radar', name: 'Static Radar', description: 'Enemies are 10% faster', type: 'NEGATIVE', isPositive: false },
@@ -122,31 +131,31 @@ export const TRAITS: Record<string, Trait> = {
 export const RANDOM_EVENTS: Record<string, RandomEvent> = {
   'stranger_deal': {
     id: 'stranger_deal',
-    title: 'Mysterious Signal',
-    description: 'An unknown vessel offers a surplus of fuel in exchange for your scrap piles.',
+    title: 'Unknown signal',
+    description: 'A foreign ship offers repairs in exchange for your scrap.',
     options: [
-      { id: 'accept_fuel', label: 'Accept Deal', description: 'Trade 40 Scrap for 800 Fuel' },
-      { id: 'refuse_fuel', label: 'Refuse', description: 'Ignore the transmission' },
-      { id: 'rob_fuel', label: 'Rob Them', description: 'Try to take the fuel (30% risk of 100 dmg)' }
+      { id: 'accept_heal', label: 'Pay scrap', description: '40 scrap → restore 40% hull' },
+      { id: 'refuse_deal', label: 'Ignore', description: 'Continue without trading' },
+      { id: 'rob_deal', label: 'Raid them', description: '30% risk: 100 damage, else +50 scrap' }
     ]
   },
   'abandoned_station': {
     id: 'abandoned_station',
-    title: 'Ruined Outpost',
-    description: 'A drifting station remnants. Its reactor is glowing ominously.',
+    title: 'Abandoned station',
+    description: 'A drifting wreck. The reactor pulses uneasily.',
     options: [
-      { id: 'salvage_safe', label: 'Quick Scavenge', description: 'Gain 60 Scrap' },
-      { id: 'salvage_risky', label: 'Deep Salvage', description: 'Gain 250 Exp (40% risk of 150 dmg)' },
+      { id: 'salvage_safe', label: 'Quick salvage', description: '+60 scrap' },
+      { id: 'salvage_risky', label: 'Deep search', description: '+250 XP (40% risk: 150 damage)' },
       { id: 'leave_station', label: 'Leave', description: 'Safety first' }
     ]
   },
   'black_market': {
     id: 'black_market',
-    title: 'Black Market Dealer',
-    description: 'A shady merchant offers a powerful weapon mod, but at a steep cost.',
+    title: 'Black market',
+    description: 'A shady dealer offers power — at a price.',
     options: [
-      { id: 'buy_mod', label: 'Pay Scrap', description: 'Trade 100 Scrap for Damage Boost' },
-      { id: 'deal_blood', label: 'Pay Blood', description: 'Sacrifice 200 Max HP for a Relic' },
+      { id: 'buy_mod', label: 'Pay scrap', description: '100 scrap → +10% damage' },
+      { id: 'deal_blood', label: 'Pay in blood', description: '-200 max HP → relic chance' },
       { id: 'decline_market', label: 'Decline', description: 'Move on' }
     ]
   }
@@ -193,8 +202,15 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
     isPaused: false,
     wave: 1,
     stage: 1,
-    enemiesToKill: 80,
+    enemiesToKill: 50,
     bossActive: false,
+    activeBossId: null,
+    bossArenaTransition: 0,
+    bossArenaSwapped: false,
+    inBossArena: false,
+    mainWorldSnapshot: null,
+    lastBossId: null,
+    pendingArenaRestore: false,
     stageTransition: 0,
     spawnRampTimer: 0,
     qualityLevel: 'high',
@@ -264,6 +280,7 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
     comboDamageMult: 1,
     hasEmergencyShield: false,
     emergencyShieldCooldown: 0,
+    extraLifeCharges: 0,
     smartRicochet: false,
     vampiricBurstStacks: 0,
     killCountSinceHeal: 0,
@@ -296,9 +313,8 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
     activeTraits: traits,
     pendingEvent: null,
     eventTimer: 1200 + Math.random() * 600, // First event after ~20-30s
-    scrap: 0,
-    fuel: 2000,
-    maxFuel: 2000,
+    runScrapEarned: 0,
+    postBossBuffPick: false,
   };
 
   // Apply Trait impacts on initialization
@@ -338,29 +354,30 @@ export function handleEventChoice(state: GameState, choiceId: string) {
   };
 
   switch(choiceId) {
-    case 'accept_fuel':
-      if (state.scrap >= 40) {
-        state.scrap -= 40;
-        state.fuel = Math.min(state.maxFuel, state.fuel + 800);
-        popup('-40 SCRAP', '#f87171');
-        popup('+800 FUEL', '#38bdf8');
+    case 'accept_heal':
+      if (state.runScrapEarned >= 40) {
+        state.runScrapEarned -= 40;
+        const heal = state.player.maxHealth * 0.4;
+        state.player.health = Math.min(state.player.maxHealth, state.player.health + heal);
+        popup('-40 SKROT', '#f87171');
+        popup('+40% HP', '#4ade80');
       } else {
-        popup('NOT ENOUGH SCRAP', '#f87171');
+        popup('INTE NOG SKROT', '#f87171');
       }
       break;
-    case 'rob_fuel':
+    case 'rob_deal':
       if (Math.random() < 0.3) {
         state.player.health -= 100;
         state.screenFlash = 5;
         popup('-100 HP', '#f87171');
       } else {
-        state.fuel = Math.min(state.maxFuel, state.fuel + 500);
-        popup('+500 FUEL', '#38bdf8');
+        state.runScrapEarned += 50;
+        popup('+50 SKROT', '#4ade80');
       }
       break;
     case 'salvage_safe':
-      state.scrap += 60;
-      popup('+60 SCRAP', '#4ade80');
+      state.runScrapEarned += 60;
+      popup('+60 SKROT', '#4ade80');
       break;
     case 'salvage_risky':
       if (Math.random() < 0.4) {
@@ -373,13 +390,13 @@ export function handleEventChoice(state: GameState, choiceId: string) {
       }
       break;
     case 'buy_mod':
-      if (state.scrap >= 100) {
-        state.scrap -= 100;
+      if (state.runScrapEarned >= 100) {
+        state.runScrapEarned -= 100;
         state.baseDamage *= 1.1;
-        popup('-100 SCRAP', '#f87171');
+        popup('-100 SKROT', '#f87171');
         popup('DMG +10%', '#fbbf24');
       } else {
-        popup('NOT ENOUGH SCRAP', '#f87171');
+        popup('INTE NOG SKROT', '#f87171');
       }
       break;
     case 'deal_blood':
@@ -530,8 +547,10 @@ export function createItemSparkle(pos: Vector2, color: string, count: number = 4
 }
 
 export function updateParticles(particles: Particle[], dt: number = 1, playerPos?: { x: number; y: number }) {
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  const maxParticlesCount = isMobile ? 40 : 250;
+  const reduced =
+    typeof window !== 'undefined' &&
+    useReducedEffects(getViewportProfile(window.innerWidth, window.innerHeight));
+  const maxParticlesCount = reduced ? 40 : 250;
   let current = particles;
   if (particles.length > maxParticlesCount) {
     current = particles.slice(particles.length - maxParticlesCount);
@@ -554,11 +573,52 @@ export function updateParticles(particles: Particle[], dt: number = 1, playerPos
   });
 }
 
-export function spawnEnemy(state: GameState, typeOverride?: number, posOverride?: { x: number; y: number }): Entity {
+function getSurvivalLevelProgress(state: GameState): number {
+  const quota = getStageQuota(state.stage);
+  if (quota <= 0) return 1;
+  const killsDone = quota - state.enemiesToKill;
+  return Math.max(0, Math.min(1, killsDone / quota));
+}
+
+function resolveSpawnTypePick(
+  state: GameState,
+  typeOverride: number | undefined,
+  levelProgress: number
+): number | null {
+  if (typeOverride !== undefined) {
+    if (state.gameMode === 'NORMAL') {
+      const type = getEnemyTypeForPick(typeOverride);
+      if (type && isTypeAtCap(type, state.enemies, levelProgress)) {
+        for (let i = 0; i < 3; i++) {
+          const picked = pickEnemyTypeForThreat(state, levelProgress);
+          if (picked !== null) return picked;
+        }
+        return null;
+      }
+    }
+    return typeOverride;
+  }
+  if (state.gameMode === 'NORMAL') {
+    for (let i = 0; i < 3; i++) {
+      const picked = pickEnemyTypeForThreat(state, levelProgress);
+      if (picked !== null) return picked;
+    }
+    return null;
+  }
+  const fallback = pickEnemyTypeForThreat(state, levelProgress);
+  return fallback;
+}
+
+export function spawnEnemy(
+  state: GameState,
+  typeOverride?: number,
+  posOverride?: { x: number; y: number }
+): Entity | null {
   const worldWidth = state.world.width;
   const worldHeight = state.world.height;
   const playerPos = state.player.pos;
-  const augmentTier = state.augmentCount;
+  const tier = getAugmentTier(state.passives.length);
+  const tierMods = getTierModifiers(tier);
   const stage = state.stage;
   const threatMult = getThreatMult(state);
 
@@ -587,11 +647,15 @@ export function spawnEnemy(state: GameState, typeOverride?: number, posOverride?
   // Time-based ramp: +50% damage/health after 5 min, +100% after 10 min, caps at +150% at ~15 min
   const timeRamp = 1 + Math.min(1.5, state.survivalTime / 600);
 
-  const dynamicHealthFactor = 0.7 + powerFactor * 3.0;
-  const healthScale = (1 + augmentTier * 0.15) * skillFactor * dynamicHealthFactor * timeRamp;
+  const dynamicHealthFactor = 0.7 + powerFactor * 2.0;
+  const healthScale =
+    tierMods.enemyHpMult * skillFactor * dynamicHealthFactor * timeRamp * threatMult;
 
-  const dynamicSpeedFactor = 0.8 + powerFactor * 1.4;
-  const speedScale = (1 + augmentTier * 0.04) * Math.min(2.5, skillFactor * dynamicSpeedFactor) * Math.min(1.5, 1 + state.survivalTime / 1200);
+  const dynamicSpeedFactor = 0.8 + powerFactor * 1.0;
+  const speedScale =
+    tierMods.enemySpeedMult *
+    Math.min(2.5, skillFactor * dynamicSpeedFactor) *
+    Math.min(1.5, 1 + state.survivalTime / 1200);
 
   const isBoss = state.bossActive && state.enemies.filter((e) => e.enemyType === EnemyType.BOSS).length === 0;
 
@@ -603,14 +667,18 @@ export function spawnEnemy(state: GameState, typeOverride?: number, posOverride?
   let damageResist = 0;
 
   if (isBoss) {
+    const boss =
+      BOSS_DEFINITIONS.find((b) => b.id === state.activeBossId) ?? pickBossForStage(stage);
     radius = 100 + stage * 10;
-    // Massive boss health scaling to act as a serious breakpoint
-    health = (3500 * Math.pow(1.5, stage - 1)) * dynamicHealthFactor;
-    speed = (0.8 + stage * 0.1) * speedScale;
+    health = (3500 * Math.pow(1.5, stage - 1)) * dynamicHealthFactor * boss.hpMult;
+    speed = (0.8 + stage * 0.1) * speedScale * boss.speedMult;
     color = '#991b1b';
     enemyType = EnemyType.BOSS;
   } else {
-    const typePick = typeOverride ?? pickEnemyTypeForThreat(state, stage);
+    const levelProgress =
+      state.gameMode === 'NORMAL' ? getSurvivalLevelProgress(state) : 0;
+    const typePick = resolveSpawnTypePick(state, typeOverride, levelProgress);
+    if (typePick === null) return null;
     switch (typePick) {
       case 0:
         color = '#ef4444'; 
@@ -717,7 +785,7 @@ export function spawnEnemy(state: GameState, typeOverride?: number, posOverride?
     speed,
     velocity: new Vector2(0, 0),
     color,
-    damage: Math.floor((15 + augmentTier * 2) * threatMult * timeRamp * (isBoss ? 2 : 1)),
+    damage: Math.floor((15 + tier * 2) * threatMult * timeRamp * (isBoss ? 2 : 1)),
     enemyType,
     lastShot: Date.now(),
     aiTimer: 0,
@@ -729,6 +797,7 @@ export function spawnEnemy(state: GameState, typeOverride?: number, posOverride?
 
 export function updateProjectiles(projectiles: Entity[], worldWidth: number, worldHeight: number, dt: number = 1, bounceCount: number = 0) {
   const updated = projectiles.filter(p => {
+    if (!p?.pos || !p?.velocity) return false;
     p.pos = p.pos.add(p.velocity.mul(dt));
     
     if (p.life !== undefined) {
@@ -831,6 +900,7 @@ export function checkCollision(e1: Entity, e2: Entity): boolean {
 export function resolveObstacleCollision(entity: Entity, obstacles: Obstacle[]) {
   // Simple push-out resolution
   for (const obs of obstacles) {
+    if (!obs?.pos || !obs?.size) continue;
     if (obs.type === 'CIRCLE') {
       const dx = entity.pos.x - obs.pos.x;
       const dy = entity.pos.y - obs.pos.y;
@@ -867,6 +937,7 @@ export function resolveObstacleCollision(entity: Entity, obstacles: Obstacle[]) 
 }
 
 export function checkProjectileObstacleCollision(p: Entity, obs: Obstacle): boolean {
+  if (!p?.pos || !obs?.pos || !obs?.size) return false;
   if (obs.type === 'CIRCLE') {
     const dx = p.pos.x - obs.pos.x;
     const dy = p.pos.y - obs.pos.y;

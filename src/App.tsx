@@ -1,6 +1,6 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+﻿import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Flame, Play, RotateCcw, Shield, Swords, Zap, Trophy, Target, Sparkles } from 'lucide-react';
+import { Flame, Play, RotateCcw, Shield, Swords, Zap, Trophy, Target } from 'lucide-react';
 import { StartPage } from './game/controls/StartPage';
 import { Joystick } from './game/controls/Joystick';
 import { GameHUD } from './game/controls/GameHUD';
@@ -8,15 +8,57 @@ import { GearSystem } from './game/controls/GearSystem';
 import { BuffCardPicker } from './game/controls/BuffCardPicker';
 import { ArtifactUnlockPicker } from './game/controls/ArtifactUnlockPicker';
 import { ArtifactInventory } from './game/controls/ArtifactInventory';
-import { detectMobileViewport, isCompactGameHud, isPortraitViewport } from './game/controls/mobileLayout';
+import {
+  getViewportSnapshot,
+  subscribeViewport,
+  getJoystickSize,
+  getTouchActionSize,
+  getBuffChipsTopClass,
+  getSynergyBarLayout,
+  type ViewportProfile,
+} from './game/controls/mobileLayout';
+import { getAugmentTier, getTierModifiers } from './game/balance/augmentTiers';
 import { computeThreatLevel } from './game/balance/threat';
+import {
+  getKillQuotaForSpawn,
+  getLevelProgress,
+  getMaxAliveEnemies,
+  getSpawnChance,
+  getStageQuota,
+} from './game/balance/spawnCurve';
+import { pickEnemyTypeForThreat } from './game/balance/spawnComposition';
+import {
+  getCombatDensityTier,
+  shouldApplyHitTimer,
+  shouldApplyKnockback,
+  shouldForceLowQuality,
+  shouldTriggerHitFeedback,
+} from './game/balance/combatDensity';
+import { grantExtraLife, tryTriggerExtraLife } from './game/balance/extraLife';
+import {
+  computeBossScrapBonus,
+  computeRunEndScrap,
+  computeStageClearScrap,
+  scrapFromKill,
+} from './game/balance/scrapRewards';
+import { BOSS_DEFINITIONS } from './game/content/bosses';
+import {
+  applyBossArenaWarp,
+  beginBossWarp,
+  BOSS_WARP_SWAP_AT,
+  pickRandomBoss,
+  restoreMainWorldAfterBoss,
+} from './game/content/bossArenas';
+import { countPassiveStacks } from './game/buffs/pickBuffs';
+import { addMetaScrap, getMetaScrap, spendMetaScrap } from './lib/metaStore';
 import { playSfx, loadSfxMuted, setSfxMuted, setSfxVolume, getSfxVolume, resumeAudio } from './game/audio/sfx';
 import { startMusic, stopMusic, duckMusic, loadMusicSettings, setMusicMuted, setMusicVolume } from './game/audio/music';
 import { spawnDamageNumber } from './game/juice/damageNumbers';
-import { triggerHitFeedback, shootSfxForSlot, isBossHit } from './game/juice/hitFeedback';
+import { triggerHitFeedback, shootSfxForSlot, isBossHit, GAMEPLAY_HITSTOP_THRESHOLD } from './game/juice/hitFeedback';
 import { getActiveSynergies, countTag } from './game/buffs/synergies';
 import { SynergyBar } from './game/controls/SynergyBar';
 import { RunSummary } from './game/controls/RunSummary';
+import { BossWarpOverlay } from './game/controls/BossWarpOverlay';
 import { PASSIVE_BUFFS } from './game/content/buffs';
 import { getCampaignLevel, pickCampaignEnemyType, getSpawnPosAlongPath, samplePath, samplePathTangent, PORTAL_TRIGGER_RADIUS } from './game/content/campaignLevels';
 import { CampaignSelect, markLevelComplete } from './game/controls/CampaignSelect';
@@ -53,7 +95,36 @@ import { render } from './game/Renderer';
 import { RandomEventDialog } from './game/controls/RandomEventDialog';
 import { TRAITS, handleEventChoice, pickRandomTraits, RANDOM_EVENTS } from './game/Logic';
 import { missionController } from './game/missionController';
-console.log('Mission controller imported:', missionController);
+
+function findNearestEnemyInGrid(
+  grid: Map<string, Entity[]>,
+  origin: Vector2,
+  excludeId: string,
+  radius: number,
+  cellSize: number
+): Entity | null {
+  const gx = Math.floor(origin.x / cellSize);
+  const gy = Math.floor(origin.y / cellSize);
+  const cellRadius = Math.ceil(radius / cellSize);
+  let nearest: Entity | null = null;
+  let minDist = radius;
+
+  for (let ox = -cellRadius; ox <= cellRadius; ox++) {
+    for (let oy = -cellRadius; oy <= cellRadius; oy++) {
+      const cell = grid.get(`${gx + ox},${gy + oy}`);
+      if (!cell) continue;
+      for (const other of cell) {
+        if (other.id === excludeId || other.health <= 0) continue;
+        const d = other.pos.distanceTo(origin);
+        if (d < minDist) {
+          minDist = d;
+          nearest = other;
+        }
+      }
+    }
+  }
+  return nearest;
+}
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -79,7 +150,9 @@ export default function App() {
     playerSpeed: number;
     isGameOver: boolean;
     isPaused: boolean;
-    gameMode: 'NORMAL' | 'AIM_TRAINER';
+    gameMode: GameState['gameMode'];
+    cardTimer: number;
+    passives: string[];
     buffs: {
       shield: number;
       overdrive: number;
@@ -93,10 +166,12 @@ export default function App() {
     ultimateCharge: number;
     activeWeaponSlot: 'CANNON_A',
     equippedArtifacts: Record<ArtifactSlot, string | null>;
-    scrap: number;
-    fuel: number;
-    maxFuel: number;
+    runScrapEarned: number;
+    bossArenaTransition: number;
+    activeBossId: string | null;
+    bossActive: boolean;
     pendingEvent: RandomEvent | null;
+    extraLifeCharges: number;
   } | null>(null);
 
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -106,28 +181,44 @@ export default function App() {
   
   // Artifact Persistence
   const [unlockedArtifactIds, setUnlockedArtifactIds] = useState<string[]>(() => {
-    const saved = localStorage.getItem('unlockedArtifacts');
-    return saved ? JSON.parse(saved) : ['iron_sights', 'backup_cannon', 'basic_hull', 'basic_thrusters'];
+    try {
+      const saved = localStorage.getItem('unlockedArtifacts');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // corrupted save
+    }
+    return ['iron_sights', 'backup_cannon', 'basic_hull', 'basic_thrusters'];
   });
   
   const [equippedArtifactIds, setEquippedArtifactIds] = useState<Record<ArtifactSlot, string | null>>(() => {
-    const saved = localStorage.getItem('equippedArtifacts');
-    if (saved) return JSON.parse(saved);
+    try {
+      const saved = localStorage.getItem('equippedArtifacts');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // corrupted save
+    }
     return {
       CANNON_A: 'iron_sights',
       CANNON_B: 'backup_cannon',
       CANNON_C: null,
       ULTIMATE: null,
       ARMOR: 'basic_hull',
-      MOBILITY: 'basic_thrusters'
+      MOBILITY: 'basic_thrusters',
     };
   });
 
   const [artifactUnlockChoices, setArtifactUnlockChoices] = useState<Artifact[]>([]);
   const [showArtifactUnlock, setShowArtifactUnlock] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [isPortrait, setIsPortrait] = useState(false);
+  const [viewportProfile, setViewportProfile] = useState<ViewportProfile>('desktop');
   const [compactHud, setCompactHud] = useState(false);
+  const [landscapeHud, setLandscapeHud] = useState(false);
+  const [showTouchControls, setShowTouchControls] = useState(false);
+  const viewportProfileRef = useRef<ViewportProfile>('desktop');
+  const reducedEffectsRef = useRef(false);
+  const isMobile = viewportProfile !== 'desktop';
   const [isInventoryOpen, setIsInventoryOpen] = useState(false);
   const [newUnlockIds, setNewUnlockIds] = useState<string[]>([]);
   
@@ -165,12 +256,6 @@ export default function App() {
     localStorage.setItem('equippedArtifacts', JSON.stringify(equippedArtifactIds));
   }, [equippedArtifactIds]);
 
-  const triggerHaptic = useCallback((pattern: number | number[]) => {
-    if (hapticsEnabled && typeof navigator !== 'undefined' && navigator.vibrate) {
-      try { navigator.vibrate(pattern); } catch (e) {}
-    }
-  }, [hapticsEnabled]);
-
   const controls = useRef({
     move: { x: 0, y: 0 },
     aim: { x: 0, y: 0 },
@@ -183,6 +268,16 @@ export default function App() {
 
   const lastFireTime = useRef(0);
   const [showLevelUp, setShowLevelUp] = useState(false);
+  const unlockedArtifactIdsRef = useRef(unlockedArtifactIds);
+  const equippedArtifactIdsRef = useRef(equippedArtifactIds);
+  const joystickDeadZoneRef = useRef(joystickDeadZone);
+  const hapticsEnabledRef = useRef(hapticsEnabled);
+  const musicMutedRef = useRef(musicMuted);
+  const showLevelUpRef = useRef(showLevelUp);
+  const showArtifactUnlockRef = useRef(showArtifactUnlock);
+  const pendingArtifactUnlockRef = useRef<Artifact[] | null>(null);
+  const [metaScrap, setMetaScrap] = useState(() => getMetaScrap());
+  const [lastRunScrapEarned, setLastRunScrapEarned] = useState(0);
   const [currentBuffs, setCurrentBuffs] = useState<PassiveBuff[]>([]);
 
   useEffect(() => {
@@ -191,18 +286,60 @@ export default function App() {
     setSfxMutedState(localStorage.getItem('sfxMuted') === '1');
     setMusicMutedState(localStorage.getItem('musicMuted') === '1');
     setSfxVol(getSfxVolume());
-    const handleResize = () => {
+    const applyViewport = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
+      const snap = getViewportSnapshot(w, h);
+      const prev = viewportProfileRef.current;
       setDimensions({ width: w, height: h });
-      const mobile = detectMobileViewport();
-      setIsMobile(mobile);
-      setIsPortrait(isPortraitViewport());
-      setCompactHud(isCompactGameHud());
+      setViewportProfile(snap.profile);
+      setCompactHud(snap.compactHud);
+      setLandscapeHud(snap.landscapeHud);
+      setShowTouchControls(snap.showTouchControls);
+      viewportProfileRef.current = snap.profile;
+      reducedEffectsRef.current = snap.reducedEffects;
+      if (prev !== snap.profile) {
+        controls.current.move = { x: 0, y: 0 };
+        controls.current.aim = { x: 0, y: 0 };
+        controls.current.isFiring = false;
+      }
     };
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    applyViewport();
+    return subscribeViewport(applyViewport);
+  }, []);
+
+  useEffect(() => {
+    unlockedArtifactIdsRef.current = unlockedArtifactIds;
+  }, [unlockedArtifactIds]);
+
+  useEffect(() => {
+    equippedArtifactIdsRef.current = equippedArtifactIds;
+  }, [equippedArtifactIds]);
+
+  useEffect(() => {
+    joystickDeadZoneRef.current = joystickDeadZone;
+  }, [joystickDeadZone]);
+
+  useEffect(() => {
+    hapticsEnabledRef.current = hapticsEnabled;
+  }, [hapticsEnabled]);
+
+  useEffect(() => {
+    musicMutedRef.current = musicMuted;
+  }, [musicMuted]);
+
+  useEffect(() => {
+    showLevelUpRef.current = showLevelUp;
+  }, [showLevelUp]);
+
+  useEffect(() => {
+    showArtifactUnlockRef.current = showArtifactUnlock;
+  }, [showArtifactUnlock]);
+
+  const triggerHaptic = useCallback((pattern: number | number[]) => {
+    if (hapticsEnabledRef.current && typeof navigator !== 'undefined' && navigator.vibrate) {
+      try { navigator.vibrate(pattern); } catch (e) {}
+    }
   }, []);
 
   const openBuffPicker = (state: GameState) => {
@@ -245,8 +382,19 @@ export default function App() {
     initialState.threatPeak = initialState.threatLevel;
     initialState.runStartTime = Date.now();
     initialState.runArtifactsUnlockedThisRun = [];
-    initialState.cardTimer = 0; // Trigger first buff pick immediately
+    initialState.cardTimer = 15;
+    initialState.spawnRampTimer = 5;
+    initialState.activeBossId = null;
+    initialState.bossArenaTransition = 0;
+    initialState.bossArenaSwapped = false;
+    initialState.inBossArena = false;
+    initialState.mainWorldSnapshot = null;
+    initialState.lastBossId = null;
+    initialState.pendingArenaRestore = false;
+    initialState.runScrapEarned = 0;
+    initialState.postBossBuffPick = false;
     gameStateRef.current = initialState;
+    setLastRunScrapEarned(0);
     setNewUnlockIds([]);
     setShowArtifactUnlock(false);
     setArtifactUnlockChoices([]);
@@ -282,6 +430,8 @@ export default function App() {
     initialState.runStartTime = Date.now();
     initialState.runArtifactsUnlockedThisRun = [];
     initialState.cardTimer = 30;
+    initialState.spawnRampTimer = 5;
+    initialState.postBossBuffPick = false;
     gameStateRef.current = initialState;
     setNewUnlockIds([]);
     setShowArtifactUnlock(false);
@@ -320,11 +470,31 @@ export default function App() {
       cardTimer: state.cardTimer,
       activeWeaponSlot: state.activeWeaponSlot,
       equippedArtifacts: { ...state.equippedArtifacts },
-      scrap: state.scrap,
-      fuel: state.fuel,
-      maxFuel: state.maxFuel,
+      runScrapEarned: state.runScrapEarned,
+      bossArenaTransition: state.bossArenaTransition,
+      activeBossId: state.activeBossId,
+      bossActive: state.bossActive,
       pendingEvent: state.pendingEvent,
+      extraLifeCharges: state.extraLifeCharges,
+      passives: [...state.passives],
     });
+  };
+
+  const handleFatalDamage = (next: GameState, player: Entity): boolean => {
+    if (player.health > 0) return false;
+    if (next.isGameOver) return false;
+    if (tryTriggerExtraLife(next, player)) return true;
+    next.isGameOver = true;
+    const banked = next.runScrapEarned + computeRunEndScrap(next);
+    if (banked > 0) {
+      addMetaScrap(banked);
+      setMetaScrap(getMetaScrap());
+    }
+    setLastRunScrapEarned(banked);
+    playSfx('gameOver');
+    stopMusic();
+    next.screenshake = 10;
+    return true;
   };
 
   const handleLevelUpChoice = (choiceId: string) => {
@@ -428,7 +598,7 @@ export default function App() {
     const ctx = canvasRef.current?.getContext('2d');
     if (!ctx) return;
 
-    // FPS tracking — rolling average over 30 frames
+    // FPS tracking â€” rolling average over 30 frames
     const FPS_WINDOW = 30;
     const fpsBuffer: number[] = [];
     let fpsMeasured = 0;
@@ -443,19 +613,24 @@ export default function App() {
       // dt is normalized to 60fps (16.67ms per frame), scaled by 0.75 to slow down the action
       const dt = Math.min(deltaTime / 16.67, 4) * 0.70;
 
-      // Rolling FPS average — update quality every FPS_WINDOW frames
+      // Rolling FPS average â€” update quality every FPS_WINDOW frames
       if (deltaTime > 0 && deltaTime < 500) {
         fpsBuffer.push(1000 / deltaTime);
         if (fpsBuffer.length > FPS_WINDOW) fpsBuffer.shift();
         fpsMeasured = fpsBuffer.reduce((a, b) => a + b, 0) / fpsBuffer.length;
         if (next && fpsBuffer.length === FPS_WINDOW) {
-          if (fpsMeasured < 50 && next.qualityLevel === 'high') next.qualityLevel = 'low';
-          else if (fpsMeasured > 55 && next.qualityLevel === 'low') next.qualityLevel = 'high';
+          if (shouldForceLowQuality(getCombatDensityTier(next.enemies.length))) {
+            next.qualityLevel = 'low';
+          } else if (fpsMeasured < 50 && next.qualityLevel === 'high') {
+            next.qualityLevel = 'low';
+          } else if (fpsMeasured > 55 && next.qualityLevel === 'low') {
+            next.qualityLevel = 'high';
+          }
         }
       }
 
-      if (!next || next.isPaused || showLevelUp || showArtifactUnlock) {
-        if (next) render(ctx, next, dimensions.width, dimensions.height, { isMobile: window.innerWidth < 768 });
+      if (!next || next.isPaused || showLevelUpRef.current || showArtifactUnlockRef.current) {
+        if (next) render(ctx, next, dimensions.width, dimensions.height, { isMobile: reducedEffectsRef.current });
         animId = requestAnimationFrame(loop);
         return;
       }
@@ -464,18 +639,19 @@ export default function App() {
         // Only update particles for death explosion
         next.particles = updateParticles(next.particles, dt, next.player.pos);
         if (next.screenshake > 0) next.screenshake *= Math.pow(0.9, dt);
-        render(ctx, next, dimensions.width, dimensions.height, { isMobile: window.innerWidth < 768 });
+        render(ctx, next, dimensions.width, dimensions.height, { isMobile: reducedEffectsRef.current });
         animId = requestAnimationFrame(loop);
         return;
       }
 
-      // Hit-Stop logic
+      // Hit-stop: only freeze gameplay for heavy hits (crit/boss/shield), not every bullet
       if (next.hitStop > 0) {
         next.hitStop -= dt;
-        // Still render and update particles slightly during hitstop, but freeze game logic
+      }
+      if (next.hitStop >= GAMEPLAY_HITSTOP_THRESHOLD) {
         next.particles = updateParticles(next.particles, dt * 0.1, next.player.pos);
         if (next.screenshake > 0) next.screenshake *= Math.pow(0.9, dt);
-        render(ctx, next, dimensions.width, dimensions.height, { isMobile: window.innerWidth < 768 });
+        render(ctx, next, dimensions.width, dimensions.height, { isMobile: reducedEffectsRef.current });
         animId = requestAnimationFrame(loop);
         return;
       }
@@ -516,15 +692,8 @@ export default function App() {
         next.energy = Math.min(next.maxEnergy, next.energy + 0.3 * dt);
       }
 
-      // Fuel Decay & Event Logic
+      // Random events (survival)
       if (next.gameMode === 'NORMAL') {
-        const fuelDrainRate = next.activeTraits.includes('fuel_leak') ? 0.25 : next.activeTraits.includes('efficient') ? 0.07 : 0.1;
-        next.fuel = Math.max(0, next.fuel - fuelDrainRate * dt);
-        if (next.fuel <= 0) {
-          // Slow health drain if fuel is empty
-          player.health -= 0.1 * dt;
-        }
-
         next.eventTimer -= dt;
         if (next.eventTimer <= 0) {
           const eventIds = Object.keys(RANDOM_EVENTS);
@@ -582,14 +751,6 @@ export default function App() {
         }
       }
 
-      if (next.hasEmergencyShield && player.health / player.maxHealth < 0.3) {
-        next.emergencyShieldCooldown -= dt * (16.67 / 1000);
-        if (next.emergencyShieldCooldown <= 0) {
-          next.buffs.shield = Math.max(next.buffs.shield, 1);
-          next.emergencyShieldCooldown = 45; // 45 seconds
-        }
-      }
-
       // Buffs decay (skip permanents)
       if (!next.permanentOverdrive && next.buffs.overdrive > 0) next.buffs.overdrive -= dt;
       if (next.buffs.magnet > 0) next.buffs.magnet -= dt;
@@ -613,15 +774,6 @@ export default function App() {
         player.health = Math.min(player.maxHealth, player.health + (next.regen / 60) * dt);
       }
 
-      // Passive Shield Charge
-      if (next.passives.includes('shield_up')) {
-        next.shieldTimer += dt * (16.67 / 1000);
-        if (next.shieldTimer >= 18) { // Every 18 seconds
-          next.shieldTimer = 0;
-          next.buffs.shield = Math.min(next.buffs.shield + 1, 3); // Max 3 shields
-        }
-      }
-
       // Passive Health Regen (very slow - base)
       if (player.health < player.maxHealth) {
         player.health = Math.min(player.maxHealth, player.health + 0.01 * dt);
@@ -632,6 +784,8 @@ export default function App() {
       // Process Input: Keyboard takes priority over Joystick
       let kx = 0;
       let ky = 0;
+      const warpLocked = next.bossArenaTransition > 0;
+
       if (controls.current.keys.has('w')) ky -= 1;
       if (controls.current.keys.has('s')) ky += 1;
       if (controls.current.keys.has('a')) kx -= 1;
@@ -659,9 +813,9 @@ export default function App() {
       const joystickMag = Math.hypot(controls.current.move.x, controls.current.move.y);
       if (kx !== 0 || ky !== 0) {
         moveDir = new Vector2(kx, ky).normalize();
-      } else if (joystickMag > joystickDeadZone) {
-        // Apply dead zone mapping
-        const mappedMag = Math.min(1, (joystickMag - joystickDeadZone) / (1 - joystickDeadZone));
+      } else if (joystickMag > joystickDeadZoneRef.current) {
+        const dz = joystickDeadZoneRef.current;
+        const mappedMag = Math.min(1, (joystickMag - dz) / (1 - dz));
         const dir = new Vector2(controls.current.move.x, controls.current.move.y).normalize();
         moveDir = dir.mul(mappedMag);
       }
@@ -669,7 +823,7 @@ export default function App() {
       // Calculate Aim: Joystick takes priority for aiming if actively moved
       let aimDir: Vector2;
       const aimMag = Math.hypot(controls.current.aim.x, controls.current.aim.y);
-      if (aimMag > joystickDeadZone) {
+      if (aimMag > joystickDeadZoneRef.current) {
         aimDir = new Vector2(controls.current.aim.x, controls.current.aim.y).normalize();
       } else {
         const zoom = next.campaignZoom ?? 0.5;
@@ -685,7 +839,13 @@ export default function App() {
       
       // Dash Initiation
       const dashCost = Math.max(12, 30 - next.dashEnergyDiscount);
-      if (next.gameMode !== 'CAMPAIGN' && controls.current.wantDash && next.energy >= dashCost && !next.isDashing) {
+      if (
+        !warpLocked &&
+        next.gameMode !== 'CAMPAIGN' &&
+        controls.current.wantDash &&
+        next.energy >= dashCost &&
+        !next.isDashing
+      ) {
         next.isDashing = true;
         next.dashDuration = 10;
         next.energy -= dashCost;
@@ -749,6 +909,8 @@ export default function App() {
             size: 5
           });
         }
+      } else if (warpLocked) {
+        player.velocity = new Vector2(0, 0);
       } else {
         if (moveDir.magnitude() > 0.05) {
           // Rapid acceleration, almost 1-frame, but allows some lean tracking
@@ -775,7 +937,7 @@ export default function App() {
       player.aimDir = aimDir;
       const preObsPos = player.pos.clone();
       resolveObstacleCollision(player, next.obstacles);
-      // If push-out moved the player, they were touching an obstacle → damage
+      // If push-out moved the player, they were touching an obstacle â†’ damage
       if (next.gameMode === 'CAMPAIGN' && next.playerIFrameTimer <= 0) {
         const pushed = player.pos.sub(preObsPos).magnitude();
         if (pushed > 0.5) {
@@ -1000,9 +1162,17 @@ export default function App() {
         }
       }
 
-      if (next.hasHoming && next.enemies.length > 0) {
+      if (next.enemies.length > 0) {
         next.projectiles.forEach(p => {
-          if (p.type === EntityType.PROJECTILE && p.ownerId === 'player') {
+          if (
+            !p?.pos ||
+            !p?.velocity ||
+            p.type !== EntityType.PROJECTILE ||
+            p.ownerId !== 'player' ||
+            (!next.hasHoming && !p.homing)
+          ) {
+            return;
+          }
             let bestDist = 800;
             let target: Entity | null = null;
             next.enemies.forEach(e => {
@@ -1018,7 +1188,6 @@ export default function App() {
               const currentSpeed = p.velocity.magnitude();
               p.velocity = p.velocity.normalize().add(toTarget.mul(steerRate)).normalize().mul(currentSpeed);
             }
-          }
         });
       }
 
@@ -1031,6 +1200,36 @@ export default function App() {
         next.particles.splice(0, next.particles.length - PARTICLE_CAP);
       }
 
+      if (next.pendingArenaRestore) {
+        restoreMainWorldAfterBoss(next, dimensions.width, dimensions.height);
+        next.pendingArenaRestore = false;
+        next.enemies = [];
+        next.projectiles = [];
+        next.items = [];
+        next.screenFlash = Math.max(next.screenFlash, 15);
+        playSfx('augment');
+      }
+
+      if (next.bossArenaTransition > 0) {
+        next.bossArenaTransition -= dt;
+        next.player.velocity = new Vector2(0, 0);
+        if (
+          next.bossArenaTransition <= BOSS_WARP_SWAP_AT &&
+          !next.bossArenaSwapped &&
+          next.activeBossId
+        ) {
+          applyBossArenaWarp(next, dimensions.width, dimensions.height);
+          if (next.passives.includes('crimson_overdrive')) {
+            next.buffs.overdrive = Math.max(next.buffs.overdrive, 480);
+          }
+          playSfx('augment');
+        }
+        if (next.bossArenaTransition <= 0) {
+          next.bossArenaTransition = 0;
+          next.bossActive = true;
+        }
+      }
+
       // Stage Transition Logic
       if (next.gameMode === 'NORMAL') {
         if (next.stageTransition > 0) {
@@ -1039,8 +1238,19 @@ export default function App() {
             // Advance Stage
           next.stage++;
           next.cardTimer = getCardIntervalSeconds(next.stage, next.survivalTime, next.passives.length);
-          next.enemiesToKill = 60 + 40 * next.stage;
+          next.enemiesToKill = getStageQuota(next.stage);
           next.bossActive = false;
+          next.activeBossId = null;
+          next.bossArenaTransition = 0;
+          next.bossArenaSwapped = false;
+          next.inBossArena = false;
+          next.mainWorldSnapshot = null;
+          next.obstacles = generateObstaclesForStage(
+            next.stage,
+            next.world.width,
+            next.world.height
+          );
+          next.runScrapEarned += computeStageClearScrap(next.stage - 1);
           next.enemies = [];
           next.projectiles = [];
           next.items = [];
@@ -1089,7 +1299,7 @@ export default function App() {
             color: '#facc15',
           });
         }
-      } else if (next.stageTransition <= 0) {
+      } else if (next.stageTransition <= 0 && next.bossArenaTransition <= 0) {
         // Hazard spawning
         if (Math.random() < 0.002) {
           next.hazards.push(spawnHazard(next));
@@ -1097,72 +1307,85 @@ export default function App() {
 
         if (next.spawnRampTimer > 0) next.spawnRampTimer -= dt;
 
-        // Dynamically scale max enemies based on player power (threatLevel 0-100) and game progression
-        const mobile = typeof window !== 'undefined' && window.innerWidth < 768;
-        const threatFactor = next.threatLevel / 100;
+        const mobile = reducedEffectsRef.current;
+        const tierMods = getTierModifiers(getAugmentTier(next.passives.length));
+        const threatFactor = tierMods.threatFactor;
 
         const campaignLevel = next.gameMode === 'CAMPAIGN' && next.campaignLevelId
           ? getCampaignLevel(next.campaignLevelId)
           : null;
 
-        let totalToKill = campaignLevel
-          ? campaignLevel.enemiesToKill
-          : 150 + (next.stage * 100);
-        let progressToBoss = Math.max(0, 1.0 - (next.enemiesToKill / totalToKill));
-        if (next.bossActive || next.gameMode === 'SURVIVAL') progressToBoss = 1.0 + (next.survivalTime / 600);
+        const totalToKill = getKillQuotaForSpawn(
+          next.gameMode,
+          next.stage,
+          campaignLevel?.enemiesToKill ?? null
+        );
+        let levelProgress = getLevelProgress(next.enemiesToKill, totalToKill);
+        if (next.bossActive || next.gameMode === 'SURVIVAL') {
+          levelProgress = Math.min(1, levelProgress + next.survivalTime / 600);
+        }
 
         const isRamping = next.spawnRampTimer > 0;
 
-        // Start very low, scale massively by combining progress and threat
-        const baseEnemies = 5 + (progressToBoss * progressToBoss * 150) + ((next.stage - 1) * 40);
-        const powerEnemies = threatFactor * (mobile ? 100 : 200);
-        const maxEnemiesLimit = mobile ? 50 : 120;
-        const maxEnemies = isRamping
-          ? Math.min(10, maxEnemiesLimit)
-          : Math.min(maxEnemiesLimit, baseEnemies + powerEnemies);
+        const maxEnemies = getMaxAliveEnemies({
+          levelProgress,
+          threatFactor,
+          isRamping,
+          mobile,
+        });
 
-        // Spawn chance ramps up heavily with progress and threat
-        const spawnChance = Math.min(mobile ? 0.35 : 0.85, 0.01 + (progressToBoss * 0.4) + (threatFactor * 0.2));
+        const spawnChance =
+          getSpawnChance({
+            levelProgress,
+            threatFactor,
+            survivalTime: next.survivalTime,
+            mobile,
+          }) * tierMods.spawnChanceMult;
 
-        const spawnOne = () => {
+        const spawnOne = (): Entity | null => {
           if (campaignLevel) {
-            const typeOv = pickCampaignEnemyType(campaignLevel, 1 - next.enemiesToKill / totalToKill);
+            const typeOv = pickCampaignEnemyType(campaignLevel, levelProgress);
             const posOv = getSpawnPosAlongPath(campaignLevel, next.enemiesToKill, next.world.width, next.world.height);
             return spawnEnemy(next, typeOv, posOv);
           }
-          return spawnEnemy(next);
+          const pick = pickEnemyTypeForThreat(next, levelProgress);
+          if (pick === null) return null;
+          return spawnEnemy(next, pick);
         };
 
-        if (!next.bossActive && next.enemiesToKill > next.enemies.length && next.enemies.length < maxEnemies) {
+        const pushSpawn = (entity: Entity | null) => {
+          if (entity) next.enemies.push(entity);
+        };
+
+        if (!next.bossActive && next.enemiesToKill > 0 && next.enemies.length < maxEnemies) {
           if (Math.random() < spawnChance) {
-            next.enemies.push(spawnOne());
+            pushSpawn(spawnOne());
           }
 
           if (!isRamping) {
             if (spawnChance > 0.15 && Math.random() < spawnChance * 0.5 && next.enemies.length < maxEnemies) {
-              next.enemies.push(spawnOne());
+              pushSpawn(spawnOne());
             }
             if (spawnChance > 0.3 && Math.random() < spawnChance * 0.4 && next.enemies.length < maxEnemies) {
-              next.enemies.push(spawnOne());
-              next.enemies.push(spawnOne());
+              pushSpawn(spawnOne());
+              pushSpawn(spawnOne());
             }
-            if (!campaignLevel && progressToBoss > 0.6 && Math.random() < 0.03 && next.enemies.length < maxEnemies) {
-              const fastCount = next.enemies.filter(e => e.enemyType === EnemyType.FAST).length;
-              if (fastCount < 10) {
-                for (let h = 0; h < 2 + Math.floor(threatFactor * 4); h++) next.enemies.push(spawnEnemy(next, 9));
+            if (!campaignLevel && levelProgress > 0.6 && Math.random() < 0.03 && next.enemies.length < maxEnemies) {
+              const burstCount = Math.min(2, 1 + Math.floor(threatFactor));
+              for (let h = 0; h < burstCount; h++) {
+                if (next.enemies.length >= maxEnemies) break;
+                pushSpawn(spawnOne());
               }
             }
           }
         } else if (next.bossActive && next.enemies.filter(e => e.enemyType === EnemyType.BOSS).length === 0) {
-          // Spawn the boss
-          next.enemies.push(spawnEnemy(next));
+          pushSpawn(spawnEnemy(next));
         } else if (next.bossActive && next.enemies.length < maxEnemies && Math.random() < Math.min(0.4, spawnChance * 0.5)) {
-          // Add extra adds during boss fight
-          next.enemies.push(spawnEnemy(next));
+          pushSpawn(spawnEnemy(next));
         }
 
         // Hard trim: remove oldest non-boss enemies if over absolute limit
-        const HARD_CAP = mobile ? 60 : 150;
+        const HARD_CAP = mobile ? 60 : 90;
         if (next.enemies.length > HARD_CAP) {
           let toRemove = next.enemies.length - HARD_CAP;
           next.enemies = next.enemies.filter(e => {
@@ -1191,10 +1414,12 @@ export default function App() {
       // Collision
       for (let i = next.projectiles.length - 1; i >= 0; i--) {
         const p = next.projectiles[i];
+        if (!p?.pos) continue;
 
         // vs Obstacles
         let hitObs = false;
         for (const obs of next.obstacles) {
+          if (!obs?.pos || !obs?.size) continue;
           if (checkProjectileObstacleCollision(p, obs)) {
             hitObs = true;
             if (next.qualityLevel === 'high') next.particles.push(...createImpact(p.pos, p.color, 2));
@@ -1214,28 +1439,16 @@ export default function App() {
               p.health = 0;
               continue;
             }
-            if (next.buffs.shield > 0) {
-              next.buffs.shield -= 1;
-              next.playerIFrameTimer = 20; // Brief iframes after shield hit
-              next.particles.push(...createImpact(p.pos, '#60a5fa', 15));
-              triggerHitFeedback(next, 'shield');
-              playSfx('pickup'); // Placeholder for shield impact sound
-            } else {
-              const takenDmg = (p.damage || 10) * 1.5; 
-              player.health -= takenDmg;
-              player.hitTimer = 3;
-              next.playerIFrameTimer = 45; 
-              next.screenFlash = 4;
-              next.screenshake = Math.min(next.screenshake + 1, 4);
-              next.particles.push(...createImpact(player.pos, '#ffffff', 5));
-              
-              if (player.health <= 0) {
-                next.isGameOver = true;
-                playSfx('gameOver');
-                stopMusic();
-                next.screenshake = 10;
-                syncUi();
-              }
+            const takenDmg = (p.damage || 10) * 1.5;
+            player.health -= takenDmg;
+            player.hitTimer = 3;
+            next.playerIFrameTimer = 45;
+            next.screenFlash = 4;
+            next.screenshake = Math.min(next.screenshake + 1, 4);
+            next.particles.push(...createImpact(player.pos, '#ffffff', 5));
+
+            if (handleFatalDamage(next, player)) {
+              if (next.isGameOver) syncUi();
             }
             p.health = 0;
             continue;
@@ -1271,7 +1484,11 @@ export default function App() {
                   }
                   
                   e.health -= damage;
-                  e.hitTimer = 3; 
+                  const densityTier = getCombatDensityTier(next.enemies.length);
+                  const isKillHit = e.health <= 0;
+                  if (shouldApplyHitTimer(densityTier, isCrit, isKillHit)) {
+                    e.hitTimer = 3;
+                  }
 
                   // Lifesteal
                   if (next.lifeSteal > 0 && e.health <= 0) {
@@ -1325,19 +1542,14 @@ export default function App() {
                   }
                   
                   if ((p.bounceCount || 0) > 0 && p.health > 0 && !isCrit && !hasPermanentPiercing(next) && !next.hasInfinityPierce && next.buffs.piercing <= 0) {
-                    // Ricochet logic: find another nearby enemy
                     const bounceRadius = 300;
-                    let nearestOther: Entity | null = null;
-                    let minDist = bounceRadius;
-                    
-                    next.enemies.forEach(other => {
-                      if (other.id === e.id || other.health <= 0) return;
-                      const d = other.pos.distanceTo(e.pos);
-                      if (d < minDist) {
-                        minDist = d;
-                        nearestOther = other;
-                      }
-                    });
+                    const nearestOther = findNearestEnemyInGrid(
+                      grid,
+                      e.pos,
+                      e.id,
+                      bounceRadius,
+                      cellSize
+                    );
 
                     if (nearestOther) {
                       const newDir = (nearestOther as Entity).pos.sub(e.pos).normalize();
@@ -1365,19 +1577,22 @@ export default function App() {
                     next.nextShotBurns = false;
                   }
 
-                  if (isCrit) triggerHitFeedback(next, 'crit');
-                  else if (isBossHit(e.enemyType)) triggerHitFeedback(next, 'boss');
-                  else triggerHitFeedback(next, 'normal');
+                  const hitKind = isCrit ? 'crit' : isBossHit(e.enemyType) ? 'boss' : 'normal';
+                  if (shouldTriggerHitFeedback(densityTier, hitKind)) {
+                    triggerHitFeedback(next, hitKind);
+                  }
 
-                  const kbForce = Math.min((damage / e.maxHealth) * 30 + 2, 10);
-                  const pNorm = p.velocity.magnitude() > 0.01 ? p.velocity.normalize() : new Vector2(1, 0);
-                  e.knockback = new Vector2(pNorm.x * kbForce, pNorm.y * kbForce);
+                  if (shouldApplyKnockback(densityTier, isCrit, isKillHit, isBossHit(e.enemyType))) {
+                    const kbForce = Math.min((damage / e.maxHealth) * 30 + 2, 10);
+                    const pNorm = p.velocity.magnitude() > 0.01 ? p.velocity.normalize() : new Vector2(1, 0);
+                    e.knockback = new Vector2(pNorm.x * kbForce, pNorm.y * kbForce);
+                  }
 
                   const chaosFactor = Math.max(1, next.enemies.length / 50);
-                  const isKill = e.health <= 0;
+                  const isKill = isKillHit;
                   const isHeavy = e.enemyType === EnemyType.BOSS || e.enemyType === EnemyType.TANK || e.enemyType === EnemyType.ELITE;
 
-                  // Damage numbers always — particles only on light enemies at low chaos
+                  // Damage numbers always â€” particles only on light enemies at low chaos
                   spawnDamageNumber(
                     next.damageTexts,
                     e.pos.clone(),
@@ -1398,7 +1613,9 @@ export default function App() {
                     const scoreGain = 100 * (next.buffs.scoreX > 0 ? 2 : 1) * Math.min(10, next.combo) * next.comboDamageMult;
                     next.score += scoreGain;
                     next.killCountSinceHeal += 1;
-                    next.ultimateCharge = Math.min(100, next.ultimateCharge + 0.5);
+                    const ultGain =
+                      next.bossActive && countPassiveStacks(next.passives, 'tyrant_fury') > 0 ? 0.8 : 0.5;
+                    next.ultimateCharge = Math.min(100, next.ultimateCharge + ultGain);
                     if (next.passives.includes('kill_satellite')) {
                       next.killSatelliteCounter += 1;
                       if (next.killSatelliteCounter >= 8) {
@@ -1450,11 +1667,9 @@ export default function App() {
                     next.screenshake = Math.min(next.screenshake + (e.enemyType === EnemyType.BOSS ? 8 : 2) * shakeMult, 15);
 
                     if (e.enemyType !== EnemyType.BOSS) {
-                      // 1-frame flash only — not a value ramp
+                      // 1-frame flash only â€” not a value ramp
                       next.screenFlash = Math.max(next.screenFlash, 1);
-                      // Give scrap reward
-                      const scrapReward = Math.random() < 0.3 ? (next.activeTraits.includes('scavenger') ? 2 : 1) : 0;
-                      next.scrap += scrapReward;
+                      next.runScrapEarned += scrapFromKill(next);
                     }
                     
                     const item = spawnItem(e.pos);
@@ -1482,23 +1697,30 @@ export default function App() {
                     } else if (e.enemyType === EnemyType.NOVA) {
                       next.particles.push(...createExplosion(e.pos, '#f97316', 40, 2.5));
                       if (player.pos.distanceTo(e.pos) < 200) {
-                         if (next.buffs.shield > 0) {
-                            next.buffs.shield -= 1;
-                            next.playerIFrameTimer = 30; // brief iframes
-                            next.particles.push(...createImpact(player.pos, '#60a5fa', 15));
-                            triggerHitFeedback(next, 'shield');
-                         } else {
-                            player.health -= 35;
-                            next.screenshake = Math.max(next.screenshake, 20);
-                         }
+                        player.health -= 35;
+                        next.screenshake = Math.max(next.screenshake, 20);
+                        if (handleFatalDamage(next, player) && next.isGameOver) syncUi();
                       }
                     }
                     
                     if (e.type === EntityType.ENEMY) {
-                      console.log('Enemy killed event:', e.enemyType);
-                      missionController.notifyEvent('enemy_killed', e.enemyType);
                       if (e.enemyType === EnemyType.BOSS) {
                         next.bossActive = false;
+                        next.pendingArenaRestore = true;
+                        next.postBossBuffPick = true;
+                        let bossScrap = computeBossScrapBonus(next.stage);
+                        if (countPassiveStacks(next.passives, 'salvage_radar') > 0) {
+                          bossScrap += 25 * countPassiveStacks(next.passives, 'salvage_radar');
+                        }
+                        next.runScrapEarned += bossScrap;
+                        if (countPassiveStacks(next.passives, 'regent_protocol') > 0) {
+                          const heal = next.player.maxHealth * 0.25;
+                          next.player.health = Math.min(
+                            next.player.maxHealth,
+                            next.player.health + heal
+                          );
+                          next.runScrapEarned += 15;
+                        }
                         next.stageTransition = 300;
                         next.hitStop = 15;
                         next.screenshake = 10;
@@ -1507,14 +1729,11 @@ export default function App() {
                         if (next.gameMode === 'CAMPAIGN' && next.campaignLevelId) {
                           markLevelComplete(next.campaignLevelId);
                         }
-                        
-                        if (next.runArtifactUnlocks < 2) {
-                          const choices = pickArtifactUnlockChoices(unlockedArtifactIds, 2);
-                          if (choices.length > 0) {
-                            setArtifactUnlockChoices(choices);
-                            setShowArtifactUnlock(true);
-                            next.isPaused = true;
-                          }
+
+                        const choices = pickArtifactUnlockChoices(unlockedArtifactIdsRef.current, 2);
+                        if (choices.length > 0) {
+                          pendingArtifactUnlockRef.current = choices;
+                          next.isPaused = true;
                         }
 
                         // Health / shield drops
@@ -1529,11 +1748,16 @@ export default function App() {
                             });
                           }
                         });
-                      } else if (!next.bossActive && next.enemiesToKill > 0 && next.gameMode === 'NORMAL') {
+                      } else if (
+                        !next.bossActive &&
+                        next.enemiesToKill > 0 &&
+                        (next.gameMode === 'NORMAL' || next.gameMode === 'CAMPAIGN')
+                      ) {
                         next.enemiesToKill--;
-                        if (next.enemiesToKill <= 0) {
-                          next.bossActive = true;
-                          next.screenshake = 10;
+                        if (next.enemiesToKill <= 0 && next.gameMode === 'NORMAL' && next.bossArenaTransition <= 0) {
+                          const upcoming = pickRandomBoss(next.stage, next.lastBossId);
+                          next.lastBossId = upcoming.id;
+                          beginBossWarp(next, upcoming);
                         }
                       }
                     }
@@ -1553,7 +1777,8 @@ export default function App() {
         if (e.health <= 0) missionController.notifyEvent('enemy_killed', e.enemyType);
       });
       next.enemies = next.enemies.filter(e => e.health > 0);
-      next.projectiles = next.projectiles.filter(p => p.health > 0);
+      next.projectiles = next.projectiles.filter(p => p && p.health > 0 && p.pos);
+      next.obstacles = next.obstacles.filter(o => o && o.pos && o.size);
       if (next.qualityLevel === 'low' && next.projectiles.length > 200) {
         next.projectiles.splice(0, next.projectiles.length - 200);
       }
@@ -1582,12 +1807,12 @@ export default function App() {
             player.health = Math.min(player.maxHealth, player.health + 100);
             playSfx('pickup');
           } else if (item.itemType === ItemType.SHIELD) {
-            next.buffs.shield = Math.min((next.buffs.shield || 0) + 1, 3); // Gives 1 shield charge, max 3
+            grantExtraLife(next);
             playSfx('pickup');
             next.damageTexts.push({
               id: Math.random().toString(),
               pos: player.pos.clone(),
-              text: 'SHIELD CHARGE!',
+              text: 'EXTRA LIV!',
               life: 1.5,
               color: '#10b981'
             });
@@ -1618,30 +1843,19 @@ export default function App() {
             e.health -= next.thornsDamage * 0.15 * dt;
           }
           if (next.dashIFrameTimer > 0 || next.playerIFrameTimer > 0) continue;
-          if (next.buffs.shield > 0) {
-            next.buffs.shield -= 1;
-            next.playerIFrameTimer = 30; // brief iframes on shield break
-            next.particles.push(...createImpact(player.pos, '#60a5fa', 15));
-            triggerHitFeedback(next, 'shield');
-            
-            // Push player away from enemy to prevent instant multi-hits if iframes are short
-            const pushDir = player.pos.sub(e.pos).normalize();
-            player.velocity = player.velocity.add(pushDir.mul(12));
-          } else {
-            player.health -= (2.0 + next.stage * 0.5) * dt; // Massive collision damage scaling
-            player.hitTimer = 3;
-            next.screenFlash = Math.max(next.screenFlash, 2); 
-            next.screenshake = Math.min(next.screenshake + 0.4 * dt, 7);
-          }
-          
-          if (player.health <= 0) {
-            next.isGameOver = true;
-            playSfx('gameOver');
-            stopMusic();
-            next.particles.push(...createExplosion(player.pos, player.color, 50));
-            next.particles.push(...createExplosion(player.pos, '#ffffff', 20));
-            next.screenshake = 20;
-            syncUi();
+
+          player.health -= (2.0 + next.stage * 0.5) * dt;
+          player.hitTimer = 3;
+          next.screenFlash = Math.max(next.screenFlash, 2);
+          next.screenshake = Math.min(next.screenshake + 0.4 * dt, 7);
+
+          if (handleFatalDamage(next, player)) {
+            if (next.isGameOver) {
+              next.particles.push(...createExplosion(player.pos, player.color, 50));
+              next.particles.push(...createExplosion(player.pos, '#ffffff', 20));
+              next.screenshake = 20;
+              syncUi();
+            }
           }
         }
       }
@@ -1649,20 +1863,26 @@ export default function App() {
       if (prevFrameHealth > player.health) {
         // Player took damage this frame
         if (next.passives.includes('neon_blood')) {
-          const numMissiles = 8 + (next.buffs.neon_blood || 0) * 4;
+          const stacks = countPassiveStacks(next.passives, 'neon_blood');
+          const numMissiles = 8 + Math.max(0, stacks - 1) * 4;
+          const missileSpeed = 12;
           for (let i = 0; i < numMissiles; i++) {
-             const angle = Math.random() * Math.PI * 2;
-             next.projectiles.push({
-               id: Math.random().toString(),
-               pos: player.pos.clone(),
-               velocity: new Vector2(Math.cos(angle) * 12, Math.sin(angle) * 12),
-               color: '#ef4444',
-               ownerId: 'player',
-               damage: 60,
-               isHoming: true,
-               homingTarget: null,
-               bounceCount: 0
-             });
+            const angle = Math.random() * Math.PI * 2;
+            next.projectiles.push({
+              id: Math.random().toString(),
+              type: EntityType.PROJECTILE,
+              pos: player.pos.clone(),
+              radius: 6,
+              health: 1,
+              maxHealth: 1,
+              speed: missileSpeed,
+              velocity: new Vector2(Math.cos(angle) * missileSpeed, Math.sin(angle) * missileSpeed),
+              color: '#ef4444',
+              ownerId: 'player',
+              damage: 60,
+              bounceCount: 0,
+              homing: true,
+            });
           }
         }
         
@@ -1696,13 +1916,22 @@ export default function App() {
         lastUiSync = currentTime;
       }
 
-      render(ctx, next, dimensions.width, dimensions.height, { isMobile: window.innerWidth < 768 });
+      if (pendingArtifactUnlockRef.current) {
+        const choices = pendingArtifactUnlockRef.current;
+        pendingArtifactUnlockRef.current = null;
+        window.setTimeout(() => {
+          setArtifactUnlockChoices(choices);
+          setShowArtifactUnlock(true);
+        }, 0);
+      }
+
+      render(ctx, next, dimensions.width, dimensions.height, { isMobile: reducedEffectsRef.current });
       animId = requestAnimationFrame(loop);
     };
 
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [screen, dimensions, showLevelUp, showArtifactUnlock, equippedArtifactIds]);
+  }, [screen, dimensions]);
 
   return (
     <div className={`fixed inset-0 bg-[#0c0c0e] overflow-hidden select-none touch-none ${screen === 'GAME' ? 'cursor-crosshair' : 'cursor-default'}`}>
@@ -1714,6 +1943,7 @@ export default function App() {
             onOpenGear={() => setIsGearOpen(true)}
             onOpenInventory={() => setIsInventoryOpen(true)}
             relicCount={unlockedArtifactIds.length}
+            metaScrap={metaScrap}
             equippedArtifactIds={equippedArtifactIds}
             activeTraits={nextRunTraits.map(id => TRAITS[id])}
           />
@@ -1753,7 +1983,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Low Health Tint */}
+      {screen === 'GAME' && uiState && (uiState.bossArenaTransition > 0 || gameStateRef.current?.inBossArena) && (
+        <BossWarpOverlay
+          bossId={uiState.activeBossId}
+          bossArenaTransition={uiState.bossArenaTransition}
+          inBossArena={gameStateRef.current?.inBossArena ?? false}
+        />
+      )}
+
       {uiState && uiState.health / uiState.maxHealth < 0.25 && (
         <motion.div 
           key="low-health-tint"
@@ -1763,17 +2000,17 @@ export default function App() {
         />
       )}
 
-      {screen === 'GAME' && uiState && (
+      {screen === 'GAME' && uiState && !showLevelUp && !showArtifactUnlock && (
         <motion.div key="game-ui-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 pointer-events-none">
           <GameHUD 
             health={uiState.health} maxHealth={uiState.maxHealth}
             survivalTime={uiState.survivalTime}
             threatLevel={uiState.threatLevel}
+            augmentTier={getAugmentTier(gameStateRef.current?.passives.length ?? 0)}
             score={uiState.score} wave={uiState.wave}
             energy={uiState.energy} maxEnergy={uiState.maxEnergy}
             ultimateCharge={uiState.ultimateCharge}
             stage={uiState.stage} enemiesToKill={uiState.enemiesToKill} stageTransition={uiState.stageTransition} gameMode={uiState.gameMode}
-            showLevelUp={showLevelUp} onChoiceSelection={handleLevelUpChoice}
             onOpenMenu={togglePause}
             onWeaponSwitch={(slot) => {
               const next = gameStateRef.current;
@@ -1783,29 +2020,37 @@ export default function App() {
                 syncUi();
               }
             }}
-            randomBuffs={currentBuffs}
             cardTimer={uiState.cardTimer}
-            cardInterval={getCardIntervalSeconds(uiState.stage, uiState.survivalTime, uiState.passives?.length ?? 0)}
+            cardInterval={getCardIntervalSeconds(
+              uiState.stage,
+              uiState.survivalTime,
+              uiState.passives.length
+            )}
             activeWeaponSlot={uiState.activeWeaponSlot}
             equippedArtifacts={uiState.equippedArtifacts}
-            scrap={uiState.scrap}
-            fuel={uiState.fuel}
-            maxFuel={uiState.maxFuel}
+            bossArenaTransition={uiState.bossArenaTransition}
+            bossActive={uiState.bossActive}
             isMobile={isMobile}
             compactHud={compactHud}
+            landscapeHud={landscapeHud}
+            viewportProfile={viewportProfile}
+            tabletSpacious={viewportProfile === 'tablet' && compactHud}
           />
           {gameStateRef.current && (
-            <SynergyBar lines={getActiveSynergies(gameStateRef.current)} compact={compactHud} />
+            <SynergyBar
+              lines={getActiveSynergies(gameStateRef.current)}
+              layout={getSynergyBarLayout(viewportProfile)}
+            />
           )}
           {/* Buff Bar */}
-          <div
-            className="absolute top-16 left-1/2 -translate-x-1/2 flex flex-row flex-wrap justify-center gap-2 max-w-[80vw] z-50 pointer-events-none"
+          <motion.div
+            className={`absolute left-1/2 -translate-x-1/2 flex flex-row flex-wrap justify-center gap-2 max-w-[80vw] z-50 pointer-events-none ${getBuffChipsTopClass(viewportProfile)}`}
           >
-            {uiState?.buffs.shield > 0 && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-1.5 bg-cyan-950/40 backdrop-blur-md rounded border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.3)] animate-pulse ${compactHud ? 'px-2 py-0.5' : 'px-3 py-1'}`}>
+            {(uiState?.extraLifeCharges ?? 0) > 0 && (
+              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-1.5 bg-cyan-950/40 backdrop-blur-md rounded border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.3)] ${compactHud ? 'px-2 py-0.5' : 'px-3 py-1'}`}>
                 <Shield size={compactHud ? 12 : 16} className="text-cyan-400 shrink-0" />
                 <span className={`font-bold text-cyan-400 ${compactHud ? 'text-[9px]' : 'text-xs'}`}>
-                  {compactHud ? `S ${Math.ceil(uiState.buffs.shield / 60)}` : `SHIELD ${Math.ceil(uiState.buffs.shield / 60)}s`}
+                  {compactHud ? 'EXTRA LIV' : 'EXTRA LIV (1)'}
                 </span>
               </motion.div>
             )}
@@ -1845,128 +2090,137 @@ export default function App() {
                 <span className="text-xs font-bold text-fuchsia-400 overflow-hidden text-ellipsis whitespace-nowrap">PIERCE {Math.ceil(uiState.buffs.piercing / 60)}s</span>
               </motion.div>
             )}
-          </div>
+          </motion.div>
 
-          <motion.div
-            className={`absolute flex flex-col items-center gap-3 pointer-events-none ${
+          {showTouchControls && (() => {
+            const joystickSize = getJoystickSize(viewportProfile);
+            const touchSize = getTouchActionSize(viewportProfile);
+            const touchBtnClass =
+              touchSize === 'compact'
+                ? 'min-h-12 min-w-12 border-white/20'
+                : touchSize === 'medium'
+                  ? 'w-14 h-14 border-white/30'
+                  : 'w-14 h-14 md:w-16 md:h-16 border-white/30';
+            const touchIconSize = touchSize === 'compact' ? 24 : touchSize === 'medium' ? 28 : 32;
+            const safeCorner = compactHud || landscapeHud;
+            const moveCornerClass =
               mobileLayout === 'LEFT_HANDED'
-                ? (compactHud
+                ? safeCorner
                   ? 'right-[max(0.5rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
-                  : 'bottom-6 right-6 md:bottom-10 md:right-10')
-                : (compactHud
+                  : 'bottom-6 right-6 md:bottom-10 md:right-10'
+                : safeCorner
                   ? 'left-[max(0.5rem,env(safe-area-inset-left))] bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
-                  : 'bottom-6 left-6 md:bottom-10 md:left-10')
-            }`}
-          >
-            <div className="flex gap-4 mb-2 pointer-events-auto">
-                <motion.button
-                whileTap={{ scale: 0.9 }}
-                onPointerDown={(e) => { 
-                  e.stopPropagation();
-                  controls.current.wantUltimate = true;
-                }}
-                className={`rounded-full border flex items-center justify-center text-white transition-all duration-300 shadow-xl touch-manipulation backdrop-blur-xl ${
-                  compactHud ? 'min-h-12 min-w-12 border-white/20' : 'w-14 h-14 md:w-16 md:h-16 border-white/30'
-                } ${
-                  uiState && uiState.ultimateCharge >= 100
-                    ? 'bg-fuchsia-600/80 border-white/50 shadow-[0_0_15px_rgba(217,70,239,0.5)] animate-pulse'
-                    : 'bg-black/60 border-white/10 opacity-50 grayscale'
-                }`}
-                aria-label="Ultimate"
-              >
-                <Zap size={compactHud ? 24 : 32} fill={uiState && uiState.ultimateCharge >= 100 ? 'white' : 'rgba(255,255,255,0.2)'} />
-              </motion.button>
-              <div className="relative pointer-events-auto">
-                {uiState && uiState.energy < 30 && (
-                  <div className="absolute inset-0 bg-red-500/10 rounded-full animate-pulse pointer-events-none" />
-                )}
-                <motion.button
-                whileTap={{ scale: 0.9 }}
-                onPointerDown={(e) => { 
-                  e.stopPropagation();
-                  controls.current.wantDash = true; 
-                }}
-                className={`rounded-full border flex items-center justify-center text-white transition-all duration-300 shadow-xl touch-manipulation backdrop-blur-xl ${
-                  compactHud ? 'min-h-12 min-w-12 border-white/20' : 'w-14 h-14 md:w-16 md:h-16 border-white/30'
-                } ${
-                  uiState && uiState.energy >= 30
-                    ? 'bg-white/10 border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.2)]'
-                    : 'bg-black/60 border-white/10 opacity-50 grayscale'
-                }`}
-                aria-label="Dash"
-              >
-                <Zap size={compactHud ? 24 : 32} fill={uiState && uiState.energy >= 30 ? 'white' : 'rgba(255,255,255,0.2)'} />
-              </motion.button>
-              </div>
-              </div>
-            <Joystick
-              size={compactHud ? 76 : isMobile ? 92 : 128}
-              label="move"
-              onMove={(dir) => {
-                controls.current.move = dir;
-              }}
-              onTap={() => {                
-                 controls.current.wantDash = true;
-              }}
-              onEnd={() => {
-                controls.current.move = { x: 0, y: 0 };
-              }}
-            />
-          </motion.div>
-          <motion.div
-            className={`absolute flex flex-col items-center gap-2 pointer-events-none ${
+                  : 'bottom-6 left-6 md:bottom-10 md:left-10';
+            const aimCornerClass =
               mobileLayout === 'LEFT_HANDED'
-                ? (compactHud
+                ? safeCorner
                   ? 'left-[max(0.5rem,env(safe-area-inset-left))] bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
-                  : 'bottom-6 left-6 md:bottom-10 md:left-10')
-                : (compactHud
+                  : 'bottom-6 left-6 md:bottom-10 md:left-10'
+                : safeCorner
                   ? 'right-[max(0.5rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
-                  : 'bottom-6 right-6 md:bottom-10 md:right-10')
-            }`}
-          >
-            <motion.div className="flex gap-4 mb-1 pointer-events-auto">
-              {isMobile && (
-                <motion.button
-                  whileTap={{ scale: 0.9 }}
-                  onPointerDown={(e) => { 
-                    e.stopPropagation();
-                    const slots: ('CANNON_A' | 'CANNON_B')[] = ['CANNON_A', 'CANNON_B'];
-                    if (!uiState) return;
-                    const currentIdx = slots.indexOf(uiState.activeWeaponSlot);
-                    const nextSlot = slots[(currentIdx + 1) % slots.length];
-                    if (gameStateRef.current) {
-                      gameStateRef.current.activeWeaponSlot = nextSlot;
-                    }
-                    playSfx('switchWeapon');
-                    syncUi();
-                  }}
-                  className={`relative rounded-full border-2 flex flex-col items-center justify-center text-white transition-all shadow-lg touch-manipulation min-h-12 min-w-12 bg-cyan-950/60 border-cyan-500`}
-                  aria-label="Swap Weapon"
-                >
-                  {uiState?.activeWeaponSlot === 'CANNON_A' && <Swords size={20} className="text-cyan-400" />}
-                  {uiState?.activeWeaponSlot === 'CANNON_B' && <Flame size={20} className="text-cyan-400" />}
-                  <span className="text-[7px] font-mono font-black mt-0.5 text-cyan-200">
-                    WPN.{(uiState ? ['CANNON_A', 'CANNON_B'].indexOf(uiState.activeWeaponSlot) + 1 : 1).toString().padStart(2, '0')}
-                  </span>
-                  <div className="absolute -top-1 -right-1 bg-cyan-900 rounded-full border border-cyan-400/50 p-1">
-                    <RotateCcw size={10} className="text-cyan-400" />
+                  : 'bottom-6 right-6 md:bottom-10 md:right-10';
+            const actionStackClass = landscapeHud ? 'flex flex-col gap-2 mb-1' : 'flex gap-3 mb-2';
+
+            return (
+              <>
+                <motion.div className={`absolute flex flex-col items-center gap-2 pointer-events-none ${moveCornerClass}`}>
+                  <div className={`${actionStackClass} pointer-events-auto`}>
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        controls.current.wantUltimate = true;
+                      }}
+                      className={`rounded-full border flex items-center justify-center text-white transition-all duration-300 shadow-xl touch-manipulation backdrop-blur-xl ${touchBtnClass} ${
+                        uiState && uiState.ultimateCharge >= 100
+                          ? 'bg-fuchsia-600/80 border-white/50 shadow-[0_0_15px_rgba(217,70,239,0.5)] animate-pulse'
+                          : 'bg-black/60 border-white/10 opacity-50 grayscale'
+                      }`}
+                      aria-label="Ultimate"
+                    >
+                      <Zap size={touchIconSize} fill={uiState && uiState.ultimateCharge >= 100 ? 'white' : 'rgba(255,255,255,0.2)'} />
+                    </motion.button>
+                    <motion.div className="relative pointer-events-auto">
+                      {uiState && uiState.energy < 30 && (
+                        <div className="absolute inset-0 bg-red-500/10 rounded-full animate-pulse pointer-events-none" />
+                      )}
+                      <motion.button
+                        whileTap={{ scale: 0.9 }}
+                        onPointerDown={(e) => {
+                          e.stopPropagation();
+                          controls.current.wantDash = true;
+                        }}
+                        className={`rounded-full border flex items-center justify-center text-white transition-all duration-300 shadow-xl touch-manipulation backdrop-blur-xl ${touchBtnClass} ${
+                          uiState && uiState.energy >= 30
+                            ? 'bg-white/10 border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.2)]'
+                            : 'bg-black/60 border-white/10 opacity-50 grayscale'
+                        }`}
+                        aria-label="Dash"
+                      >
+                        <Zap size={touchIconSize} fill={uiState && uiState.energy >= 30 ? 'white' : 'rgba(255,255,255,0.2)'} />
+                      </motion.button>
+                    </motion.div>
                   </div>
-                </motion.button>
-              )}
-            </motion.div>
-            <Joystick
-              size={compactHud ? 76 : isMobile ? 92 : 128}
-              label="aim"
-              color="bg-red-500/10"
-              onMove={(dir) => {
-                controls.current.aim = dir;
-                controls.current.isFiring = true;
-              }}
-              onEnd={() => {
-                controls.current.isFiring = false;
-              }}
-            />
-          </motion.div>
+                  <Joystick
+                    size={joystickSize}
+                    label="move"
+                    onMove={(dir) => {
+                      controls.current.move = dir;
+                    }}
+                    onTap={() => {
+                      controls.current.wantDash = true;
+                    }}
+                    onEnd={() => {
+                      controls.current.move = { x: 0, y: 0 };
+                    }}
+                  />
+                </motion.div>
+                <motion.div className={`absolute flex flex-col items-center gap-2 pointer-events-none ${aimCornerClass}`}>
+                  <motion.div className="flex gap-2 mb-1 pointer-events-auto">
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        const slots: ('CANNON_A' | 'CANNON_B')[] = ['CANNON_A', 'CANNON_B'];
+                        if (!uiState) return;
+                        const currentIdx = slots.indexOf(uiState.activeWeaponSlot);
+                        const nextSlot = slots[(currentIdx + 1) % slots.length];
+                        if (gameStateRef.current) {
+                          gameStateRef.current.activeWeaponSlot = nextSlot;
+                        }
+                        playSfx('switchWeapon');
+                        syncUi();
+                      }}
+                      className="relative rounded-full border-2 flex flex-col items-center justify-center text-white transition-all shadow-lg touch-manipulation min-h-12 min-w-12 bg-cyan-950/60 border-cyan-500"
+                      aria-label="Swap Weapon"
+                    >
+                      {uiState?.activeWeaponSlot === 'CANNON_A' && <Swords size={20} className="text-cyan-400" />}
+                      {uiState?.activeWeaponSlot === 'CANNON_B' && <Flame size={20} className="text-cyan-400" />}
+                      <span className="text-[7px] font-mono font-black mt-0.5 text-cyan-200">
+                        WPN.{(uiState ? ['CANNON_A', 'CANNON_B'].indexOf(uiState.activeWeaponSlot) + 1 : 1).toString().padStart(2, '0')}
+                      </span>
+                      <motion.div className="absolute -top-1 -right-1 bg-cyan-900 rounded-full border border-cyan-400/50 p-1">
+                        <RotateCcw size={10} className="text-cyan-400" />
+                      </motion.div>
+                    </motion.button>
+                  </motion.div>
+                  <Joystick
+                    size={joystickSize}
+                    label="aim"
+                    color="bg-red-500/10"
+                    onMove={(dir) => {
+                      controls.current.aim = dir;
+                      controls.current.isFiring = true;
+                    }}
+                    onEnd={() => {
+                      controls.current.isFiring = false;
+                    }}
+                  />
+                </motion.div>
+              </>
+            );
+          })()}
+
         </motion.div>
       )}
 
@@ -1977,6 +2231,7 @@ export default function App() {
         passives={gameStateRef.current?.passives ?? []}
         onSelect={handleLevelUpChoice}
         isMobile={isMobile}
+        viewportProfile={viewportProfile}
       />
 
       <ArtifactUnlockPicker
@@ -1991,8 +2246,18 @@ export default function App() {
         isOpen={isInventoryOpen}
         onClose={() => setIsInventoryOpen(false)}
         unlockedIds={unlockedArtifactIds}
+        metaScrap={metaScrap}
         newUnlockIds={newUnlockIds}
         isMobile={isMobile}
+        onUnlockWithScrap={(artifactId, cost) => {
+          if (!spendMetaScrap(cost)) return false;
+          setMetaScrap(getMetaScrap());
+          if (!unlockedArtifactIds.includes(artifactId)) {
+            setUnlockedArtifactIds((prev) => [...prev, artifactId]);
+          }
+          playSfx('artifact');
+          return true;
+        }}
         onOpenHangar={() => {
           setIsInventoryOpen(false);
           setIsGearOpen(true);
@@ -2003,6 +2268,7 @@ export default function App() {
         isMobile={isMobile} 
         isOpen={isGearOpen}
         onClose={() => setIsGearOpen(false)}
+        metaScrap={metaScrap}
         unlockedArtifacts={unlockedArtifactIds.map(id => ARTIFACTS[id]).filter(Boolean)}
         equippedIds={equippedArtifactIds}
         onEquip={(slot, id) => {
@@ -2023,7 +2289,7 @@ export default function App() {
               <p className="text-blue-400 font-mono text-[10px] md:text-sm tracking-widest mt-2 uppercase">Neural Link Suspended</p>
             </div>
             
-            <motion.div className="flex flex-col gap-4 w-72 pointer-events-auto">
+            <motion.div className="flex flex-col gap-4 w-full max-w-sm md:max-w-md pointer-events-auto px-4">
               <label className="text-white/50 text-[10px] uppercase font-bold tracking-widest">SFX</label>
               <input type="range" min={0} max={100} value={Math.round(sfxVol * 100)} onChange={(e) => { const v = Number(e.target.value) / 100; setSfxVol(v); setSfxVolume(v); }} className="w-full accent-blue-500" />
               <label className="flex items-center gap-2 text-white text-sm">
@@ -2037,7 +2303,7 @@ export default function App() {
                 Mute music
               </label>
 
-              {isMobile && (
+              {showTouchControls && (
                 <div className="flex flex-col gap-2 p-4 bg-white/5 rounded-xl border border-white/10 mt-2">
                   <span className="text-white/50 text-[10px] uppercase font-bold tracking-widest mb-1">Mobile Options</span>
                   <label className="flex items-center gap-2 text-white text-sm">
@@ -2083,6 +2349,8 @@ export default function App() {
           unlockedCount={unlockedArtifactIds.length}
           totalArtifacts={Object.keys(ARTIFACTS).length}
           lockedIds={Object.keys(ARTIFACTS).filter((id) => !unlockedArtifactIds.includes(id))}
+          scrapEarned={lastRunScrapEarned}
+          metaScrapTotal={metaScrap}
           victory={uiState.stage > 25}
           onRestart={() => {
             gameStateRef.current = null;

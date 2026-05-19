@@ -65,6 +65,8 @@ export interface Entity {
   burnTimer?: number;
   frostTimer?: number;
   damageResist?: number;
+  /** Per-projectile homing (e.g. neon_blood retaliation). */
+  homing?: boolean;
 }
 
 export interface Particle {
@@ -139,6 +141,8 @@ export interface Artifact {
     specialType?: string;
     multiShot?: number;
   };
+  /** Meta scrap to unlock in vault (optional). */
+  scrapCost?: number;
 }
 
 export interface Trait {
@@ -187,6 +191,18 @@ export interface GameState {
   stage: number;
   enemiesToKill: number;
   bossActive: boolean;
+  activeBossId: string | null;
+  bossArenaTransition: number;
+  bossArenaSwapped: boolean;
+  inBossArena: boolean;
+  mainWorldSnapshot: {
+    world: { width: number; height: number };
+    obstacles: Obstacle[];
+    playerPos: Vector2;
+    camera: Vector2;
+  } | null;
+  lastBossId: string | null;
+  pendingArenaRestore: boolean;
   stageTransition: number;
   spawnRampTimer: number;
   qualityLevel: 'high' | 'low';
@@ -252,6 +268,8 @@ export interface GameState {
   comboDamageMult: number;
   hasEmergencyShield: boolean;
   emergencyShieldCooldown: number;
+  /** 0 or 1 — consumed only when HP would reach 0 (not per-hit block). */
+  extraLifeCharges: number;
   smartRicochet: boolean;
   vampiricBurstStacks: number;
   killCountSinceHeal: number;
@@ -279,9 +297,10 @@ export interface GameState {
   activeTraits: string[];
   pendingEvent: RandomEvent | null;
   eventTimer: number;
-  scrap: number; // New survival resource for trading
-  fuel: number;  // Depleting resource for urgency
-  maxFuel: number;
+  /** Scrap earned this run (banked to meta scrap on game over). */
+  runScrapEarned: number;
+  /** Next buff pick favors rare+ (set after boss kill). */
+  postBossBuffPick: boolean;
 }
 
 export interface DamageText {

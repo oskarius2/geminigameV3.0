@@ -1,27 +1,32 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import { Lock, Sparkles } from 'lucide-react';
-import { Artifact, ArtifactSlot, BuffRarity } from '../types';
+import { ArtifactSlot } from '../types';
 import { ARTIFACTS, artifactPowerScore } from '../content/artifacts';
 import { ALL_ARTIFACT_SLOTS } from '../content/artifactsExtra';
 import { RARITY_COLORS } from '../content/rarityColors';
+import { Panel } from '../../components/ui/Panel';
+import { GhostButton } from '../../components/ui/GhostButton';
 
 interface ArtifactInventoryProps {
   isOpen: boolean;
   onClose: () => void;
   unlockedIds: string[];
+  metaScrap: number;
   newUnlockIds?: string[];
   isMobile?: boolean;
   onOpenHangar?: () => void;
+  onUnlockWithScrap?: (artifactId: string, cost: number) => boolean;
 }
 
 export const ArtifactInventory: React.FC<ArtifactInventoryProps> = ({
   isOpen,
   onClose,
   unlockedIds,
+  metaScrap,
   newUnlockIds = [],
-  isMobile = false,
   onOpenHangar,
+  onUnlockWithScrap,
 }) => {
   const [filterSlot, setFilterSlot] = useState<ArtifactSlot | 'ALL'>('ALL');
 
@@ -35,43 +40,31 @@ export const ArtifactInventory: React.FC<ArtifactInventoryProps> = ({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 z-[700] bg-black/95 backdrop-blur-2xl flex flex-col pointer-events-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+      className="absolute inset-0 z-[700] bg-black/90 backdrop-blur-2xl flex flex-col pointer-events-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] px-4"
     >
-      <motion.div
-        className={`flex flex-col h-full p-4 md:p-8`}
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-      >
-        <motion.div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4 shrink-0">
-          <motion.div>
-            <h2 className="text-3xl md:text-4xl font-black text-white italic uppercase tracking-tighter">
+      <div className="flex flex-col h-full max-w-6xl mx-auto w-full">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4 shrink-0">
+          <div>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-white uppercase tracking-tight">
               Relic Vault
             </h2>
             <p className="text-fuchsia-400/80 text-xs font-mono uppercase tracking-widest mt-1">
-              {ownedCount} / {all.length} salvaged — permanent collection
+              {ownedCount} / {all.length} · {metaScrap.toLocaleString()} scrap
             </p>
-          </motion.div>
-          <motion.div className="flex gap-2 shrink-0">
+          </div>
+          <div className="flex gap-2 shrink-0">
             {onOpenHangar && (
-              <button
-                type="button"
-                onClick={onOpenHangar}
-                className="min-h-12 px-4 bg-cyan-600/30 border border-cyan-500/40 text-cyan-200 font-bold text-xs uppercase rounded-xl"
-              >
+              <GhostButton onClick={onOpenHangar} className="!w-auto min-h-12 px-4 text-cyan-200 border-cyan-500/40">
                 Hangar
-              </button>
+              </GhostButton>
             )}
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-12 px-4 bg-white/5 border border-white/10 text-white font-bold text-xs uppercase rounded-xl"
-            >
+            <GhostButton onClick={onClose} className="!w-auto min-h-12 px-4">
               Close
-            </button>
-          </motion.div>
-        </motion.div>
+            </GhostButton>
+          </div>
+        </div>
 
-        <motion.div className="flex gap-2 overflow-x-auto pb-3 shrink-0 scrollbar-hide">
+        <div className="flex gap-2 overflow-x-auto pb-3 shrink-0 scrollbar-hide">
           {(['ALL', ...ALL_ARTIFACT_SLOTS] as const).map((slot) => (
             <button
               key={slot}
@@ -84,49 +77,50 @@ export const ArtifactInventory: React.FC<ArtifactInventoryProps> = ({
               {slot === 'ALL' ? 'All' : slot.replace('_', ' ')}
             </button>
           ))}
-        </motion.div>
+        </div>
 
-        <motion.div
-          className={`grid gap-3 overflow-y-auto flex-1 pr-1 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4`}
-        >
+        <div className="grid gap-3 overflow-y-auto flex-1 pr-1 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 pb-4">
           {filtered.map((art) => {
             const owned = unlockedIds.includes(art.id);
             const isNew = newUnlockIds.includes(art.id);
+            const cost = art.scrapCost ?? 0;
+            const canBuy = !owned && cost > 0 && onUnlockWithScrap && metaScrap >= cost;
+
             return (
-              <motion.div
+              <Panel
                 key={art.id}
-                layout
-                className={`relative p-5 rounded-3xl border-2 text-left transition-all ${
-                  owned
-                    ? `${RARITY_COLORS[art.rarity].border} ${RARITY_COLORS[art.rarity].bg}`
-                    : 'border-white/5 bg-black/20 opacity-40'
-                }`}
+                className={`relative p-4 text-left ${owned ? '' : 'opacity-70'}`}
               >
                 {isNew && owned && (
                   <span className="absolute top-3 right-3 flex items-center gap-1 text-[9px] font-black uppercase text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
                     <Sparkles size={10} /> NEW
                   </span>
                 )}
-                {!owned && (
-                  <Lock className="absolute top-4 right-4 text-white/10" size={16} />
-                )}
-                <span className={`text-xs font-black uppercase tracking-widest ${owned ? RARITY_COLORS[art.rarity].text : 'text-white/20'}`}>
+                {!owned && <Lock className="absolute top-4 right-4 text-white/20" size={16} />}
+                <span className={`text-xs font-black uppercase tracking-widest ${owned ? RARITY_COLORS[art.rarity].text : 'text-white/30'}`}>
                   {art.rarity}
                 </span>
-                <h3 className={`text-base font-black italic mt-1 leading-tight ${owned ? 'text-white' : 'text-white/30'}`}>
-                  {owned ? art.name : 'REDACTED'}
+                <h3 className={`text-base font-bold mt-1 ${owned ? 'text-white' : 'text-white/40'}`}>
+                  {owned ? art.name : 'Locked'}
                 </h3>
                 {owned && <p className="text-[11px] text-white/50 mt-2 leading-relaxed">{art.description}</p>}
-                <div className="flex items-center gap-1 mt-3">
-                  <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${owned ? `${RARITY_COLORS[art.rarity].text} bg-white/5` : 'text-white/20'}`}>
-                    {art.slot.replace('_', ' ')}
-                  </span>
-                </div>
-              </motion.div>
+                {!owned && cost > 0 && (
+                  <p className="text-[10px] text-amber-400/90 mt-2 font-mono">{cost} scrap</p>
+                )}
+                {canBuy && (
+                  <button
+                    type="button"
+                    onClick={() => onUnlockWithScrap(art.id, cost)}
+                    className="mt-3 w-full min-h-10 rounded-lg bg-amber-600/30 border border-amber-500/50 text-amber-100 text-[10px] font-bold uppercase tracking-wider"
+                  >
+                    Unlock
+                  </button>
+                )}
+              </Panel>
             );
           })}
-        </motion.div>
-      </motion.div>
+        </div>
+      </div>
     </motion.div>
   );
 };

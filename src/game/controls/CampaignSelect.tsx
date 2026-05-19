@@ -141,7 +141,10 @@ export const CampaignSelect: React.FC<CampaignSelectProps> = ({ onStartLevel, on
   const [save, setSave] = useState<CampaignSave>({ highestLevelUnlocked: 1, completedLevels: [] });
 
   useEffect(() => {
-    setSave(loadSave());
+    const refresh = () => setSave(loadSave());
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
   }, []);
 
   const completedCount = save.completedLevels.length;

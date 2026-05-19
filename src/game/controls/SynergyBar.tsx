@@ -1,20 +1,31 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { SynergyLine } from '../buffs/synergies';
+import type { HudVariant } from './mobileLayout';
 
 interface SynergyBarProps {
   lines: SynergyLine[];
+  layout?: HudVariant;
+  /** @deprecated use layout */
   compact?: boolean;
 }
 
-export const SynergyBar: React.FC<SynergyBarProps> = ({ lines, compact = false }) => {
+const TOP_BY_LAYOUT: Record<HudVariant, string> = {
+  full: 'top-[11.5rem]',
+  compact: 'top-[4.75rem]',
+  landscape: 'top-11',
+  'tablet-landscape': 'top-[4.5rem]',
+};
+
+export const SynergyBar: React.FC<SynergyBarProps> = ({ lines, layout, compact = false }) => {
   if (lines.length === 0) return null;
+
+  const resolvedLayout: HudVariant = layout ?? (compact ? 'compact' : 'full');
+  const topClass = TOP_BY_LAYOUT[resolvedLayout];
 
   return (
     <motion.div
-      className={`absolute left-3 right-3 md:left-6 md:right-auto md:max-w-md flex flex-col gap-1 pointer-events-none z-20 ${
-        compact ? 'top-[4.75rem]' : 'top-[11.5rem]'
-      }`}
+      className={`absolute left-3 right-3 md:left-6 md:right-auto md:max-w-md flex flex-col gap-1 pointer-events-none z-20 ${topClass}`}
       initial={{ opacity: 0, y: -6 }}
       animate={{ opacity: 1, y: 0 }}
     >

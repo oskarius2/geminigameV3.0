@@ -11,6 +11,8 @@ interface RunSummaryProps {
   unlockedCount: number;
   totalArtifacts: number;
   lockedIds: string[];
+  scrapEarned: number;
+  metaScrapTotal: number;
   onRestart: () => void;
   onVault: () => void;
   victory?: boolean;
@@ -21,6 +23,8 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
   unlockedCount,
   totalArtifacts,
   lockedIds,
+  scrapEarned,
+  metaScrapTotal,
   onRestart,
   onVault,
   victory = false,
@@ -91,7 +95,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
         {runArts.length > 0 && (
           <motion.div>
             <p className="text-white/30 text-[10px] uppercase font-black tracking-widest mb-2 flex items-center gap-1">
-              <Sparkles size={12} className="text-fuchsia-400" /> Reliker denna run
+              <Sparkles size={12} className="text-fuchsia-400" /> Relics this run
             </p>
             <ul className="text-xs text-fuchsia-200/90 space-y-0.5">
               {runArts.map((name) => (
@@ -101,11 +105,19 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
           </motion.div>
         )}
 
+        <motion.div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl col-span-2 text-center">
+            <p className="text-amber-300 text-2xl font-black">+{scrapEarned}</p>
+            <p className="text-white/40 text-[10px] uppercase font-bold tracking-widest">scrap this run</p>
+            <p className="text-white/50 text-xs mt-1">Total in hangar: {metaScrapTotal}</p>
+          </div>
+        </motion.div>
+
         <motion.div className="text-center pt-2 border-t border-white/10">
           <p className="text-lg font-black text-white">
             {unlockedCount} / {totalArtifacts}
           </p>
-          <p className="text-white/40 text-[10px] uppercase">i samlingen</p>
+          <p className="text-white/40 text-[10px] uppercase">in collection</p>
           {goal && (
             <p className="text-cyan-400/90 text-xs mt-2 font-bold">
               {goal.label} → {goal.name}

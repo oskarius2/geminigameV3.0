@@ -9,8 +9,15 @@ function isExclusiveBuff(b: PassiveBuff): boolean {
   return b.exclusive === true || b.rarity === BuffRarity.EXCLUSIVE;
 }
 
-function rollRarity(): BuffRarity {
+function rollRarity(postBoss = false): BuffRarity {
   const rand = Math.random();
+  if (postBoss) {
+    if (rand < 0.04) return BuffRarity.EXCLUSIVE;
+    if (rand < 0.14) return BuffRarity.LEGENDARY;
+    if (rand < 0.38) return BuffRarity.EPIC;
+    if (rand < 0.72) return BuffRarity.RARE;
+    return BuffRarity.COMMON;
+  }
   if (rand < 0.02) return BuffRarity.EXCLUSIVE;
   if (rand < 0.05) return BuffRarity.LEGENDARY;
   if (rand < 0.15) return BuffRarity.EPIC;
@@ -18,14 +25,18 @@ function rollRarity(): BuffRarity {
   return BuffRarity.COMMON;
 }
 
-function pickOneFromPool(pool: PassiveBuff[], preferHighThreat: boolean): PassiveBuff {
+function pickOneFromPool(
+  pool: PassiveBuff[],
+  preferHighThreat: boolean,
+  postBoss = false
+): PassiveBuff {
   if (pool.length === 0) throw new Error('empty pool');
   if (preferHighThreat) {
     const sorted = [...pool].sort((a, b) => (b.threatWeight ?? 0) - (a.threatWeight ?? 0));
     const top = sorted.slice(0, Math.min(4, sorted.length));
     return top[Math.floor(Math.random() * top.length)];
   }
-  let rarityTarget = rollRarity();
+  let rarityTarget = rollRarity(postBoss);
   let options = pool.filter((b) => b.rarity === rarityTarget);
   if (options.length === 0) options = pool;
   return options[Math.floor(Math.random() * options.length)];
@@ -40,15 +51,23 @@ export function pickBuffs(state: GameState, count = 3): PassiveBuff[] {
   });
 
   const exclusivePool = available.filter(isExclusiveBuff);
+  const bossTagged = available.filter((b) => b.tags?.includes('boss'));
+  const preferBoss = state.bossActive || state.bossArenaTransition > 0;
   const normalPool = available.filter((b) => !isExclusiveBuff(b));
+  const weightedNormal =
+    preferBoss && bossTagged.length > 0
+      ? [...bossTagged, ...bossTagged, ...normalPool.filter((b) => !b.tags?.includes('boss'))]
+      : normalPool;
 
   const selected: PassiveBuff[] = [];
   const usedIds = new Set<string>();
 
+  const postBoss = state.postBossBuffPick;
+
   const takeFrom = (pool: PassiveBuff[], preferHighThreat = false) => {
     const remaining = pool.filter((b) => !usedIds.has(b.id));
     if (remaining.length === 0) return null;
-    const buff = pickOneFromPool(remaining, preferHighThreat);
+    const buff = pickOneFromPool(remaining, preferHighThreat, postBoss);
     usedIds.add(buff.id);
     return buff;
   };
@@ -65,7 +84,7 @@ export function pickBuffs(state: GameState, count = 3): PassiveBuff[] {
   }
 
   while (selected.length < count) {
-    const pool = normalPool.length > 0 ? normalPool : available;
+    const pool = weightedNormal.length > 0 ? weightedNormal : available;
     const buff = takeFrom(pool.filter((b) => !isExclusiveBuff(b) || selected.length === 0), false);
     if (!buff) {
       const fallback = takeFrom(available, false);
@@ -92,6 +111,8 @@ export function pickBuffs(state: GameState, count = 3): PassiveBuff[] {
   } else {
     state.augmentPityExclusive += 1;
   }
+
+  state.postBossBuffPick = false;
 
   return selected;
 }

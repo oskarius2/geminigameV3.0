@@ -8,6 +8,12 @@ import {
 } from '../Logic';
 import { spawnDamageNumber } from '../juice/damageNumbers';
 import { triggerHitFeedback, isBossHit } from '../juice/hitFeedback';
+import {
+  getCombatDensityTier,
+  shouldApplyHitTimer,
+  shouldTriggerHitFeedback,
+} from '../balance/combatDensity';
+import { beginBossWarp, pickRandomBoss } from '../content/bossArenas';
 
 export interface BeamHitContext {
   next: GameState;
@@ -33,18 +39,22 @@ export function applyBeamHit(ctx: BeamHitContext, e: Entity): void {
   }
 
   e.health -= finalDmg;
-  e.hitTimer = 3;
+  const densityTier = getCombatDensityTier(next.enemies.length);
+  const isKill = e.health <= 0;
+  if (shouldApplyHitTimer(densityTier, isCrit, isKill)) {
+    e.hitTimer = 3;
+  }
 
-  if (next.lifeSteal > 0 && e.health <= 0) {
+  if (next.lifeSteal > 0 && isKill) {
     player.health = Math.min(player.maxHealth, player.health + e.maxHealth * next.lifeSteal);
   }
 
-  if (isCrit) triggerHitFeedback(next, 'crit');
-  else if (isBossHit(e.enemyType)) triggerHitFeedback(next, 'boss');
-  else triggerHitFeedback(next, 'normal');
+  const hitKind = isCrit ? 'crit' : isBossHit(e.enemyType) ? 'boss' : 'normal';
+  if (shouldTriggerHitFeedback(densityTier, hitKind)) {
+    triggerHitFeedback(next, hitKind);
+  }
 
   const chaosFactor = Math.max(1, next.enemies.length / 50);
-  const isKill = e.health <= 0;
   spawnDamageNumber(
     next.damageTexts,
     e.pos.clone(),
@@ -98,14 +108,20 @@ function handleEnemyDeath(ctx: BeamHitContext, e: Entity, chaosFactor: number): 
 
   if (e.enemyType === EnemyType.BOSS) {
     next.bossActive = false;
+    next.pendingArenaRestore = true;
     next.stageTransition = 300;
     next.screenFlash = 25;
     onBossKill();
-  } else if (!next.bossActive && next.enemiesToKill > 0 && next.gameMode === 'NORMAL') {
+  } else if (
+    !next.bossActive &&
+    next.enemiesToKill > 0 &&
+    (next.gameMode === 'NORMAL' || next.gameMode === 'CAMPAIGN')
+  ) {
     next.enemiesToKill--;
-    if (next.enemiesToKill <= 0) {
-      next.bossActive = true;
-      next.screenshake = 10;
+    if (next.enemiesToKill <= 0 && next.gameMode === 'NORMAL' && next.bossArenaTransition <= 0) {
+      const upcoming = pickRandomBoss(next.stage, next.lastBossId);
+      next.lastBossId = upcoming.id;
+      beginBossWarp(next, upcoming);
     }
   }
 }

@@ -3,6 +3,10 @@ import { motion } from 'motion/react';
 import { Play, Sparkles, Swords, Shield, Zap, Wind, Map } from 'lucide-react';
 import { ArtifactSlot, Artifact, Trait } from '../types';
 import { ARTIFACTS } from '../Logic';
+import { ScreenShell } from '../../components/ui/ScreenShell';
+import { PrimaryButton } from '../../components/ui/PrimaryButton';
+import { GhostButton } from '../../components/ui/GhostButton';
+import { Panel } from '../../components/ui/Panel';
 
 interface StartPageProps {
   onStart: () => void;
@@ -10,6 +14,7 @@ interface StartPageProps {
   onOpenGear: () => void;
   onOpenInventory: () => void;
   relicCount: number;
+  metaScrap: number;
   equippedArtifactIds: Record<ArtifactSlot, string | null>;
   activeTraits: Trait[];
 }
@@ -31,113 +36,97 @@ export const StartPage: React.FC<StartPageProps> = ({
   onOpenGear,
   onOpenInventory,
   relicCount,
+  metaScrap,
   equippedArtifactIds,
-  activeTraits
+  activeTraits,
 }) => {
   const equippedList = Object.entries(equippedArtifactIds)
     .filter(([_, id]) => id !== null)
     .map(([slot, id]) => ({
       slot: slot as ArtifactSlot,
-      artifact: ARTIFACTS[id as string]
+      artifact: ARTIFACTS[id as string],
     }));
 
   return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="absolute inset-0 z-[500] bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] flex flex-col items-center justify-start overflow-y-auto p-4 md:p-8 text-center bg-noise"
-    >
+    <ScreenShell className="min-h-[100dvh] justify-center">
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col lg:flex-row lg:items-center lg:gap-12 w-full py-8 lg:py-12"
+      >
         <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: 0.2, duration: 1, ease: 'easeOut' }}
-            className="mt-16 md:mt-24"
+          initial={{ scale: 0.98, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          className="flex-1 text-center lg:text-left"
         >
-            <h1 className="text-5xl sm:text-6xl md:text-8xl lg:text-9xl font-display font-bold tracking-tight text-white drop-shadow-[0_0_25px_rgba(255,255,255,0.2)]">
-                SPACEHERO
-            </h1>
-            <p className="text-white/40 text-[9px] sm:text-xs md:text-sm font-sans uppercase tracking-[0.4em] font-medium mt-4">
-                The Next Generation Simulation
-            </p>
+          <h1 className="text-5xl sm:text-6xl lg:text-6xl font-display font-bold tracking-tight text-white">
+            SPACEHERO
+          </h1>
+          <p className="text-amber-400/90 text-sm font-mono mt-4 tabular-nums">
+            {metaScrap.toLocaleString()} scrap in hangar
+          </p>
+
+          <Panel className="mt-8 p-4 md:p-6 w-full lg:max-w-xl">
+            <p className="text-[10px] uppercase tracking-widest text-white/40 mb-3">Loadout</p>
+            <motion.div className="flex flex-wrap justify-center lg:justify-start gap-2">
+              {equippedList.length > 0 ? (
+                equippedList.map(({ slot, artifact }) => (
+                  <motion.div
+                    key={slot}
+                    className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2"
+                  >
+                    <SlotIcon slot={slot} size={14} />
+                    <span className="text-xs text-white/90">{artifact?.name}</span>
+                  </motion.div>
+                ))
+              ) : (
+                <span className="text-white/40 text-sm">No loadout equipped</span>
+              )}
+            </motion.div>
+            {activeTraits.length > 0 && (
+              <motion.div className="flex flex-wrap justify-center lg:justify-start gap-2 mt-4 pt-4 border-t border-white/10">
+                {activeTraits.map((trait) => (
+                  <span
+                    key={trait.id}
+                    className={`text-[10px] font-bold uppercase px-2 py-1 rounded border ${
+                      trait.isPositive
+                        ? 'border-emerald-500/40 text-emerald-400 bg-emerald-500/10'
+                        : 'border-rose-500/40 text-rose-400 bg-rose-500/10'
+                    }`}
+                  >
+                    {trait.name}
+                  </span>
+                ))}
+              </motion.div>
+            )}
+          </Panel>
         </motion.div>
 
-        {/* Loadout & Traits Display */}
-        <div className="mt-12 md:mt-16 flex flex-col items-center gap-6 md:gap-8 w-full max-w-4xl px-4">
-          <div className="flex flex-wrap justify-center gap-3">
-            {equippedList.length > 0 ? (
-              equippedList.map(({ slot, artifact }) => (
-                <div 
-                  key={slot} 
-                  className="group flex flex-col items-center gap-2 bg-white/5 backdrop-blur-xl border border-white/10 p-3 md:p-4 rounded-xl transition-all hover:bg-white/10 hover:border-white/20 hover:-translate-y-1"
-                >
-                  <div className="p-2 md:p-2.5 bg-black/40 rounded-full border border-white/10 group-hover:scale-110 transition-transform shadow-inner">
-                    <SlotIcon slot={slot} size={16} />
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="text-[8px] md:text-[9px] uppercase font-sans tracking-[0.2em] font-medium text-white/40">{slot.replace('_', ' ')}</span>
-                    <span className="text-xs md:text-sm font-display font-medium text-white/90 whitespace-nowrap">{artifact?.name || 'Empty'}</span>
-                  </div>
-                </div>
-              ))
-            ) : (
-               <div className="text-white/30 italic font-sans text-sm md:text-base">No gear equipped</div>
-            )}
-          </div>
-
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5 }}
-            className="flex flex-wrap justify-center gap-3 border-t border-white/10 pt-6 md:pt-8"
-          >
-             {activeTraits.map((trait) => (
-               <div 
-                 key={trait.id}
-                 className={`flex flex-col items-center p-3 md:p-4 rounded-xl border ${trait.isPositive ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-rose-500/30 bg-rose-500/10'} min-w-[140px] max-w-[200px] backdrop-blur-md`}
-               >
-                 <span className={`text-[11px] font-sans font-bold uppercase tracking-[0.1em] ${trait.isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
-                   {trait.name}
-                 </span>
-                 <span className="text-[10px] text-white/50 leading-relaxed mt-1.5 group-hover:text-white/70">
-                   {trait.description}
-                 </span>
-               </div>
-             ))}
+        <motion.div className="flex flex-col gap-3 w-full max-w-sm lg:max-w-md mt-10 lg:mt-0 lg:shrink-0 lg:sticky lg:top-8">
+          <PrimaryButton onClick={onStart} className="!bg-white !text-black !shadow-none border-0 min-h-12">
+            <span className="flex items-center justify-center gap-2">
+              <Play size={18} fill="currentColor" /> Start Survival
+            </span>
+          </PrimaryButton>
+          <GhostButton onClick={onCampaign} className="border-cyan-500/30 text-cyan-200">
+            <span className="flex items-center justify-center gap-2">
+              <Map size={16} /> Campaign
+            </span>
+          </GhostButton>
+          <motion.div className="grid grid-cols-2 gap-3">
+            <GhostButton onClick={onOpenGear}>
+              <span className="flex items-center justify-center gap-2">
+                <Swords size={16} /> Hangar
+              </span>
+            </GhostButton>
+            <GhostButton onClick={onOpenInventory}>
+              <span className="flex items-center justify-center gap-2">
+                <Sparkles size={16} /> Vault ({relicCount})
+              </span>
+            </GhostButton>
           </motion.div>
-        </div>
-
-        <div className="flex flex-col gap-4 w-full max-w-xs md:max-w-md px-4 md:px-0 mt-16 pb-24 z-10">
-            <button
-                onClick={onStart}
-                className="group relative bg-white text-black font-display font-bold py-5 px-8 rounded-xl text-base md:text-lg flex items-center justify-center gap-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] overflow-hidden shadow-[0_0_30px_rgba(255,255,255,0.3)]"
-            >
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-black/10 to-transparent -translate-x-[200%] group-hover:animate-[shimmer_1.5s_infinite]" />
-                <Play size={20} fill="currentColor" /> INITIATE BOOT
-            </button>
-
-            <button
-                onClick={onCampaign}
-                className="group relative bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 hover:border-cyan-500/60 text-cyan-300 font-display font-bold py-4 px-8 rounded-xl text-base md:text-lg flex items-center justify-center gap-3 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
-            >
-                <Map size={18} /> CAMPAIGN
-            </button>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full">
-              <button onClick={onOpenGear} className="group relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-sans font-medium py-4 rounded-xl text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] backdrop-blur-md">
-                  <Swords size={18} className="text-white/60 group-hover:text-white transition-colors" /> LOADOUT
-              </button>
-
-              <button onClick={onOpenInventory} className="group relative bg-white/5 hover:bg-white/10 border border-white/10 hover:border-white/20 text-white font-sans font-medium py-4 rounded-xl text-sm flex items-center justify-center gap-2.5 transition-all active:scale-[0.98] backdrop-blur-md">
-                  <Sparkles size={18} className="text-white/60 group-hover:text-amber-400 transition-colors" /> VAULT ({relicCount})
-              </button>
-            </div>
-        </div>
-        
-        <div className="absolute bottom-8 text-white/30 flex flex-col items-center gap-2 pointer-events-none">
-            <span className="text-[10px] font-sans uppercase tracking-[0.3em] font-medium">System Core v2.0</span>
-        </div>
-    </motion.div>
+        </motion.div>
+      </motion.div>
+    </ScreenShell>
   );
 };
-

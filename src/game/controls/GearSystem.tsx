@@ -20,6 +20,7 @@ import { RARITY_COLORS as RARITY_COLOR_MAP } from "../content/rarityColors";
 interface GearSystemProps {
   equippedIds: Record<ArtifactSlot, string | null>;
   unlockedArtifacts: Artifact[];
+  metaScrap: number;
   onEquip: (slot: ArtifactSlot, id: string | null) => void;
   isOpen: boolean;
   onClose: () => void;
@@ -53,6 +54,7 @@ const SLOT_LABELS: Record<ArtifactSlot, string> = {
 export const GearSystem: React.FC<GearSystemProps> = ({
   equippedIds,
   unlockedArtifacts,
+  metaScrap,
   onEquip,
   isOpen,
   onClose,
@@ -75,7 +77,7 @@ export const GearSystem: React.FC<GearSystemProps> = ({
     <motion.div
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="absolute inset-0 z-[700] bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] backdrop-blur-2xl flex flex-col p-4 sm:p-8 pointer-events-auto"
+      className="absolute inset-0 z-[700] bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] backdrop-blur-2xl flex flex-col pointer-events-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.5rem,env(safe-area-inset-bottom))] px-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] p-4 sm:p-8"
     >
       <div className="flex flex-row justify-between items-center gap-4 mb-4 sm:mb-6 shrink-0">
         <div className="flex flex-col min-w-0">
@@ -85,6 +87,7 @@ export const GearSystem: React.FC<GearSystemProps> = ({
           <span className="text-cyan-500/50 text-[8px] sm:text-xs font-bold uppercase tracking-widest mt-0.5 truncate">
             NANO-TECH INTEGRATION
           </span>
+          <span className="text-amber-400/80 text-[10px] font-mono mt-1">{metaScrap.toLocaleString()} scrap</span>
         </div>
         <button
           onClick={onClose}

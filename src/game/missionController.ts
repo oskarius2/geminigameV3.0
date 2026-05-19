@@ -6,23 +6,12 @@ class MissionControllerSingleton {
   private manager: MissionManager;
 
   constructor() {
-    console.log('🎯 MissionController initialized');
     this.manager = new MissionManager({
-      onComplete: (mission, reward) => {
-        console.log(`✓ Mission Complete: ${mission.name} (+${reward} CR)`);
-      },
-      onFail: (mission, reason) => {
-        console.log(`✗ Mission Failed: ${mission.name} — ${reason}`);
-      },
-      onProgress: (mission, progress) => {
-        console.log(`→ ${mission.name}: ${progress}/${mission.targetCount}`);
-      },
-      onUnlock: (mission) => {
-        console.log(`🔓 Mission Unlocked: ${mission.name}`);
-      },
-      onStart: (mission) => {
-        console.log(`▶ Mission Started: ${mission.name}`);
-      },
+      onComplete: () => {},
+      onFail: () => {},
+      onProgress: () => {},
+      onUnlock: () => {},
+      onStart: () => {},
     });
   }
 

@@ -29,8 +29,8 @@ export function getActiveSynergies(state: GameState): SynergyLine[] {
     lines.push({ id: 'overload', text: 'OVERCHARGE — +' + dmg * 25 + '% chained damage' });
   }
 
-  if (defense >= 2 && state.buffs.shield > 0) {
-    lines.push({ id: 'bulwark', text: 'BULWARK — shield lasts longer' });
+  if (defense >= 2 && state.extraLifeCharges > 0) {
+    lines.push({ id: 'bulwark', text: 'BULWARK — extra life ready' });
   }
 
   if (mobility >= 2) {

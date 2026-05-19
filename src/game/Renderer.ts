@@ -9,6 +9,11 @@ import {
   PathWaypoint,
   PORTAL_TRIGGER_RADIUS,
 } from './content/campaignLevels';
+import {
+  getCombatDensityTier,
+  shouldDrawEnemyTrails,
+  shouldDrawPlexusLinks,
+} from './balance/combatDensity';
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWidth: number, screenHeight: number, options: { isMobile?: boolean; debug?: boolean } = {}) {
   // Ensure screen dimensions are finite to avoid canvas errors
@@ -17,6 +22,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
 
   const { isMobile = false, debug = false } = options;
   const { camera } = state;
+  const densityTier = getCombatDensityTier(state.enemies.length);
   const cullMargin = state.qualityLevel === 'low' ? 50 : 200;
   
   // Helper to safely create radial gradients
@@ -58,8 +64,18 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
   
   const ctxScreenFlash = state.screenFlash || 0;
 
-  // Dynamic background colors per stage
-  const stageThemeIndex = Math.min(Math.max(state.stage - 1, 0), 4);
+  // Dynamic background colors per stage (boss arena overrides theme)
+  let stageThemeIndex = Math.min(Math.max(state.stage - 1, 0), 4);
+  if (state.bossActive && state.activeBossId) {
+    const bossThemes: Record<string, number> = {
+      salvage_hauler: 0,
+      hive_regent: 3,
+      void_cardinal: 1,
+      crimson_tyrant: 2,
+    };
+    const override = bossThemes[state.activeBossId];
+    if (override !== undefined) stageThemeIndex = override;
+  }
   const themes = [
     { center: '#020617', edge: '#000000', sunRaw: '255, 241, 202', sunGlow: '251, 191, 36' }, // 1: Dark Slate
     { center: '#1a0b1c', edge: '#05000a', sunRaw: '240, 150, 255', sunGlow: '200, 50, 255' }, // 2: Purple / Void
@@ -852,7 +868,7 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   });
 
   // --- Nano Plexus Links between enemies (Optimized and Throttled) ---
-  if (!isMobile && state.enemies.length < 150) {
+  if (!isMobile && shouldDrawPlexusLinks(state.enemies.length, densityTier)) {
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
     
@@ -916,7 +932,7 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
 
     // Enemy Trail
     const eVelLen = e.velocity.magnitude();
-    if (eVelLen > 0.1) {
+    if (shouldDrawEnemyTrails(densityTier) && eVelLen > 0.1) {
       ctx.strokeStyle = e.color;
       ctx.globalAlpha = 0.15;
       ctx.lineWidth = e.radius;
@@ -1550,19 +1566,17 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     if (!isMobile) ctx.shadowBlur = 0;
   }
 
-  // Buff Visuals
-  if (state.buffs.shield > 0) {
+  // Extra life ready (subtle ring — not a per-hit absorb shield)
+  if (state.extraLifeCharges > 0) {
     ctx.strokeStyle = '#34d399';
     const shieldPulse = Math.sin(Date.now() / 150) * 4;
-    for (let s = 0; s < Math.min(state.buffs.shield, 3); s++) {
-      ctx.lineWidth = 3 - s * 0.5;
-      ctx.beginPath();
-      ctx.arc(pDrawX, pDrawY, Math.max(0, p.radius * 1.8 + shieldPulse + s * 8), 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.arc(pDrawX, pDrawY, Math.max(0, p.radius * 1.8 + shieldPulse), 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(52, 211, 153, 0.1)';
+    ctx.arc(pDrawX, pDrawY, Math.max(0, p.radius * 2.1 + shieldPulse), 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(pDrawX, pDrawY, Math.max(0, p.radius * 2.1 + shieldPulse), 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(52, 211, 153, 0.08)';
     ctx.fill();
   }
 
@@ -1659,6 +1673,27 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
        ctx.fillRect(0, 0, width, height);
     }
     
+    ctx.restore();
+  }
+
+  if (state.bossArenaTransition > 0) {
+    const total = 3.5;
+    const t = 1 - state.bossArenaTransition / total;
+    const tunnel = Math.sin(t * Math.PI);
+    ctx.save();
+    ctx.fillStyle = `rgba(2, 6, 23, ${0.35 + tunnel * 0.55})`;
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = `rgba(34, 211, 238, ${tunnel * 0.35})`;
+    ctx.lineWidth = 2;
+    const streaks = 18;
+    for (let i = 0; i < streaks; i++) {
+      const angle = (i / streaks) * Math.PI * 2 + t * 6;
+      const len = width * 0.15 + tunnel * width * 0.35;
+      ctx.beginPath();
+      ctx.moveTo(width / 2, height / 2);
+      ctx.lineTo(width / 2 + Math.cos(angle) * len, height / 2 + Math.sin(angle) * len);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 

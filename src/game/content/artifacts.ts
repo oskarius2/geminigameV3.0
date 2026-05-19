@@ -17,6 +17,7 @@ const BASE_ARTIFACTS: Record<string, Artifact> = {
     rarity: BuffRarity.RARE,
     slot: 'CANNON_A',
     stats: { damageMod: 1.25, critMod: 0.05 },
+    scrapCost: 120,
   },
   void_shard: {
     id: 'void_shard',
@@ -25,6 +26,7 @@ const BASE_ARTIFACTS: Record<string, Artifact> = {
     rarity: BuffRarity.EPIC,
     slot: 'CANNON_A',
     stats: { damageMod: 1.45, speedMod: 0.9 },
+    scrapCost: 280,
   },
   pulse_gatling: {
     id: 'pulse_gatling',
@@ -57,6 +59,7 @@ const BASE_ARTIFACTS: Record<string, Artifact> = {
     rarity: BuffRarity.RARE,
     slot: 'CANNON_B',
     stats: { damageMod: 1.2, multiShot: 1 },
+    scrapCost: 150,
   },
   storm_bringer: {
     id: 'storm_bringer',

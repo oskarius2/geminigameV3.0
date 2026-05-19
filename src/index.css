@@ -5,6 +5,7 @@
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
   --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --spacing-touch: 3rem;
 }
 
 @layer utilities {

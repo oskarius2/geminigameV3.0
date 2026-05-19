@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertTriangle, Cpu, Fuel, Ghost } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { RandomEvent } from '../types';
 
 interface RandomEventDialogProps {

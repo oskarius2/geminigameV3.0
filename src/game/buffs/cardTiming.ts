@@ -1,8 +1,8 @@
-export function getCardIntervalSeconds(stage: number, survivalTime: number, passiveCount: number = 0): number {
-  const base = 31 + Math.random() * 3; // 31–34s base
-  const buffDiscount = Math.min(12, passiveCount * 1.2); // up to -12s with 10+ buffs
-  const stageDiscount = Math.min(6, (stage - 1) * 1.2);  // up to -6s at stage 6+
-  return Math.max(18, base - buffDiscount - stageDiscount);
+export function getCardIntervalSeconds(stage: number, _survivalTime: number, passiveCount: number = 0): number {
+  const base = 20 + Math.random() * 4; // 20–24s base
+  const buffDiscount = Math.min(8, passiveCount * 0.8);
+  const stageDiscount = Math.min(6, (stage - 1) * 1.2);
+  return Math.max(12, base - buffDiscount - stageDiscount);
 }
 
 export function getNextLevelExp(current: number): number {
