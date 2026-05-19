@@ -1,6 +1,7 @@
 ﻿import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Flame, Play, RotateCcw, Shield, Swords, Zap, Trophy, Target } from 'lucide-react';
+import { SpeedInsights } from '@vercel/speed-insights/react';
 import { StartPage } from './game/controls/StartPage';
 import { Joystick } from './game/controls/Joystick';
 import { GameHUD } from './game/controls/GameHUD';
@@ -2422,6 +2423,7 @@ export default function App() {
           onVault={() => setIsInventoryOpen(true)}
         />
       ) : null}
+      <SpeedInsights />
     </div>
   );
 }
