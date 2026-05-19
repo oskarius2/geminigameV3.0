@@ -72,6 +72,9 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
       hive_regent: 3,
       void_cardinal: 1,
       crimson_tyrant: 2,
+      colossus: 2,
+      hive_queen: 3,
+      wraith_lord: 1,
     };
     const override = bossThemes[state.activeBossId];
     if (override !== undefined) stageThemeIndex = override;
@@ -944,7 +947,7 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     }
     
     // Danger Zones for large enemies
-    if (e.enemyType === EnemyType.BOSS || e.enemyType === EnemyType.ELITE || e.enemyType === EnemyType.TANK || e.enemyType === EnemyType.NOVA) {
+    if (e.enemyType === EnemyType.BOSS || e.enemyType === EnemyType.ELITE || e.enemyType === EnemyType.TANK || e.enemyType === EnemyType.NOVA || e.enemyType === EnemyType.FORTIFIED) {
       ctx.save();
       ctx.translate(drawX, drawY);
       const pulse = 1 + Math.sin(Date.now() / 200 + e.id.length) * 0.1;
@@ -961,6 +964,23 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
         ctx.beginPath();
         ctx.arc(0, 0, ringRadius * 0.7, 0, Math.PI * 2);
         ctx.strokeStyle = `hsla(0, 100%, 50%, 0.6)`;
+        ctx.stroke();
+      }
+      // Colossus telegraph: expanding warning ring during windup
+      if (e.enemyType === EnemyType.BOSS && state.activeBossId === 'colossus' && e.aiState === 'windup' && (e.aiTimer ?? 0) > 0) {
+        const windupProgress = 1 - Math.min(1, (e.aiTimer ?? 0) / 70);
+        const warnR = e.radius * (1.5 + windupProgress * 4);
+        const warnAlpha = 0.15 + windupProgress * 0.55;
+        ctx.beginPath();
+        ctx.arc(0, 0, warnR, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 60, 0, ${warnAlpha})`;
+        ctx.lineWidth = 3 + windupProgress * 5;
+        ctx.stroke();
+        // Inner pulse ring
+        ctx.beginPath();
+        ctx.arc(0, 0, warnR * 0.55, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255, 200, 0, ${warnAlpha * 0.8})`;
+        ctx.lineWidth = 2;
         ctx.stroke();
       }
       ctx.restore();
@@ -1259,6 +1279,227 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
         ctx.closePath();
         ctx.fill();
         break;
+
+      case EnemyType.DASHER: {
+        // Arrow streaking with afterburn
+        ctx.rotate(Math.atan2(e.velocity.y, e.velocity.x));
+        ctx.beginPath();
+        ctx.moveTo(radius * 1.8, 0);
+        ctx.lineTo(-radius * 0.5, -radius * 0.55);
+        ctx.lineTo(-radius * 1.2, 0);
+        ctx.lineTo(-radius * 0.5, radius * 0.55);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#ffaa44';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        // Afterburn trail
+        ctx.globalAlpha = 0.4;
+        ctx.fillStyle = '#ff6b35';
+        ctx.beginPath();
+        ctx.moveTo(-radius * 1.2, 0);
+        ctx.lineTo(-radius * 2.5, -radius * 0.35);
+        ctx.lineTo(-radius * 2.5, radius * 0.35);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+
+      case EnemyType.PHANTOM: {
+        // Flickering translucent ghost triangle
+        const isInvis = e.aiState === 'invisible';
+        ctx.globalAlpha = isInvis ? 0.18 + Math.sin(time * 12) * 0.12 : 0.75 + Math.sin(time * 4) * 0.15;
+        ctx.rotate(time * 1.2);
+        ctx.beginPath();
+        ctx.moveTo(0, -radius * 1.6);
+        ctx.lineTo(radius * 1.2, radius * 1.0);
+        ctx.lineTo(-radius * 1.2, radius * 1.0);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#00ffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        ctx.globalAlpha = 1.0;
+        break;
+      }
+
+      case EnemyType.ZAPPER: {
+        // Electric jagged star
+        ctx.rotate(time * 3);
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const ang = (i * Math.PI * 2) / 6;
+          const r = i % 2 === 0 ? radius * 1.4 : radius * 0.6;
+          if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+          else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        // Spark arcs
+        ctx.strokeStyle = '#38bdf8';
+        ctx.lineWidth = 1.5;
+        for (let s = 0; s < 3; s++) {
+          const sang = time * 6 + (s * Math.PI * 2 / 3);
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(sang) * radius * 0.8, Math.sin(sang) * radius * 0.8);
+          ctx.lineTo(Math.cos(sang + 0.5) * radius * 1.5, Math.sin(sang + 0.5) * radius * 1.5);
+          ctx.stroke();
+        }
+        break;
+      }
+
+      case EnemyType.STRIKER: {
+        // Heavy arrow with forward spike
+        ctx.rotate(Math.atan2(e.velocity.y, e.velocity.x));
+        const chargeFlash = e.aiState === 'windup' ? 0.4 + Math.sin(time * 20) * 0.4 : 0;
+        if (chargeFlash > 0) {
+          ctx.fillStyle = `rgba(255,80,0,${chargeFlash})`;
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = e.color;
+        }
+        ctx.beginPath();
+        ctx.moveTo(radius * 2, 0);
+        ctx.lineTo(-radius * 0.5, -radius * 0.9);
+        ctx.lineTo(-radius * 1.2, -radius * 0.5);
+        ctx.lineTo(-radius * 1.6, 0);
+        ctx.lineTo(-radius * 1.2, radius * 0.5);
+        ctx.lineTo(-radius * 0.5, radius * 0.9);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        break;
+      }
+
+      case EnemyType.SWARM_V2: {
+        // Slightly larger SWARMER with angular edges
+        const sv2p = Math.sin(time * 12 + e.id.length) * 0.25 + 0.75;
+        ctx.rotate(time * 2.5);
+        ctx.beginPath();
+        for (let i = 0; i < 5; i++) {
+          const ang = (i * Math.PI * 2) / 5;
+          const r = i % 2 === 0 ? radius * sv2p * 1.2 : radius * sv2p * 0.7;
+          if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+          else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#ffaa44';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        break;
+      }
+
+      case EnemyType.TRACKER: {
+        // Concentric targeting rings
+        ctx.rotate(time * 0.6);
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+        // Outer scan rings
+        for (let r = 0; r < 2; r++) {
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * (1.5 + r * 0.5), 0, Math.PI * 1.5);
+          ctx.strokeStyle = `rgba(192,38,211,${0.6 - r * 0.2})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        // Cross-hair lines
+        ctx.strokeStyle = '#e879f9';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-radius * 0.6, 0); ctx.lineTo(radius * 0.6, 0);
+        ctx.moveTo(0, -radius * 0.6); ctx.lineTo(0, radius * 0.6);
+        ctx.stroke();
+        break;
+      }
+
+      case EnemyType.FORTIFIED: {
+        // Armored octagon with plating lines
+        ctx.rotate(time * 0.05);
+        ctx.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const ang = (i * Math.PI * 2) / 8 + Math.PI / 8;
+          if (i === 0) ctx.moveTo(Math.cos(ang) * radius, Math.sin(ang) * radius);
+          else ctx.lineTo(Math.cos(ang) * radius, Math.sin(ang) * radius);
+        }
+        ctx.closePath();
+        ctx.fillStyle = hitIntensity > 0 ? '#ffffff' : '#334155';
+        ctx.fill();
+        ctx.strokeStyle = '#94a3b8';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        // Armor plating details
+        ctx.strokeStyle = '#475569';
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 4; i++) {
+          const ang = (i * Math.PI * 2) / 4 + Math.PI / 8;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(ang) * radius * 0.4, Math.sin(ang) * radius * 0.4);
+          ctx.lineTo(Math.cos(ang) * radius * 0.85, Math.sin(ang) * radius * 0.85);
+          ctx.stroke();
+        }
+        break;
+      }
+
+      case EnemyType.SHIELDED: {
+        // Hexagon body with shield bubble
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const ang = (i * Math.PI * 2) / 6;
+          if (i === 0) ctx.moveTo(Math.cos(ang) * radius, Math.sin(ang) * radius);
+          else ctx.lineTo(Math.cos(ang) * radius, Math.sin(ang) * radius);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Shield bubble when active
+        if (e.aiState !== 'recharge' && e.damageResist && e.damageResist > 0.5) {
+          const shieldAlpha = 0.15 + Math.sin(time * 4) * 0.08;
+          ctx.beginPath();
+          ctx.arc(0, 0, radius * 1.7, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(6,182,212,${shieldAlpha})`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(6,182,212,${0.5 + Math.sin(time * 6) * 0.25})`;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        break;
+      }
+
+      case EnemyType.REGENERATING: {
+        // Pulsing organic circle with regen vines
+        const hpFrac = e.health / e.maxHealth;
+        const regenPulse = 1 + Math.sin(time * 8) * 0.15;
+        ctx.rotate(time * 0.4);
+        ctx.beginPath();
+        ctx.arc(0, 0, radius * regenPulse, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Regen vines (more visible when healing)
+        if (hpFrac < 0.8) {
+          const vineAlpha = (1 - hpFrac) * 0.8;
+          ctx.strokeStyle = `rgba(34,197,94,${vineAlpha})`;
+          ctx.lineWidth = 2;
+          for (let v = 0; v < 4; v++) {
+            const vAng = time * 2 + (v * Math.PI / 2);
+            ctx.beginPath();
+            ctx.moveTo(Math.cos(vAng) * radius, Math.sin(vAng) * radius);
+            ctx.quadraticCurveTo(
+              Math.cos(vAng + 0.5) * radius * 1.8,
+              Math.sin(vAng + 0.5) * radius * 1.8,
+              Math.cos(vAng + 1.0) * radius * 1.3,
+              Math.sin(vAng + 1.0) * radius * 1.3
+            );
+            ctx.stroke();
+          }
+        }
+        break;
+      }
 
       default: // CHASER (Triangle/Spiky)
         ctx.rotate(Math.atan2(e.velocity.y, e.velocity.x));

@@ -666,6 +666,7 @@ export function spawnEnemy(
   let color = '#f87171';
   let enemyType = EnemyType.CHASER;
   let damageResist = 0;
+  let damageMult = 1;
 
   if (isBoss) {
     const boss =
@@ -773,6 +774,71 @@ export function spawnEnemy(
         speed *= 0.6;
         enemyType = EnemyType.SNIPER;
         break;
+      case 12:
+        color = '#ff6b35';
+        radius = 10;
+        health *= 0.5;
+        speed *= 2.8;
+        enemyType = EnemyType.DASHER;
+        break;
+      case 13:
+        color = '#00d4ff';
+        radius = 16;
+        health *= 4;
+        speed *= 1.5;
+        enemyType = EnemyType.PHANTOM;
+        break;
+      case 14:
+        color = '#38bdf8';
+        radius = 13;
+        health *= 1.8;
+        speed *= 1.1;
+        enemyType = EnemyType.ZAPPER;
+        break;
+      case 15:
+        color = '#cc2200';
+        radius = 18;
+        health *= 5;
+        speed *= 1.9;
+        damageMult = 1.9; // high contact damage is STRIKER's identity
+        enemyType = EnemyType.STRIKER;
+        break;
+      case 16:
+        color = '#ff8c00';
+        radius = 10;
+        health *= 0.3;
+        speed *= 2.9;
+        enemyType = EnemyType.SWARM_V2;
+        break;
+      case 17:
+        color = '#c026d3';
+        radius = 17;
+        health *= 7;
+        speed *= 1.15; // relentless pursuit — faster than average
+        enemyType = EnemyType.TRACKER;
+        break;
+      case 18:
+        color = '#475569';
+        radius = 44;
+        health *= 60;
+        speed *= 0.2;
+        enemyType = EnemyType.FORTIFIED;
+        break;
+      case 19:
+        color = '#06b6d4';
+        radius = 22;
+        health *= 8;
+        speed *= 0.9;
+        enemyType = EnemyType.SHIELDED;
+        damageResist = 0.85;
+        break;
+      case 20:
+        color = '#22c55e';
+        radius = 20;
+        health *= 12;
+        speed *= 0.8;
+        enemyType = EnemyType.REGENERATING;
+        break;
       default:
         color = '#ef4444';
         radius = 14;
@@ -793,13 +859,14 @@ export function spawnEnemy(
     speed,
     velocity: new Vector2(0, 0),
     color,
-    damage: Math.floor((15 + tier * 2) * threatMult * timeRamp * (isBoss ? 2 : 1)),
+    damage: Math.floor((15 + tier * 2) * threatMult * timeRamp * (isBoss ? 2 : 1) * damageMult),
     enemyType,
     lastShot: Date.now(),
     aiTimer: 0,
     behaviorSeed: Math.random(),
     aiState: 'chase',
     damageResist,
+    shieldHealth: enemyType === EnemyType.SHIELDED ? 10 : undefined,
   };
 }
 
@@ -890,6 +957,18 @@ export function updateEnemies(state: GameState, dt: number = 1) {
     vy += sep.vy;
 
     runEnemyAttacks(enemy, state, dist, dx, dy, vx, vy);
+
+    // REGENERATING: heals 5 HP/sec
+    if (enemy.enemyType === EnemyType.REGENERATING && enemy.health < enemy.maxHealth) {
+      enemy.health = Math.min(enemy.maxHealth, enemy.health + (5 / 60) * enemyDt);
+    }
+
+    // SHIELDED: shield restores after recharge timer expires (aiTimer decremented in computeEnemyVelocity)
+    if (enemy.enemyType === EnemyType.SHIELDED && enemy.aiState === 'recharge' && (enemy.aiTimer ?? 1) <= 0) {
+      enemy.damageResist = 0.85;
+      enemy.shieldHealth = 10;
+      enemy.aiState = 'chase';
+    }
 
     finalizeEnemyMovement(enemy, state, vx, vy, enemyDt, i);
     resolveObstacleCollision(enemy, state.obstacles);

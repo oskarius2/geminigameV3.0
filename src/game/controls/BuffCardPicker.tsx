@@ -35,6 +35,13 @@ const RARITY_STYLE: Record<BuffRarity, { border: string; bg: string; glow: strin
     text: 'text-cyan-200',
     label: 'EXCLUSIVE',
   },
+  [BuffRarity.MYSTERY]: {
+    border: 'border-fuchsia-500/70',
+    bg: 'bg-linear-to-br from-fuchsia-900/30 via-slate-900/20 to-fuchsia-900/30',
+    glow: 'shadow-[0_0_30px_rgba(217,70,239,0.4)]',
+    text: 'text-fuchsia-300',
+    label: '???',
+  },
 };
 
 interface BuffCardPickerProps {

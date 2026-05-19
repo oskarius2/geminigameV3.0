@@ -49,6 +49,33 @@ export const BOSS_DEFINITIONS: BossDefinition[] = [
     speedMult: 0.75,
     damageMult: 1.25,
   },
+  {
+    id: 'colossus',
+    name: 'Colossus',
+    tagline: 'The sector shudders under its weight.',
+    arenaTheme: 2,
+    hpMult: 2.5,
+    speedMult: 0.35,
+    damageMult: 2.0,
+  },
+  {
+    id: 'hive_queen',
+    name: 'Hive Queen',
+    tagline: 'From the queen, the swarm is born.',
+    arenaTheme: 3,
+    hpMult: 1.1,
+    speedMult: 0.75,
+    damageMult: 0.8,
+  },
+  {
+    id: 'wraith_lord',
+    name: 'Wraith Lord',
+    tagline: 'Blink and it is already behind you.',
+    arenaTheme: 1,
+    hpMult: 1.3,
+    speedMult: 1.5,
+    damageMult: 1.4,
+  },
 ];
 
 /** @deprecated Use pickRandomBoss from bossArenas.ts */

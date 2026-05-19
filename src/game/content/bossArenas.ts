@@ -239,8 +239,10 @@ export function buildBossArenaLayout(bossId: string, width: number, height: numb
   return build(width, height);
 }
 
+const SURVIVAL_BOSS_IDS = new Set(['salvage_hauler', 'hive_regent', 'void_cardinal', 'crimson_tyrant']);
+
 export function pickRandomBoss(stage: number = 1, excludeId?: string | null): BossDefinition {
-  let pool = [...BOSS_DEFINITIONS];
+  let pool = BOSS_DEFINITIONS.filter((b) => SURVIVAL_BOSS_IDS.has(b.id));
   if (excludeId) {
     const filtered = pool.filter((b) => b.id !== excludeId);
     if (filtered.length > 0) pool = filtered;

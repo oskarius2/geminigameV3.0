@@ -34,6 +34,7 @@ const RARITY_COLORS: Record<BuffRarity, string> = {
   [BuffRarity.EPIC]: "border-fuchsia-800 bg-fuchsia-900/10 text-fuchsia-400",
   [BuffRarity.LEGENDARY]: "border-amber-700 bg-amber-900/10 text-amber-500",
   [BuffRarity.EXCLUSIVE]: "border-rose-700 bg-rose-900/10 text-rose-500",
+  [BuffRarity.MYSTERY]: "border-fuchsia-700 bg-fuchsia-900/10 text-fuchsia-400",
 };
 
 const SLOT_ICONS: Record<ArtifactSlot, React.ReactNode> = {

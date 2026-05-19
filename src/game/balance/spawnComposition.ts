@@ -13,6 +13,16 @@ export const BASE_TYPE_CAPS: Partial<Record<EnemyType, number>> = {
   [EnemyType.SNIPER]: 3,
   [EnemyType.PHALANX]: 3,
   [EnemyType.TANK]: 2,
+  // New variants
+  [EnemyType.DASHER]: 8,
+  [EnemyType.PHANTOM]: 4,
+  [EnemyType.ZAPPER]: 6,
+  [EnemyType.STRIKER]: 5,
+  [EnemyType.SWARM_V2]: 10,
+  [EnemyType.TRACKER]: 3,
+  [EnemyType.FORTIFIED]: 2,
+  [EnemyType.SHIELDED]: 4,
+  [EnemyType.REGENERATING]: 3,
 };
 
 /** Maps spawnEnemy switch index → EnemyType (must match Logic.ts). */
@@ -29,6 +39,16 @@ export const PICK_TO_TYPE: Record<number, EnemyType> = {
   9: EnemyType.FAST,
   10: EnemyType.SWARMER,
   11: EnemyType.SNIPER,
+  // New variants
+  12: EnemyType.DASHER,
+  13: EnemyType.PHANTOM,
+  14: EnemyType.ZAPPER,
+  15: EnemyType.STRIKER,
+  16: EnemyType.SWARM_V2,
+  17: EnemyType.TRACKER,
+  18: EnemyType.FORTIFIED,
+  19: EnemyType.SHIELDED,
+  20: EnemyType.REGENERATING,
 };
 
 export function getEffectiveTypeCap(type: EnemyType, levelProgress: number): number {
@@ -63,11 +83,20 @@ function buildCandidatePicks(threatLevel: number): number[] {
     9, 9,
     10, 10,
     7, 7,
+    12, 12,   // DASHER — available from the start
+    16, 16,   // SWARM_V2 — always present
     ...(t >= 15 ? [6] : []),
+    ...(t >= 15 ? [14] : []),  // ZAPPER
     ...(t >= 25 ? [2] : []),
+    ...(t >= 30 ? [19] : []),  // SHIELDED
     ...(t >= 35 ? [3] : []),
+    ...(t >= 35 ? [13] : []),  // PHANTOM
+    ...(t >= 40 ? [15] : []),  // STRIKER
     ...(t >= 45 ? [4] : []),
+    ...(t >= 50 ? [17] : []),  // TRACKER
     ...(t >= 55 ? [5] : []),
+    ...(t >= 55 ? [20] : []),  // REGENERATING
+    ...(t >= 60 ? [18] : []),  // FORTIFIED
     ...(t >= 65 ? [11] : []),
     ...(t >= 75 ? [1] : []),
     ...(t >= 88 ? [0] : []),

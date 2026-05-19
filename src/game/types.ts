@@ -37,6 +37,16 @@ export enum EnemyType {
   SPLINTER = 'SPLINTER',
   NOVA = 'NOVA',
   SNIPER = 'SNIPER',
+  // New variants
+  DASHER = 'DASHER',
+  PHANTOM = 'PHANTOM',
+  ZAPPER = 'ZAPPER',
+  STRIKER = 'STRIKER',
+  SWARM_V2 = 'SWARM_V2',
+  TRACKER = 'TRACKER',
+  FORTIFIED = 'FORTIFIED',
+  SHIELDED = 'SHIELDED',
+  REGENERATING = 'REGENERATING',
 }
 
 export interface Entity {
@@ -60,7 +70,8 @@ export interface Entity {
   lastShot?: number;
   bounceCount?: number;
   life?: number;
-  aiState?: 'chase' | 'strafe' | 'retreat' | 'windup' | 'lunge' | 'blink';
+  aiState?: 'chase' | 'strafe' | 'retreat' | 'windup' | 'lunge' | 'blink' | 'teleport' | 'invisible' | 'recharge';
+  shieldHealth?: number;
   behaviorSeed?: number;
   burnTimer?: number;
   frostTimer?: number;
@@ -107,6 +118,7 @@ export enum BuffRarity {
   EPIC = 'EPIC',
   LEGENDARY = 'LEGENDARY',
   EXCLUSIVE = 'EXCLUSIVE',
+  MYSTERY = 'MYSTERY',
 }
 
 export interface PassiveBuff {

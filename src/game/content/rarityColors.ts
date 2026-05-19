@@ -6,4 +6,5 @@ export const RARITY_COLORS: Record<BuffRarity, { text: string; bg: string; borde
   [BuffRarity.EPIC]:      { text: 'text-purple-400', bg: 'bg-purple-900/20', border: 'border-purple-500/60' },
   [BuffRarity.LEGENDARY]: { text: 'text-amber-400',  bg: 'bg-amber-900/20',  border: 'border-amber-400/70'  },
   [BuffRarity.EXCLUSIVE]: { text: 'text-cyan-400',   bg: 'bg-cyan-900/20',   border: 'border-cyan-400/70'   },
+  [BuffRarity.MYSTERY]:   { text: 'text-fuchsia-400', bg: 'bg-fuchsia-900/20', border: 'border-fuchsia-500/60' },
 };

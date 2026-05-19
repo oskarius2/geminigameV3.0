@@ -350,6 +350,16 @@ export default function App() {
     duckMusic(0.3);
   };
 
+  const MYSTERY_BUFF_IDS = ['mys_dmg_burst', 'mys_hp_drain', 'mys_speed_curse', 'mys_shield_gift', 'mys_scrap_tax', 'mys_multishot'];
+  const openMysteryCard = (state: GameState) => {
+    state.isPaused = true;
+    const id = MYSTERY_BUFF_IDS[Math.floor(Math.random() * MYSTERY_BUFF_IDS.length)];
+    setCurrentBuffs([PASSIVE_BUFFS[id]]);
+    setShowLevelUp(true);
+    playSfx('cardFlip');
+    duckMusic(0.3);
+  };
+
   const startGame = () => {
     const initialState = INITIAL_STATE(dimensions.width, dimensions.height);
     
@@ -692,18 +702,6 @@ export default function App() {
         next.energy = Math.min(next.maxEnergy, next.energy + 0.3 * dt);
       }
 
-      // Random events (survival)
-      if (next.gameMode === 'NORMAL') {
-        next.eventTimer -= dt;
-        if (next.eventTimer <= 0) {
-          const eventIds = Object.keys(RANDOM_EVENTS);
-          const pickId = eventIds[Math.floor(Math.random() * eventIds.length)];
-          next.pendingEvent = RANDOM_EVENTS[pickId];
-          next.isPaused = true;
-          next.eventTimer = 2000 + Math.random() * 1500;
-          syncUi();
-        }
-      }
 
       if (next.gameMode === 'NORMAL' && !next.isPaused) {
         next.survivalTime += dt * (16.67 / 1000);
@@ -734,7 +732,11 @@ export default function App() {
       next.cardTimer -= dt * (16.67 / 1000); // Decr in seconds
       if (next.cardTimer <= 0) {
         next.cardTimer = getCardIntervalSeconds(next.stage, next.survivalTime, next.passives.length);
-        openBuffPicker(next);
+        if (Math.random() < 0.2) {
+          openMysteryCard(next);
+        } else {
+          openBuffPicker(next);
+        }
         playSfx('levelUp');
         next.screenshake = 5;
         syncUi();
@@ -1355,7 +1357,22 @@ export default function App() {
         };
 
         const pushSpawn = (entity: Entity | null) => {
-          if (entity) next.enemies.push(entity);
+          if (!entity) return;
+          next.enemies.push(entity);
+          // SWARM_V2: spawn 2-4 packmates nearby
+          if (entity.enemyType === EnemyType.SWARM_V2 && next.enemies.length < maxEnemies - 3) {
+            const packSize = 2 + Math.floor(Math.random() * 3);
+            for (let pk = 0; pk < packSize && next.enemies.length < maxEnemies; pk++) {
+              const packAngle = Math.random() * Math.PI * 2;
+              const packDist = 25 + Math.random() * 70;
+              const mate = spawnEnemy(next, 16);
+              if (mate) {
+                mate.pos.x = Math.max(0, Math.min(next.world.width, entity.pos.x + Math.cos(packAngle) * packDist));
+                mate.pos.y = Math.max(0, Math.min(next.world.height, entity.pos.y + Math.sin(packAngle) * packDist));
+                next.enemies.push(mate);
+              }
+            }
+          }
         };
 
         if (!next.bossActive && next.enemiesToKill > 0 && next.enemies.length < maxEnemies) {
@@ -1381,6 +1398,20 @@ export default function App() {
           }
         } else if (next.bossActive && next.enemies.filter(e => e.enemyType === EnemyType.BOSS).length === 0) {
           pushSpawn(spawnEnemy(next));
+          // Hive Queen: 3 elite minions spawn alongside the boss on arena entry
+          if (next.activeBossId === 'hive_queen') {
+            for (let m = 0; m < 3; m++) {
+              const minion = spawnEnemy(next, 3); // pick 3 = ELITE
+              if (minion) {
+                const mAngle = (m / 3) * Math.PI * 2;
+                minion.pos = new Vector2(
+                  Math.max(80, Math.min(next.world.width - 80, next.player.pos.x + Math.cos(mAngle) * 320)),
+                  Math.max(80, Math.min(next.world.height - 80, next.player.pos.y + Math.sin(mAngle) * 320))
+                );
+                next.enemies.push(minion);
+              }
+            }
+          }
         } else if (next.bossActive && next.enemies.length < maxEnemies && Math.random() < Math.min(0.4, spawnChance * 0.5)) {
           pushSpawn(spawnEnemy(next));
         }
@@ -1476,7 +1507,18 @@ export default function App() {
                   const isCrit = Math.random() < critRoll;
                   next.pendingCritBonus = isCrit ? Math.min(0.35, next.chainCritBonus) : 0;
                   let damage = (p.damage || 10) * (isCrit ? 2.5 : 1);
-                  if (e.damageResist && e.damageResist > 0) damage *= 1 - e.damageResist;
+                  if (e.enemyType === EnemyType.SHIELDED && e.damageResist && e.damageResist > 0.5) {
+                    // Each hit chips the shield
+                    e.shieldHealth = (e.shieldHealth ?? 10) - 1;
+                    if ((e.shieldHealth ?? 0) <= 0) {
+                      e.damageResist = 0;
+                      e.aiState = 'recharge';
+                      e.aiTimer = 300; // 5s recharge at 60fps
+                    }
+                    damage *= 0.15; // shield absorbs most damage
+                  } else if (e.damageResist && e.damageResist > 0) {
+                    damage *= 1 - e.damageResist;
+                  }
                   if (e.health < e.maxHealth * 0.5 && next.hunterMarkBonus > 0) {
                     damage *= 1 + next.hunterMarkBonus;
                   }
@@ -1701,6 +1743,36 @@ export default function App() {
                         player.health -= 35;
                         next.screenshake = Math.max(next.screenshake, 20);
                         if (handleFatalDamage(next, player) && next.isGameOver) syncUi();
+                      }
+                    } else if (e.enemyType === EnemyType.SWARM_V2) {
+                      // Nearby SWARM_V2 flee briefly when a packmate dies
+                      next.enemies.forEach(other => {
+                        if (other.enemyType === EnemyType.SWARM_V2 && other.pos.distanceTo(e.pos) < 280) {
+                          other.aiState = 'retreat';
+                          other.aiTimer = Math.max(other.aiTimer ?? 0, 55);
+                        }
+                      });
+                    } else if (e.enemyType === EnemyType.FORTIFIED) {
+                      // Always drops health
+                      next.items.push({ ...(spawnItem(e.pos) ?? { id: Math.random().toString(), type: EntityType.ITEM, pos: e.pos.clone(), radius: 10, health: 1, maxHealth: 1, speed: 0, velocity: new Vector2(0, 0), color: '#4ade80' }), itemType: ItemType.HEALTH });
+                      next.items.push({ ...(spawnItem(e.pos) ?? { id: Math.random().toString(), type: EntityType.ITEM, pos: new Vector2(e.pos.x + 30, e.pos.y), radius: 10, health: 1, maxHealth: 1, speed: 0, velocity: new Vector2(0, 0), color: '#4ade80' }), itemType: ItemType.ENERGY });
+                    } else if (e.enemyType === EnemyType.TRACKER) {
+                      // Drops extra XP
+                      for (let x = 0; x < 3; x++) {
+                        const xpOrb = spawnItem(new Vector2(e.pos.x + (Math.random()-0.5)*60, e.pos.y + (Math.random()-0.5)*60));
+                        if (xpOrb) next.items.push({ ...xpOrb, itemType: ItemType.XP });
+                      }
+                    } else if (e.enemyType === EnemyType.REGENERATING) {
+                      // Drops health orb on death
+                      if (Math.random() < 0.6) {
+                        const h = spawnItem(e.pos);
+                        if (h) next.items.push({ ...h, itemType: ItemType.HEALTH });
+                      }
+                    } else if (e.enemyType === EnemyType.SHIELDED) {
+                      // Drops shield item
+                      if (Math.random() < 0.5) {
+                        const s = spawnItem(e.pos);
+                        if (s) next.items.push({ ...s, itemType: ItemType.SHIELD });
                       }
                     }
                     
@@ -1957,15 +2029,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      <RandomEventDialog 
-        event={uiState?.pendingEvent ?? null}
-        onChoice={(choiceId) => {
-          if (gameStateRef.current) {
-            handleEventChoice(gameStateRef.current, choiceId);
-            syncUi();
-          }
-        }}
-      />
 
       <canvas 
         ref={canvasRef} 

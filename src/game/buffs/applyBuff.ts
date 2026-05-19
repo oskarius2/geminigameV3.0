@@ -1,5 +1,6 @@
 import { PASSIVE_BUFFS } from '../content/buffs';
 import { BuffRarity, GameState } from '../types';
+import { Vector2 } from '../utils/vector';
 import { computeThreatLevel } from '../balance/threat';
 import { grantExtraLife } from '../balance/extraLife';
 import { countPassiveStacks } from './pickBuffs';
@@ -192,6 +193,65 @@ export function applyBuff(state: GameState, choiceId: string): void {
       break;
     case 'crimson_overdrive':
       state.buffs.overdrive = Math.max(state.buffs.overdrive, 480);
+      break;
+    // Mystery buffs — random good or bad effect revealed on pick
+    case 'mys_dmg_burst':
+      if (Math.random() < 0.55) {
+        state.baseDamage *= 1.35;
+        state.damageTexts.push({ id: Math.random().toString(), text: '+35% DMG!', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#22d3ee', life: 90 });
+      } else {
+        state.baseDamage *= 0.8;
+        state.damageTexts.push({ id: Math.random().toString(), text: '-20% DMG', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#f87171', life: 90 });
+      }
+      break;
+    case 'mys_hp_drain':
+      if (Math.random() < 0.5) {
+        state.player.maxHealth += 120;
+        state.player.health = Math.min(state.player.maxHealth, state.player.health + 120);
+        state.damageTexts.push({ id: Math.random().toString(), text: '+120 HP!', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#4ade80', life: 90 });
+      } else {
+        state.player.health = Math.max(1, state.player.health - 180);
+        state.damageTexts.push({ id: Math.random().toString(), text: '-180 HP', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#f87171', life: 90 });
+      }
+      break;
+    case 'mys_speed_curse':
+      if (Math.random() < 0.5) {
+        state.player.speed *= 1.3;
+        state.damageTexts.push({ id: Math.random().toString(), text: '+30% SPEED!', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#22d3ee', life: 90 });
+      } else {
+        state.player.speed *= 0.75;
+        state.damageTexts.push({ id: Math.random().toString(), text: '-25% SPEED', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#f87171', life: 90 });
+      }
+      break;
+    case 'mys_shield_gift':
+      if (Math.random() < 0.6) {
+        grantExtraLife(state);
+        state.damageTexts.push({ id: Math.random().toString(), text: 'EXTRA LIFE!', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#facc15', life: 90 });
+      } else {
+        state.player.health = Math.max(1, state.player.health - 250);
+        state.screenshake = Math.max(state.screenshake, 12);
+        state.damageTexts.push({ id: Math.random().toString(), text: '-250 HP', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#f87171', life: 90 });
+      }
+      break;
+    case 'mys_scrap_tax':
+      if (Math.random() < 0.5) {
+        state.regen += 8;
+        state.damageTexts.push({ id: Math.random().toString(), text: '+8 REGEN!', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#4ade80', life: 90 });
+      } else {
+        state.critChance = Math.max(0, state.critChance - 0.15);
+        state.damageTexts.push({ id: Math.random().toString(), text: '-15% CRIT', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#f87171', life: 90 });
+      }
+      break;
+    case 'mys_multishot':
+      if (Math.random() < 0.55) {
+        state.multiShot += 2;
+        state.multiShotFireRatePenalty = (state.multiShotFireRatePenalty ?? 1) * 0.9;
+        state.damageTexts.push({ id: Math.random().toString(), text: '+2 SHOTS!', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#c084fc', life: 90 });
+      } else {
+        state.player.speed *= 0.85;
+        state.baseDamage *= 0.9;
+        state.damageTexts.push({ id: Math.random().toString(), text: 'CURSED', pos: new Vector2(state.player.pos.x, state.player.pos.y - 30), color: '#f87171', life: 90 });
+      }
       break;
     default:
       break;
