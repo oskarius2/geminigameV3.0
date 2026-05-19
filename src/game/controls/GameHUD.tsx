@@ -49,15 +49,15 @@ function CardTimerRing({ cardTimer, cardInterval, size = 'md' }: { cardTimer: nu
   return (
     <motion.div className="relative flex items-center justify-center shrink-0" style={{ width: dim, height: dim }}>
       <svg className={`absolute inset-0 -rotate-90 ${size === 'sm' ? 'w-9 h-9' : 'w-11 h-11'}`} viewBox="0 0 36 36" aria-hidden>
-        <circle cx="18" cy="18" r={r} fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="1" />
-        <circle cx="18" cy="18" r={r} fill="none" stroke="white" strokeWidth="2"
+        <circle cx="18" cy="18" r={r} fill="none" stroke="rgba(6,182,212,0.12)" strokeWidth="1" />
+        <circle cx="18" cy="18" r={r} fill="none" stroke="rgba(6,182,212,0.9)" strokeWidth="2"
           strokeDasharray={`${Math.max(0, (cardTimer / cardInterval) * dash)} ${dash}`}
           strokeLinecap="round"
         />
       </svg>
       <div className="flex flex-col items-center leading-none z-10">
-        <span className={`${size === 'sm' ? 'text-[5px]' : 'text-[6px]'} text-white/50 uppercase tracking-widest`}>SYNC</span>
-        <span className={`${size === 'sm' ? 'text-[8px]' : 'text-[9px]'} font-mono text-white tabular-nums`}>
+        <span className={`${size === 'sm' ? 'text-[5px]' : 'text-[6px]'} text-cyan-400/50 uppercase tracking-widest`}>SYNC</span>
+        <span className={`${size === 'sm' ? 'text-[8px]' : 'text-[9px]'} font-mono text-cyan-300 tabular-nums`}>
           {cardTimer > 3 ? `~${Math.ceil(cardTimer)}s` : `${Math.max(0, Math.ceil(cardTimer))}s`}
         </span>
       </div>
@@ -67,7 +67,14 @@ function CardTimerRing({ cardTimer, cardInterval, size = 'md' }: { cardTimer: nu
 
 function HudBracket({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`relative rounded-xl border border-white/10 bg-black/50 backdrop-blur-xl ${className}`}>
+    <div
+      className={`relative rounded-xl backdrop-blur-xl ${className}`}
+      style={{
+        background: 'rgba(15,23,42,0.6)',
+        border: '1px solid rgba(6,182,212,0.15)',
+        boxShadow: 'inset 0 0 16px rgba(6,182,212,0.04)',
+      }}
+    >
       {children}
     </div>
   );
@@ -112,7 +119,8 @@ function CompactTopHud(props: {
             type="button"
             aria-label="Pausmeny"
             onClick={(e) => { e.stopPropagation(); onOpenMenu?.(); }}
-            className="pointer-events-auto h-8 w-8 flex items-center justify-center rounded-lg bg-white/5 border border-white/10 text-white"
+            className="pointer-events-auto h-8 w-8 flex items-center justify-center rounded-lg text-cyan-300/70"
+            style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.18)' }}
           >
             <Menu size={14} />
           </button>
@@ -120,13 +128,13 @@ function CompactTopHud(props: {
             {score.toLocaleString()}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-[9px] font-mono text-white/60">
+        <div className="flex items-center gap-2 text-[9px] font-mono text-cyan-400/50">
           <span>{formatSurvival(survivalTime)}</span>
           {(gameMode === 'NORMAL' || gameMode === 'CAMPAIGN') && (
             <>
-              <span className="text-white/20">|</span>
+              <span className="text-cyan-400/20">·</span>
               <span>S{stage}</span>
-              <span className="text-white/20">|</span>
+              <span className="text-cyan-400/20">·</span>
               <span>
                 {bossArenaTransition > 0
                   ? 'ARENA'
@@ -142,7 +150,7 @@ function CompactTopHud(props: {
       </HudBracket>
       <div className="flex flex-col items-end gap-1 shrink-0">
         <CardTimerRing cardTimer={cardTimer} cardInterval={cardInterval} />
-        <span className="text-[9px] font-mono text-red-400">
+        <span className="text-[9px] font-mono text-rose-400/80 tracking-wider">
           T{augmentTier + 1} · {threatLevel.toFixed(0)}%
         </span>
       </div>
@@ -185,16 +193,17 @@ function LandscapeTopHud(props: {
         type="button"
         aria-label="Pausmeny"
         onClick={(e) => { e.stopPropagation(); onOpenMenu?.(); }}
-        className="pointer-events-auto h-9 w-9 shrink-0 flex items-center justify-center rounded-lg bg-black/50 border border-white/10 text-white"
+        className="pointer-events-auto h-9 w-9 shrink-0 flex items-center justify-center rounded-lg text-cyan-300/70"
+        style={{ background: 'rgba(15,23,42,0.6)', border: '1px solid rgba(6,182,212,0.15)' }}
       >
         <Menu size={14} />
       </button>
       <p className="text-sm font-display font-bold text-white tabular-nums truncate min-w-0">
         {score.toLocaleString()}
       </p>
-      <span className="text-[10px] font-mono text-white/60 shrink-0">{formatSurvival(survivalTime)}</span>
+      <span className="text-[10px] font-mono text-cyan-400/50 shrink-0">{formatSurvival(survivalTime)}</span>
       {(gameMode === 'NORMAL' || gameMode === 'CAMPAIGN') && (
-        <span className="text-[10px] font-mono text-white/50 shrink-0">
+        <span className="text-[10px] font-mono text-cyan-400/40 shrink-0">
           S{stage}
           {bossArenaTransition > 0
             ? ' · ARENA'
@@ -206,7 +215,7 @@ function LandscapeTopHud(props: {
         </span>
       )}
       <CardTimerRing cardTimer={cardTimer} cardInterval={cardInterval} size="sm" />
-      <span className="text-[9px] font-mono text-red-400 shrink-0">
+      <span className="text-[9px] font-mono text-rose-400/80 shrink-0 tracking-wider">
         T{augmentTier + 1}·{threatLevel.toFixed(0)}%
       </span>
     </motion.div>
@@ -292,12 +301,13 @@ export const GameHUD: React.FC<HUDProps> = ({
       ) : (
         <div className="w-full flex justify-between items-start z-20 gap-4">
           <HudBracket className="flex flex-col gap-2 p-4 w-72 max-w-[45vw]">
-            <span className="text-[8px] text-white/50 uppercase tracking-widest">Score</span>
-            <p className="text-3xl md:text-4xl font-display font-bold text-white tabular-nums leading-none">
+            <span className="font-mono text-[8px] uppercase tracking-[0.3em] text-cyan-400/50">Score</span>
+            <p className="text-3xl md:text-4xl font-display font-bold text-white tabular-nums leading-none"
+              style={{ textShadow: '0 0 20px rgba(6,182,212,0.3)' }}>
               {score.toLocaleString()}
             </p>
-            <div className="flex items-center gap-3 text-[10px] font-mono text-white/60">
-              <Activity size={10} /> {formatSurvival(survivalTime)}
+            <div className="flex items-center gap-3 text-[10px] font-mono text-cyan-400/50">
+              <Activity size={10} className="text-cyan-400/60" /> {formatSurvival(survivalTime)}
               {(gameMode === 'NORMAL' || gameMode === 'CAMPAIGN') && (
                 <span>
                   Sector {stage}
@@ -308,7 +318,8 @@ export const GameHUD: React.FC<HUDProps> = ({
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onOpenMenu?.(); }}
-              className="pointer-events-auto h-9 flex items-center justify-center gap-2 rounded-lg bg-white/5 border border-white/10 text-white text-[10px] uppercase tracking-widest"
+              className="pointer-events-auto h-9 flex items-center justify-center gap-2 rounded-lg font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70 transition-colors"
+              style={{ background: 'rgba(6,182,212,0.06)', border: '1px solid rgba(6,182,212,0.18)' }}
             >
               <Terminal size={12} /> Pause
             </button>
@@ -317,14 +328,17 @@ export const GameHUD: React.FC<HUDProps> = ({
           <div className="flex flex-col items-end gap-3">
             <CardTimerRing cardTimer={cardTimer} cardInterval={cardInterval} />
             <HudBracket className="p-3 min-w-[160px]">
-              <span className="text-[8px] text-white/50 uppercase tracking-widest flex items-center gap-1">
+              <span className="font-mono text-[8px] uppercase tracking-[0.3em] text-cyan-400/50 flex items-center gap-1">
                 <Radar size={10} /> Heat
               </span>
               <p className="text-lg font-display font-bold text-white mt-1">
-                Tier {augmentTier + 1} · {threatLevel.toFixed(0)}%
+                Tier {augmentTier + 1} · <span className="text-rose-400">{threatLevel.toFixed(0)}%</span>
               </p>
-              <div className="w-full h-1 bg-white/10 rounded-full mt-2 overflow-hidden">
-                <motion.div className="h-full bg-red-500" animate={{ width: `${threatPercent}%` }} />
+              <div className="w-full h-1 rounded-full mt-2 overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+                <motion.div
+                  className="h-full rounded-full bg-gradient-to-r from-amber-500 to-rose-500"
+                  animate={{ width: `${threatPercent}%` }}
+                />
               </div>
             </HudBracket>
           </div>
@@ -342,11 +356,18 @@ export const GameHUD: React.FC<HUDProps> = ({
                   key={slot}
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onWeaponSwitch?.(slot); }}
-                  className={`h-14 w-14 rounded-lg border flex items-center justify-center ${
-                    isActive ? 'bg-white/15 border-white/40' : 'bg-white/5 border-white/10 opacity-60'
-                  }`}
+                  className="h-14 w-14 rounded-lg flex items-center justify-center transition-all"
+                  style={isActive ? {
+                    background: 'rgba(6,182,212,0.15)',
+                    border: '1px solid rgba(6,182,212,0.5)',
+                    boxShadow: '0 0 16px rgba(6,182,212,0.2)',
+                  } : {
+                    background: 'rgba(255,255,255,0.04)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    opacity: 0.55,
+                  }}
                 >
-                  <Icon size={20} className={isActive ? 'text-white' : 'text-white/40'} />
+                  <Icon size={20} className={isActive ? 'text-cyan-300' : 'text-white/30'} />
                 </button>
               );
             })}
@@ -357,7 +378,7 @@ export const GameHUD: React.FC<HUDProps> = ({
       {isLandscape ? (
         <>
           <motion.div className="absolute left-[max(0.5rem,env(safe-area-inset-left))] bottom-[max(0.5rem,env(safe-area-inset-bottom))] w-28 z-20 pointer-events-none">
-            <div className="flex items-center gap-1 mb-0.5 text-[8px] uppercase tracking-widest text-white/50">
+            <div className="flex items-center gap-1 mb-0.5 text-[8px] font-mono uppercase tracking-[0.25em] text-cyan-400/50">
               <Radio size={9} className="text-emerald-400" /> Skrov
             </div>
             <StatBar value={health} max={maxHealth} variant="health" compact />
@@ -374,7 +395,7 @@ export const GameHUD: React.FC<HUDProps> = ({
           }`}
         >
           <div className={isTabletLandscape ? 'w-40 md:w-48' : 'w-36 md:w-56'}>
-            <div className="flex items-center gap-1 mb-1 text-[9px] uppercase tracking-widest text-white/50">
+            <div className="flex items-center gap-1 mb-1 text-[9px] font-mono uppercase tracking-[0.25em] text-cyan-400/50">
               <Radio size={10} className="text-emerald-400" /> Skrov
             </div>
             <StatBar value={health} max={maxHealth} variant="health" compact={isCompact || isTabletLandscape} />

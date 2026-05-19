@@ -37,9 +37,14 @@ export const SynergyBar: React.FC<SynergyBarProps> = ({ lines, layout, compact =
             initial={{ opacity: 0, x: -12 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0 }}
-            className="bg-amber-500/15 border border-amber-400/40 backdrop-blur-md px-3 py-1.5 rounded-lg"
+            className="backdrop-blur-xl px-3 py-1.5 rounded-lg"
+          style={{
+            background: 'rgba(15,23,42,0.65)',
+            border: '1px solid rgba(245,158,11,0.3)',
+            boxShadow: 'inset 0 0 12px rgba(245,158,11,0.04)',
+          }}
           >
-            <span className="text-[11px] font-bold text-amber-200/90 tracking-wide">{line.text}</span>
+            <span className="text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-amber-300/90">{line.text}</span>
           </motion.div>
         ))}
       </AnimatePresence>
