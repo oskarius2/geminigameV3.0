@@ -2,6 +2,12 @@
 import { motion, AnimatePresence } from 'motion/react';
 import { GameIcon, GameIconFromKey, getSlotIconName } from './components/icons';
 import { StartPage } from './game/controls/StartPage';
+import { OptionsScreen } from './game/controls/OptionsScreen';
+import {
+  loadKeybinds,
+  keyMatches,
+  type KeybindAction,
+} from './game/settings/keybinds';
 import { Joystick } from './game/controls/Joystick';
 import { GameHUD } from './game/controls/GameHUD';
 import { BuffCardPicker } from './game/controls/BuffCardPicker';
@@ -16,10 +22,11 @@ import {
   type ViewportProfile,
 } from './game/controls/mobileLayout';
 import { getAugmentTier, getTierModifiers } from './game/balance/augmentTiers';
+import { resetWaveSpawnState, tickSurvivalWaveSpawns } from './game/balance/waveSpawnController';
 import {
-  resetWaveSpawnState,
-  tickSurvivalWaveSpawns,
-} from './game/balance/waveSpawnController';
+  applyDifficultyScaling,
+  initStageDifficulty,
+} from './game/progression/difficultyScaler';
 import { spawnMiniBoss } from './game/bosses/miniBossSpawn';
 import type { MiniBossId } from './game/bosses/miniBossDefs';
 import {
@@ -62,9 +69,11 @@ import { getEffectiveCardIntervalSeconds } from './game/buffs/cardTiming';
 import { applyThreatVisualEffects, resetThreatEffectTracking } from './game/hud/threatEffects';
 import {
   ensureCompanionRuntime,
+  forceCompanionActiveAbility,
   getCompanionHudSnapshot,
   updateCompanionAI,
 } from './game/companions/companionAI';
+import { getScoutSynergyDamageMult } from './game/companions/companionCombat';
 import {
   applyCompanionLoadout,
   grantCompanionKillXp,
@@ -72,6 +81,10 @@ import {
   reconcileAllCompanionProgress,
   unlockCompanionMeta,
 } from './game/companions/companionLeveling';
+import {
+  CompanionAbilityToastStack,
+  type CompanionAbilityNotification,
+} from './game/meta/companionAbilityToast';
 import { CompanionSelectScreen } from './components/CompanionSelectScreen';
 import { PreRunShop } from './components/PreRunShop';
 import {
@@ -213,6 +226,13 @@ import {
   resumeAudio,
 } from './game/audio/sfx';
 import { startMusic, stopMusic, duckMusic, loadMusicSettings, setMusicMuted, setMusicVolume } from './game/audio/music';
+import { AudioManager } from './game/audio/AudioManager';
+import { useAudioManager } from './game/audio/useAudioManager';
+import {
+  playPlayerWeaponAudio,
+  playWeaponDryFire,
+} from './game/audio/boomBapWeaponAudio';
+import { AudioSettingsPanel } from './game/ui/AudioSettingsPanel';
 import {
   startSurvivalAudio,
   stopSurvivalAudio,
@@ -226,7 +246,6 @@ import { spawnDamageNumber } from './game/juice/damageNumbers';
 import {
   applyPlayerDamageGlitch,
   triggerHitFeedback,
-  shootSfxForSlot,
   isBossHit,
   GAMEPLAY_HITSTOP_THRESHOLD,
 } from './game/juice/hitFeedback';
@@ -264,6 +283,14 @@ import {
   ARTIFACTS,
 } from './game/Logic';
 import { applyBuff, hasPermanentOverdrive, hasPermanentPiercing, hasPermanentRapidFire } from './game/buffs/applyBuff';
+import {
+  collectAmmoPickup,
+  onMiniBossDefeatedAmmo,
+  setGameWeaponSlot,
+  tickAmmoOnFrame,
+  tryConsumeAmmoForShot,
+  tryRollAmmoDropOnKill,
+} from './game/weapons';
 import { applyHangarLoadout } from './game/runSetup';
 import { applyEquippedArtifacts, applySingleArtifactStats } from './game/artifacts/applyArtifactStats';
 import { pickArtifactUnlockChoices } from './game/meta/artifactUnlock';
@@ -316,6 +343,7 @@ function findNearestEnemyInGrid(
 }
 
 export default function App() {
+  useAudioManager();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState | null>(null);
   
@@ -370,8 +398,11 @@ export default function App() {
     companionMaxHealth: number;
     companionAbilityCooldown: number;
     companionAbilityCooldownMax: number;
-    companionAbilityName: string;
+        companionAbilityName: string;
     companionEnergy?: number;
+    companionAbilityToastTimer?: number;
+    companionAbilityToastName?: string;
+    weaponState: GameState['weaponState'] | null;
   } | null>(null);
 
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
@@ -401,11 +432,38 @@ export default function App() {
     rarity?: BuffRarity;
   } | null>(null);
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [abilityNotifications, setAbilityNotifications] = useState<
+    CompanionAbilityNotification[]
+  >([]);
+  const prevCompanionToastTimerRef = useRef(0);
   const [isPauseMenuOpen, setIsPauseMenuOpen] = useState(false);
+  const [isOptionsOpen, setIsOptionsOpen] = useState(false);
+  const keybindsRef = useRef(loadKeybinds());
   const [stageIntroStage, setStageIntroStage] = useState<number | null>(null);
   const [stageIntroKey, setStageIntroKey] = useState(0);
   const clearStageIntro = useCallback(() => setStageIntroStage(null), []);
-  
+
+  const dispatchAbilityNotification = useCallback(
+    (abilityName: string, companionId: string) => {
+      setAbilityNotifications((prev) => [
+        ...prev,
+        {
+          companionId,
+          abilityName,
+          id: `ability_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        },
+      ]);
+    },
+    [],
+  );
+
+  const dismissAbilityNotification = useCallback((id: string) => {
+    setAbilityNotifications((prev) => prev.filter((a) => a.id !== id));
+    if (gameStateRef.current?.companionRuntime) {
+      gameStateRef.current.companionRuntime.abilityToastTimer = 0;
+    }
+  }, []);
+
   const [unlockedArtifactIds, setUnlockedArtifactIds] = useState<string[]>(() => {
     migrateFromLegacyStorage();
     return getUnlockedArtifactIds();
@@ -571,6 +629,7 @@ export default function App() {
     isFiring: false,
     wantDash: false,
     wantUltimate: false,
+    wantCompanionAbility: false,
     mousePos: { x: 0, y: 0 },
     keys: new Set<string>(),
   });
@@ -623,6 +682,47 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (screen !== 'GAME' || !uiState?.companionId) return;
+    const name = uiState.companionAbilityToastName;
+    const timer = uiState.companionAbilityToastTimer ?? 0;
+    const companionId = uiState.companionId;
+    if (!name || timer <= 0) {
+      if (timer <= 0) prevCompanionToastTimerRef.current = 0;
+      return;
+    }
+    const prev = prevCompanionToastTimerRef.current;
+    if (timer > prev + 0.4 && timer >= 2) {
+      dispatchAbilityNotification(name, companionId);
+    }
+    prevCompanionToastTimerRef.current = timer;
+  }, [
+    screen,
+    uiState?.companionAbilityToastName,
+    uiState?.companionAbilityToastTimer,
+    uiState?.companionId,
+    dispatchAbilityNotification,
+  ]);
+
+  useEffect(() => {
+    if (screen !== 'GAME') {
+      setAbilityNotifications([]);
+      prevCompanionToastTimerRef.current = 0;
+    }
+  }, [screen]);
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    (globalThis as typeof globalThis & {
+      dispatchAbilityNotification?: typeof dispatchAbilityNotification;
+    }).dispatchAbilityNotification = dispatchAbilityNotification;
+    return () => {
+      delete (globalThis as typeof globalThis & {
+        dispatchAbilityNotification?: typeof dispatchAbilityNotification;
+      }).dispatchAbilityNotification;
+    };
+  }, [dispatchAbilityNotification]);
+
+  useEffect(() => {
     unlockedArtifactIdsRef.current = unlockedArtifactIds;
   }, [unlockedArtifactIds]);
 
@@ -641,6 +741,20 @@ export default function App() {
   useEffect(() => {
     musicMutedRef.current = musicMuted;
   }, [musicMuted]);
+
+  useEffect(() => {
+    if (musicMuted) {
+      AudioManager.stopAllMusic();
+      return;
+    }
+    if (screen === 'MENU') {
+      AudioManager.playMenuTheme();
+      return () => AudioManager.stopAllMusic();
+    }
+    if (screen !== 'GAME') {
+      AudioManager.stopAllMusic();
+    }
+  }, [screen, musicMuted]);
 
   useEffect(() => {
     showLevelUpRef.current = showLevelUp;
@@ -794,7 +908,7 @@ export default function App() {
     initialState.miniBossKillsThisRun = 0;
     initialState.runBossesDefeated = 0;
     resetWaveSpawnState(initialState);
-    gameStateRef.current = initialState;
+    gameStateRef.current = initStageDifficulty(initialState);
     setLastRunScrapEarned(0);
     setLastRunPersonalBest({ score: false, time: false });
     setNewUnlockIds([]);
@@ -970,6 +1084,7 @@ export default function App() {
       ultimateCharge: state.ultimateCharge,
       cardTimer: state.cardTimer,
       activeWeaponSlot: state.activeWeaponSlot,
+      weaponState: state.weaponState ?? null,
       equippedArtifacts: { ...state.equippedArtifacts },
       runScrapEarned: state.runScrapEarned,
       bossArenaTransition: state.bossArenaTransition,
@@ -1001,9 +1116,11 @@ export default function App() {
           companionHealth: snap.health,
           companionMaxHealth: snap.maxHealth,
           companionAbilityCooldown: snap.abilityCooldownRemaining,
-          companionAbilityCooldownMax: snap.abilityCooldownMax,
+                    companionAbilityCooldownMax: snap.abilityCooldownMax,
           companionAbilityName: snap.abilityName,
           companionEnergy: snap.energy,
+          companionAbilityToastTimer: state.companionRuntime?.abilityToastTimer,
+          companionAbilityToastName: state.companionRuntime?.abilityToastName,
         };
       })(),
     });
@@ -1178,7 +1295,27 @@ export default function App() {
   }, [showLevelUp, showArtifactUnlock, isPauseMenuOpen]);
 
   useEffect(() => {
+    const movementActions: KeybindAction[] = [
+      'moveUp',
+      'moveDown',
+      'moveLeft',
+      'moveRight',
+    ];
+    const syncMovementKeys = (e: KeyboardEvent, down: boolean) => {
+      const binds = keybindsRef.current;
+      for (const action of movementActions) {
+        if (!keyMatches(binds[action], e)) continue;
+        if (down) controls.current.keys.add(action);
+        else controls.current.keys.delete(action);
+      }
+    };
+
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (isOptionsOpen) {
+        if (e.key === 'Escape') setIsOptionsOpen(false);
+        return;
+      }
+
       if (screen === 'GAME' && devCheatsActive) {
         const cheat = tryDevCheatKeydown(e, devCheatHandlersRef.current);
         if (cheat?.handled) {
@@ -1187,35 +1324,49 @@ export default function App() {
           return;
         }
       }
-      controls.current.keys.add(e.key.toLowerCase());
-      if (e.key === ' ') {
+
+      const binds = keybindsRef.current;
+      syncMovementKeys(e, true);
+
+      if (keyMatches(binds.dash, e)) {
         if (gameStateRef.current?.gameMode === 'ON_RAILS') {
           controls.current.isFiring = true;
         } else {
           controls.current.wantDash = true;
         }
       }
-      if (e.key.toLowerCase() === 'e') controls.current.wantUltimate = true;
+      if (keyMatches(binds.ultimate, e)) controls.current.wantUltimate = true;
+      if (keyMatches(binds.companionAbility, e)) {
+        controls.current.wantCompanionAbility = true;
+      }
+      if (keyMatches(binds.weaponSwap, e)) controls.current.keys.add('weaponSwap');
+      if (keyMatches(binds.weaponA, e)) controls.current.keys.add('weaponA');
+      if (keyMatches(binds.weaponB, e)) controls.current.keys.add('weaponB');
 
       const canToggleAchievements =
         unlockToasts.length > 0 && !showLevelUp && !showArtifactUnlock;
-      if (
-        canToggleAchievements &&
-        (e.key === 'h' || e.key === 'H' || e.key === 'Escape')
-      ) {
+      if (canToggleAchievements && keyMatches(binds.achievements, e)) {
         e.preventDefault();
         toggleAchievementsVisible();
         return;
       }
 
-      if (e.key === 'p' || e.key === 'Escape') togglePause();
+      if (screen === 'GAME' && keyMatches(binds.pause, e)) {
+        e.preventDefault();
+        togglePause();
+      }
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
-      controls.current.keys.delete(e.key.toLowerCase());
-      if (e.key === ' ' && gameStateRef.current?.gameMode === 'ON_RAILS') {
+      if (isOptionsOpen) return;
+      syncMovementKeys(e, false);
+      const binds = keybindsRef.current;
+      if (keyMatches(binds.dash, e) && gameStateRef.current?.gameMode === 'ON_RAILS') {
         controls.current.isFiring = false;
       }
+      if (keyMatches(binds.weaponSwap, e)) controls.current.keys.delete('weaponSwap');
+      if (keyMatches(binds.weaponA, e)) controls.current.keys.delete('weaponA');
+      if (keyMatches(binds.weaponB, e)) controls.current.keys.delete('weaponB');
     };
 
     const handlePointerMove = (e: PointerEvent) => {
@@ -1265,6 +1416,7 @@ export default function App() {
     showLevelUp,
     showArtifactUnlock,
     toggleAchievementsVisible,
+    isOptionsOpen,
   ]);
 
   useEffect(() => {
@@ -1352,6 +1504,10 @@ export default function App() {
         if (next.stageTransition <= 0) {
           const clearedStage = next.stage;
           next.stage++;
+          if (AudioManager.isMusicPackReady()) {
+            AudioManager.playStageClear();
+            AudioManager.playBattleMusic(next.stage);
+          }
           onShopStageAdvanced(next);
           const milestoneArts = grantStageMilestoneUnlocks(clearedStage);
           for (const artId of milestoneArts) {
@@ -1393,6 +1549,13 @@ export default function App() {
           next.items = [];
           next.spawnRampTimer = 6.0;
           resetWaveSpawnState(next);
+          const scaledStage = applyDifficultyScaling(next);
+          next.artifactDropRate = scaledStage.artifactDropRate;
+          next.activeArtifactPool = scaledStage.activeArtifactPool;
+          next.difficultyScaleSpawnIntervalMs = scaledStage.difficultyScaleSpawnIntervalMs;
+          next.threatMusicBpmBase = scaledStage.threatMusicBpmBase;
+          next.threatMusicBpmMax = scaledStage.threatMusicBpmMax;
+          next.enemies = scaledStage.enemies;
           next.player.health = Math.min(
             next.player.maxHealth,
             next.player.health + next.player.maxHealth * 0.3
@@ -1480,6 +1643,12 @@ export default function App() {
         if ((next.bossVictoryBannerTimer ?? 0) > 0) {
           next.bossVictoryBannerTimer = Math.max(0, (next.bossVictoryBannerTimer ?? 0) - dt);
         }
+      }
+
+      if (next.gameMode === 'NORMAL' || next.gameMode === 'SURVIVAL') {
+        const ammoTick = tickAmmoOnFrame(next, dtSec * 1000);
+        next.weaponState = ammoTick.weaponState;
+        next.activeWeaponSlot = ammoTick.activeWeaponSlot;
       }
 
       if (next.pickJuiceTimer > 0) next.pickJuiceTimer -= dt;
@@ -1581,10 +1750,10 @@ export default function App() {
       const warpLocked = next.bossArenaTransition > 0;
 
       if (!onRailsActive) {
-        if (controls.current.keys.has('w')) ky -= 1;
-        if (controls.current.keys.has('s')) ky += 1;
-        if (controls.current.keys.has('a')) kx -= 1;
-        if (controls.current.keys.has('d')) kx += 1;
+        if (controls.current.keys.has('moveUp')) ky -= 1;
+        if (controls.current.keys.has('moveDown')) ky += 1;
+        if (controls.current.keys.has('moveLeft')) kx -= 1;
+        if (controls.current.keys.has('moveRight')) kx += 1;
       }
 
       if (onRailsActive) {
@@ -1594,13 +1763,10 @@ export default function App() {
           dtSec,
           {
             pointerScreenX: controls.current.mousePos.x,
-            moveForward:
-              keys.has('w') ||
-              keys.has('arrowup') ||
-              keys.has(' '),
-            moveBack: keys.has('s') || keys.has('arrowdown'),
-            moveLeft: keys.has('a') || keys.has('arrowleft'),
-            moveRight: keys.has('d') || keys.has('arrowright'),
+            moveForward: keys.has('moveUp'),
+            moveBack: keys.has('moveDown'),
+            moveLeft: keys.has('moveLeft'),
+            moveRight: keys.has('moveRight'),
           },
           dimensions.width,
           dimensions.height
@@ -1622,20 +1788,33 @@ export default function App() {
       // Weapon Switch
       const triggerWeaponSwitch = (slot: 'CANNON_A' | 'CANNON_B') => {
         if (next.activeWeaponSlot !== slot) {
-          next.activeWeaponSlot = slot;
+          const switched = setGameWeaponSlot(next, slot);
+          next.activeWeaponSlot = switched.activeWeaponSlot;
+          next.weaponState = switched.weaponState;
           playSfx('switchWeapon');
           syncUi();
         }
       };
 
-      if (controls.current.keys.has('q')) {
+      if (controls.current.keys.has('weaponSwap')) {
         const slots: ('CANNON_A' | 'CANNON_B')[] = ['CANNON_A', 'CANNON_B'];
         const currentIdx = slots.indexOf(next.activeWeaponSlot);
         triggerWeaponSwitch(slots[(currentIdx + 1) % slots.length]);
-        controls.current.keys.delete('q'); // One-shot
+        controls.current.keys.delete('weaponSwap');
       }
-      if (controls.current.keys.has('1')) triggerWeaponSwitch('CANNON_A');
-      if (controls.current.keys.has('2')) triggerWeaponSwitch('CANNON_B');
+      if (controls.current.keys.has('weaponA')) {
+        triggerWeaponSwitch('CANNON_A');
+        controls.current.keys.delete('weaponA');
+      }
+      if (controls.current.keys.has('weaponB')) {
+        triggerWeaponSwitch('CANNON_B');
+        controls.current.keys.delete('weaponB');
+      }
+
+      if (controls.current.wantCompanionAbility && next.gameMode === 'NORMAL') {
+        forceCompanionActiveAbility(next);
+        controls.current.wantCompanionAbility = false;
+      }
 
       let moveDir: Vector2 = new Vector2(0, 0);
       const joystickMag = Math.hypot(controls.current.move.x, controls.current.move.y);
@@ -1785,7 +1964,11 @@ export default function App() {
       player.pos.x = Math.max(player.radius, Math.min(next.world.width - player.radius, player.pos.x));
       player.pos.y = Math.max(player.radius, Math.min(next.world.height - player.radius, player.pos.y));
 
-      if (next.gameMode === 'NORMAL' && next.activeCompanionId && !next.isPaused) {
+      if (
+        (next.gameMode === 'NORMAL' || next.gameMode === 'SURVIVAL') &&
+        next.activeCompanionId &&
+        !next.isPaused
+      ) {
         updateCompanionAI(next, dtSec);
       }
 
@@ -1842,6 +2025,12 @@ export default function App() {
         controls.current.isFiring &&
         currentTime - lastFireTime.current > fireInterval
       ) {
+        const ammoGate = tryConsumeAmmoForShot(next);
+        next.weaponState = ammoGate.state.weaponState;
+        next.activeWeaponSlot = ammoGate.state.activeWeaponSlot;
+        if (!ammoGate.didFire) {
+          playWeaponDryFire();
+        } else {
         lastFireTime.current = currentTime;
 
         if (countTag(next, 'damage') >= 2 && countTag(next, 'fire') >= 1) {
@@ -1944,9 +2133,8 @@ export default function App() {
         }
         
         const muzzlePos = player.pos.add(aimDir.normalize().mul(player.radius + 5));
-        shootSfxForSlot(
-          next.activeWeaponSlot,
-          next.selectedShip,
+        playPlayerWeaponAudio(
+          next,
           muzzlePos.x - next.camera.x,
           dimensions.width
         );
@@ -2024,6 +2212,7 @@ export default function App() {
               if (Math.random() < 0.1) next.particles.push(...createImpact(e.pos, '#8b5cf6', 1));
             }
           });
+        }
         }
       }
 
@@ -2329,6 +2518,37 @@ export default function App() {
           continue;
         }
 
+        // Companion bolts vs enemies
+        if (p.ownerId?.startsWith('companion_')) {
+          const gx = Math.floor(p.pos.x / cellSize);
+          const gy = Math.floor(p.pos.y / cellSize);
+          for (let ox = -1; ox <= 1; ox++) {
+            for (let oy = -1; oy <= 1; oy++) {
+              const key = `${gx + ox},${gy + oy}`;
+              const cellEnemies = grid.get(key);
+              if (!cellEnemies) continue;
+              for (let j = cellEnemies.length - 1; j >= 0; j--) {
+                const e = cellEnemies[j];
+                if (!checkCollision(p, e)) continue;
+                let damage = p.damage || 8;
+                if (e.damageResist && e.damageResist > 0) damage *= 1 - e.damageResist;
+                e.health -= damage;
+                if (shouldApplyHitTimer(getCombatDensityTier(next.enemies.length), false, e.health <= 0)) {
+                  e.hitTimer = 3;
+                }
+                if (next.qualityLevel === 'high') {
+                  next.particles.push(...createImpact(e.pos, p.color, 2));
+                }
+                p.health = 0;
+                break;
+              }
+              if (p.health <= 0) break;
+            }
+            if (p.health <= 0) break;
+          }
+          continue;
+        }
+
         // Enemy projectiles vs Player
         if (p.ownerId !== 'player' && next.bossArenaTransition <= 0) {
           if (checkCollision(p, player)) {
@@ -2390,6 +2610,7 @@ export default function App() {
                   const isCrit = Math.random() < critRoll;
                   next.pendingCritBonus = isCrit ? Math.min(0.35, next.chainCritBonus) : 0;
                   let damage = (p.damage || 10) * (isCrit ? 2.5 : 1);
+                  damage *= getScoutSynergyDamageMult(next, e.id);
                   if (e.enemyType === EnemyType.SHIELDED && e.damageResist && e.damageResist > 0.5) {
                     // Each hit chips the shield
                     e.shieldHealth = (e.shieldHealth ?? 10) - 1;
@@ -2614,6 +2835,8 @@ export default function App() {
                         presentLegendaryArtifactPopup(rewards.artifact);
                         applyMiniBossDefeatJuice(next, mbId, rewards);
                         playMiniBossDefeatSfx(mbId);
+                        const mbAmmoDrop = onMiniBossDefeatedAmmo(next, e.pos);
+                        next.items = mbAmmoDrop.items;
                         const mbDef = tryGetMiniBossDef(mbId);
                         if (mbDef) {
                           next.particles.push(
@@ -2735,6 +2958,10 @@ export default function App() {
                     
                     const item = spawnItem(e.pos);
                     if (item) next.items.push(item);
+                    if (next.gameMode === 'NORMAL' && e.enemyType !== EnemyType.BOSS) {
+                      const ammoDrop = tryRollAmmoDropOnKill(next, e.pos);
+                      next.items = ammoDrop.items;
+                    }
                     
                     // Special death behaviors
                     if (e.enemyType === EnemyType.SPLINTER) {
@@ -2893,7 +3120,13 @@ export default function App() {
         if (e.health <= 0) missionController.notifyEvent('enemy_killed', e.enemyType);
       });
       next.enemies = next.enemies.filter(e => e.health > 0);
-      next.projectiles = next.projectiles.filter(p => p && p.health > 0 && p.pos);
+      next.projectiles = next.projectiles.filter((p) => {
+        if (!p?.pos) return false;
+        if (p.ownerId?.startsWith('companion_')) {
+          return p.health == null || p.health > 0;
+        }
+        return p.health > 0;
+      });
       next.obstacles = next.obstacles.filter(o => o && o.pos && o.size);
       if (next.qualityLevel === 'low' && next.projectiles.length > 200) {
         next.projectiles.splice(0, next.projectiles.length - 200);
@@ -2945,6 +3178,33 @@ export default function App() {
               text: 'BOMBED!',
               life: 2.0,
               color: '#ffffff'
+            });
+          } else if (item.itemType === ItemType.AMMO_PACK) {
+            const collected = collectAmmoPickup(
+              next,
+              'ammo',
+              item.ammoPickupAmount ?? undefined
+            );
+            next.weaponState = collected.weaponState;
+            playSfx('pickup');
+            next.damageTexts.push({
+              id: Math.random().toString(),
+              pos: player.pos.clone(),
+              text: '+AMMO',
+              life: 1.2,
+              color: '#fbbf24',
+            });
+          } else if (item.itemType === ItemType.WEAPON_CRATE) {
+            const collected = collectAmmoPickup(next, 'weapon');
+            next.weaponState = collected.weaponState;
+            next.activeWeaponSlot = collected.activeWeaponSlot;
+            playSfx('switchWeapon');
+            next.damageTexts.push({
+              id: Math.random().toString(),
+              pos: player.pos.clone(),
+              text: 'WEAPON!',
+              life: 1.4,
+              color: '#a78bfa',
             });
           }
           next.particles.push(...createItemSparkle(item.pos, item.color, 12));
@@ -3109,28 +3369,30 @@ export default function App() {
             hasPendingUnlocks={getPendingNewCount() > 0}
             onOnRails={() => setScreen('RAILS_SELECT')}
             onCampaign={() => setScreen('CAMPAIGN_SELECT')}
+            onOpenOptions={() => setIsOptionsOpen(true)}
           />
         )}
         {screen === 'HANGAR' && (
-          <HangarScreen
-            key={`${hangarEntry}-${hangarInitialTab}`}
-            entry={hangarEntry}
-            initialTab={hangarInitialTab}
-            equippedIds={equippedArtifactIds}
-            unlockedArtifactIds={unlockedArtifactIds}
-            metaScrap={metaScrap}
-            newUnlockIds={newUnlockIds}
-            onEquip={(slot, id) => {
-              setEquippedArtifactIds((prev) => ({ ...prev, [slot]: id }));
-            }}
-            onViewVault={() => clearNewUnlockBadges({ artifacts: true })}
-            onViewCompanions={() => clearNewUnlockBadges({ companions: true })}
-            onConfirmLaunch={(shipId) => {
-              setPendingLaunchShipId(shipId);
-              setScreen('COMPANION_SELECT');
-            }}
-            onBack={() => setScreen('MENU')}
-          />
+          <React.Fragment key={`${hangarEntry}-${hangarInitialTab}`}>
+            <HangarScreen
+              entry={hangarEntry}
+              initialTab={hangarInitialTab}
+              equippedIds={equippedArtifactIds}
+              unlockedArtifactIds={unlockedArtifactIds}
+              metaScrap={metaScrap}
+              newUnlockIds={newUnlockIds}
+              onEquip={(slot, id) => {
+                setEquippedArtifactIds((prev) => ({ ...prev, [slot]: id }));
+              }}
+              onViewVault={() => clearNewUnlockBadges({ artifacts: true })}
+              onViewCompanions={() => clearNewUnlockBadges({ companions: true })}
+              onConfirmLaunch={(shipId) => {
+                setPendingLaunchShipId(shipId);
+                setScreen('COMPANION_SELECT');
+              }}
+              onBack={() => setScreen('MENU')}
+            />
+          </React.Fragment>
         )}
         {screen === 'COMPANION_SELECT' && pendingLaunchShipId && (
           <CompanionSelectScreen
@@ -3198,6 +3460,13 @@ export default function App() {
         >
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(255,255,255,0.2)_100%)] mix-blend-screen" />
         </div>
+      )}
+
+      {screen === 'GAME' && (
+        <CompanionAbilityToastStack
+          notifications={abilityNotifications}
+          onDismiss={dismissAbilityNotification}
+        />
       )}
 
       {screen === 'GAME' && devCheatsActive && (
@@ -3362,13 +3631,16 @@ export default function App() {
             stage={uiState.stage} enemiesToKill={uiState.enemiesToKill} stageTransition={uiState.stageTransition} gameMode={uiState.gameMode}
             onOpenMenu={togglePause}
             onWeaponSwitch={(slot) => {
-              const next = gameStateRef.current;
-              if (next && next.activeWeaponSlot !== slot) {
-                next.activeWeaponSlot = slot;
+              const gs = gameStateRef.current;
+              if (!gs || gs.activeWeaponSlot === slot) return;
+              const switched = setGameWeaponSlot(gs, slot);
+              if (switched.activeWeaponSlot !== gs.activeWeaponSlot) {
+                gameStateRef.current = switched;
                 playSfx('switchWeapon');
                 syncUi();
               }
             }}
+            weaponState={uiState.weaponState ?? gameStateRef.current?.weaponState ?? null}
             cardTimer={uiState.stage === 1 ? 0 : uiState.cardTimer}
             cardInterval={
               uiState.stage === 1
@@ -3731,36 +4003,17 @@ export default function App() {
             </div>
             
             <motion.div className="flex flex-col gap-4 w-full max-w-sm md:max-w-md pointer-events-auto px-4">
-              <label className="text-white/50 text-[10px] uppercase font-bold tracking-widest">SFX</label>
-              <input type="range" min={0} max={100} value={Math.round(sfxVol * 100)} onChange={(e) => { const v = Number(e.target.value) / 100; setSfxVol(v); setSfxVolume(v); }} className="w-full accent-blue-500" />
-              <label className="flex items-center gap-2 text-white text-sm">
-                <input type="checkbox" checked={sfxMuted} onChange={(e) => { setSfxMutedState(e.target.checked); setSfxMuted(e.target.checked); }} />
-                Mute SFX
-              </label>
-              <label className="text-white/50 text-[10px] uppercase font-bold tracking-widest mt-2">Music</label>
-              <input type="range" min={0} max={100} value={Math.round(musicVol * 100)} onChange={(e) => { const v = Number(e.target.value) / 100; setMusicVol(v); setMusicVolume(v); }} className="w-full accent-fuchsia-500" />
-              <label className="flex items-center gap-2 text-white text-sm">
-                <input type="checkbox" checked={musicMuted} onChange={(e) => { setMusicMutedState(e.target.checked); setMusicMuted(e.target.checked); if (e.target.checked) stopMusic(); else { resumeAudio(); startMusic(); } }} />
-                Mute music
-              </label>
-
-              {showTouchControls && (
-                <div className="flex flex-col gap-2 p-4 bg-white/5 rounded-xl border border-white/10 mt-2">
-                  <span className="text-white/50 text-[10px] uppercase font-bold tracking-widest mb-1">Mobile Options</span>
-                  <label className="flex items-center gap-2 text-white text-sm">
-                    <input type="checkbox" checked={mobileLayout === 'LEFT_HANDED'} onChange={(e) => setMobileLayout(e.target.checked ? 'LEFT_HANDED' : 'RIGHT_HANDED')} />
-                    Left-Handed Layout
-                  </label>
-                  <label className="flex items-center gap-2 text-white text-sm">
-                    <input type="checkbox" checked={hapticsEnabled} onChange={(e) => setHapticsEnabled(e.target.checked)} />
-                    Haptic Feedback
-                  </label>
-                  <label className="text-white text-sm mt-1">
-                    Joystick Dead Zone: {joystickDeadZone.toFixed(2)}
-                    <input type="range" min={0} max={0.5} step={0.05} value={joystickDeadZone} onChange={(e) => setJoystickDeadZone(Number(e.target.value))} className="w-full mt-1 accent-cyan-500" />
-                  </label>
-                </div>
-              )}
+              <div className="w-full max-h-[40vh] overflow-y-auto">
+                <AudioSettingsPanel />
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsOptionsOpen(true)}
+                className="bg-white/5 hover:bg-white/10 border border-cyan-500/25 text-cyan-200 font-black py-3 rounded-2xl flex items-center justify-center gap-2 transition-colors"
+              >
+                <GameIconFromKey iconKey="Settings" size={20} color="#67e8f9" />
+                OPTIONS & KEYBINDS
+              </button>
 
               <button 
                 onClick={togglePause}
@@ -3771,6 +4024,7 @@ export default function App() {
               <button 
                 onClick={() => {
                   stopMusic();
+                  AudioManager.stopAllMusic();
                   gameStateRef.current = null;
                   setScreen('MENU');
                   setIsPauseMenuOpen(false);
@@ -3781,6 +4035,62 @@ export default function App() {
               </button>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {isOptionsOpen && (
+          <OptionsScreen
+            onBack={() => setIsOptionsOpen(false)}
+            showMobileSection={showTouchControls}
+            sfxVolume={sfxVol}
+            sfxMuted={sfxMuted}
+            musicVolume={musicVol}
+            musicMuted={musicMuted}
+            mobileLayout={mobileLayout}
+            joystickDeadZone={joystickDeadZone}
+            hapticsEnabled={hapticsEnabled}
+            onSfxVolume={(v) => {
+              setSfxVol(v);
+              setSfxVolume(v);
+              AudioManager.setSFXVolume(v);
+            }}
+            onSfxMuted={(m) => {
+              setSfxMutedState(m);
+              setSfxMuted(m);
+            }}
+            onMusicVolume={(v) => {
+              setMusicVol(v);
+              setMusicVolume(v);
+              AudioManager.setMusicVolume(v);
+            }}
+            onMusicMuted={(m) => {
+              setMusicMutedState(m);
+              setMusicMuted(m);
+              if (m) {
+                AudioManager.stopAllMusic();
+                stopMusic();
+              } else {
+                resumeAudio();
+                if (screen === 'MENU') AudioManager.playMenuTheme();
+                else if (screen === 'GAME' && gameStateRef.current) {
+                  if (AudioManager.isMusicPackReady()) {
+                    AudioManager.playBattleMusic(gameStateRef.current.stage);
+                  } else {
+                    startMusic();
+                  }
+                }
+              }
+            }}
+            onMobileLayout={(left) =>
+              setMobileLayout(left ? 'LEFT_HANDED' : 'RIGHT_HANDED')
+            }
+            onJoystickDeadZone={setJoystickDeadZone}
+            onHapticsEnabled={setHapticsEnabled}
+            onKeybindsChange={(b) => {
+              keybindsRef.current = b;
+            }}
+          />
         )}
       </AnimatePresence>
 

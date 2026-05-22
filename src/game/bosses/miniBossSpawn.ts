@@ -1,4 +1,5 @@
 import { getMiniBossHpMultiplier } from '../balance/miniBossDifficulty';
+import { getMiniBossStats } from '../progression/difficultyScaler';
 import { getThreatMult } from '../balance/threat';
 import { getAugmentTier, getTierModifiers } from '../balance/augmentTiers';
 import { pickSpawnPosition } from '../Logic';
@@ -26,11 +27,14 @@ export function spawnMiniBoss(state: GameState, miniBossId: MiniBossId): Entity 
   const speedRatio = def.baseSpeed / 120;
   const speed = rangedBaselineSpeed * speedRatio;
 
-  let health = def.baseHP * healthScale * getMiniBossHpMultiplier();
+  const stageStats = getMiniBossStats(state.stage);
+  const runScale = 0.65 + healthScale * 0.2 + powerFactor * 0.15;
+  let health = stageStats.maxHealth * runScale * getMiniBossHpMultiplier();
   if (state.stage >= 5) {
     const waveBoost = 1 + Math.min(0.45, Math.max(0, state.activeWaveIndex) * 0.07);
     health *= waveBoost;
   }
+  const damage = stageStats.damage * threatMult;
   const pos = pickSpawnPosition(state);
 
   return {
@@ -43,7 +47,9 @@ export function spawnMiniBoss(state: GameState, miniBossId: MiniBossId): Entity 
     speed,
     velocity: new Vector2(0, 0),
     color: def.color,
-    damage: def.baseDamage * (1 + state.stage * 0.12) * threatMult,
+    damage,
+    baseHealth: stageStats.maxHealth,
+    baseDamage: stageStats.damage,
     enemyType: def.enemyType,
     miniBossId,
     behaviorSeed: 0.5,

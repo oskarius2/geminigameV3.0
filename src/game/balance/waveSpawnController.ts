@@ -7,6 +7,7 @@ import {
   shouldSpawnMiniBossesOnWave,
 } from './miniBossDifficulty';
 import { EnemyType, Entity, GameState } from '../types';
+import { getSpawnIntervalMs } from '../progression/difficultyScaler';
 import { getWaveForStage, WaveTemplate } from './waveCompositions';
 
 /** Maps wave EnemyType → spawnEnemy() switch index (Logic.ts). */
@@ -140,7 +141,9 @@ export function tickSurvivalWaveSpawns(
 
   const delayScale = state.stage === 1 ? 0.88 : 1;
   const diffDelay = getSurvivalSpawnModifiers().waveSpawnDelayMult;
-  const cooldown = wave.spawnDelay * delayScale * diffDelay;
+  const pacingSec =
+    (state.difficultyScaleSpawnIntervalMs ?? getSpawnIntervalMs(state.stage)) / 1000;
+  const cooldown = pacingSec * delayScale * diffDelay;
 
   if (state.waveMiniBossQueue.length > 0 && spawnMiniBoss) {
     const miniId = state.waveMiniBossQueue.shift()!;

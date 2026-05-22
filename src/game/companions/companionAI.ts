@@ -22,6 +22,10 @@ import {
 } from './companionBehavior';
 import { shouldTriggerCompanionAbility } from './companionAbilities';
 import {
+  applyGunnerCombatVolley,
+  applyScoutCombat,
+} from './companionCombat';
+import {
   CompanionAIState,
   CompanionType,
   companionIdToType,
@@ -230,6 +234,8 @@ function patchRuntimeDefaults(rt: CompanionRuntime): void {
   if (rt.playerHitBurstTimer === undefined) rt.playerHitBurstTimer = 0;
   if (rt.playerHitsInBurst === undefined) rt.playerHitsInBurst = 0;
   if (rt.markPulseTimer === undefined) rt.markPulseTimer = 0;
+  if (rt.evasionBurstTimer === undefined) rt.evasionBurstTimer = undefined;
+  if (rt.tauntTimer === undefined) rt.tauntTimer = undefined;
   if (rt.scoutTrack) {
     if (!rt.scoutTrack.lastPlayerPos) rt.scoutTrack.lastPlayerPos = new Vector2(0, 0);
     if (!rt.scoutTrack.lastKnownPosition) {
@@ -261,6 +267,8 @@ export function buildCompanionInstance(state: CompanionGameState): CompanionInst
     instance.health = Math.min(instance.maxHealth, rt.health ?? instance.maxHealth);
     instance.abilityCooldownRemaining = rt.abilityCooldownRemaining;
     instance.energy = rt.energy;
+    instance.evasionBurstTimer = rt.evasionBurstTimer;
+    instance.tauntTimer = rt.tauntTimer;
   }
   return instance;
 }
@@ -271,6 +279,8 @@ function syncRuntimeFromInstance(runtime: CompanionRuntime, instance: CompanionI
   runtime.maxHealth = instance.maxHealth;
   runtime.abilityCooldownRemaining = instance.abilityCooldownRemaining ?? 0;
   runtime.energy = instance.energy ?? runtime.energy;
+  runtime.evasionBurstTimer = instance.evasionBurstTimer;
+  runtime.tauntTimer = instance.tauntTimer;
   if (runtime.health < prevHealth - 0.5) {
     notifyCompanionDamage(runtime, prevHealth - runtime.health);
   }
@@ -363,11 +373,12 @@ export function useActiveAbility(
 ): boolean {
   const runtime = state.companionRuntime;
   if (!runtime) return false;
-  syncPlayerStatsFromGame(state, runtime.playerStats);
+    syncPlayerStatsFromGame(state, runtime.playerStats);
   const fired = useCompanionAbility(instance, runtime.playerStats, 0);
   if (fired) {
     onCompanionAbility(instance.id);
-    notifyCompanionAbilityUsed(runtime);
+    const def = getCompanionDef(instance.type);
+    notifyCompanionAbilityUsed(runtime, def?.activeAbility?.name);
     if (runtime.playerStats.currentHealth !== undefined) {
       state.player.health = Math.min(
         state.player.maxHealth,
@@ -383,36 +394,6 @@ function syncPlayerStatsFromGame(state: CompanionGameState, stats: PlayerCompani
   stats.maxHealth = player.maxHealth;
   stats.currentHealth = player.health;
   stats.moveSpeed = player.speed;
-}
-
-function applyGunnerCombat(
-  instance: CompanionInstance,
-  runtime: CompanionRuntime,
-  state: CompanionGameState,
-  dtSec: number,
-): void {
-  const targetId = runtime.targetEnemyId;
-  if (!targetId) return;
-
-  const target = state.enemies.find((e) => e.id === targetId && e.health > 0);
-  if (!target) return;
-
-  const scaled = getScaledCompanionStats(instance.id, instance.currentLevel);
-  const range = scaled?.range ?? 500;
-  if (runtime.pos.distanceTo(target.pos) > range) return;
-
-  runtime.fireCooldown -= dtSec;
-  if (runtime.fireCooldown > 0) return;
-
-  const fireRate = runtime.playerStats.companionFireRate ?? scaled?.fireRate ?? 6;
-  const damage = runtime.playerStats.companionFireDamage ?? scaled?.attackDamage ?? 25;
-  const burstMult = runtime.playerStats.focusedBurstMult ?? 1;
-
-  target.health -= damage * burstMult;
-  target.hitTimer = 6;
-  notifyCompanionFired(runtime);
-
-  runtime.fireCooldown = 1 / Math.max(fireRate, 0.5);
 }
 
 /** Scout: periodic chip damage on marked threat (scanner ping). */
@@ -453,15 +434,22 @@ function applyCompanionCombat(
   dtSec: number,
 ): void {
   if (instance.type === CompanionType.GUNNER) {
-    applyGunnerCombat(instance, runtime, state, dtSec);
+    applyGunnerCombatVolley(instance, runtime, state, dtSec);
   }
   if (instance.type === CompanionType.SCOUT) {
+    applyScoutCombat(instance, runtime, state, dtSec);
     applyScoutMarkPulse(instance, runtime, state, dtSec);
   }
 }
 
 export function updateCompanionAILogic(state: CompanionGameState, dtSec: number): void {
-  if (!state.activeCompanionId || state.isPaused || state.gameMode !== 'NORMAL') return;
+  if (
+    !state.activeCompanionId ||
+    state.isPaused ||
+    (state.gameMode !== 'NORMAL' && state.gameMode !== 'SURVIVAL')
+  ) {
+    return;
+  }
 
   const runtime = ensureCompanionRuntime(state);
   if (!runtime) return;
@@ -470,7 +458,6 @@ export function updateCompanionAILogic(state: CompanionGameState, dtSec: number)
   if (!instance) return;
 
   tickCompanionTimers(instance, dtSec);
-  applyCompanionPassivesLogic(state, instance, dtSec);
 
   const def = getCompanionDef(instance.type);
   if (!def) return;
@@ -481,9 +468,27 @@ export function updateCompanionAILogic(state: CompanionGameState, dtSec: number)
     useActiveAbility(instance, state);
   }
 
+  applyCompanionPassivesLogic(state, instance, dtSec);
+
   applyCompanionCombat(instance, runtime, state, dtSec);
   syncRuntimeFromInstance(runtime, instance);
   state.companionRuntime = runtime;
+}
+
+/** Manual ability trigger (keybind). Ignores auto-trigger heuristics. */
+export function forceCompanionActiveAbility(appState: GameState): boolean {
+  if (!appState.activeCompanionId || appState.isPaused) return false;
+  const gs = fromGameState(appState);
+  const instance = buildCompanionInstance(gs);
+  if (!instance?.isActive) return false;
+  const def = getCompanionDef(instance.type);
+  if (!def?.activeAbility) return false;
+  if (instance.abilityCooldownRemaining && instance.abilityCooldownRemaining > 0) {
+    return false;
+  }
+  const fired = useActiveAbility(instance, gs);
+  if (fired) applyCompanionGameStateToApp(gs, appState);
+  return fired;
 }
 
 export function updateCompanionAI(appState: GameState, dtSec: number): void {

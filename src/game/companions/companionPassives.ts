@@ -1,6 +1,7 @@
 import { Vector2 } from '../utils/vector';
 import type { GameState } from '../types';
 import { getCompanionDef, getScaledCompanionStats } from './companionDefs';
+import { CompanionType } from './companionTypes';
 import {
   applyCompanionGameStateToApp,
   fromGameState,
@@ -161,6 +162,40 @@ export function applyPassiveFrameEffects(
   }
 }
 
+/** Re-apply active ability buffs while timers run (passive recompute would wipe them). */
+export function mergeActiveAbilityBuffs(
+  instance: CompanionInstance,
+  stats: PlayerCompanionStats,
+): void {
+  const def = getCompanionDef(instance.type);
+  if (!def?.activeAbility) return;
+
+  if (instance.evasionBurstTimer && instance.evasionBurstTimer > 0) {
+    stats.evasionBurstActive = 1;
+    stats.evasionBurstDuration = instance.evasionBurstTimer;
+    stats.damageReduction = Math.min(0.6, (stats.damageReduction ?? 0) + 0.35);
+    if (instance.type === CompanionType.SCOUT) {
+      const scaled = getScaledCompanionStats(instance.id, instance.currentLevel);
+      const boost = scaled?.speedBoost ?? 15;
+      stats.speedMult = (stats.speedMult ?? 1) + (boost + 25) / 100;
+    }
+  }
+
+  if (instance.tauntTimer && instance.tauntTimer > 0) {
+    stats.tauntActive = 1;
+    stats.tauntDuration = instance.tauntTimer;
+  }
+}
+
+/** Scout detection range for minimap (px); Infinity = no filter. */
+export function getScoutMinimapRevealRadius(state: GameState): number {
+  if (state.activeCompanionId !== 'scout' || !state.companionRuntime) {
+    return Infinity;
+  }
+  const r = state.companionRuntime.playerStats.revealRadius ?? 0;
+  return r > 0 ? r : Infinity;
+}
+
 /**
  * Apply all companion passives for the current frame (standalone {@link CompanionGameState}).
  */
@@ -170,6 +205,7 @@ export function applyCompanionPassivesLogic(
   dtSec: number,
 ): PlayerCompanionStats {
   const stats = computeCompanionPassiveStats(state, instance);
+  mergeActiveAbilityBuffs(instance, stats);
   if (state.companionRuntime) {
     state.companionRuntime.playerStats = stats;
   }

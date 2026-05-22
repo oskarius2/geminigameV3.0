@@ -13,6 +13,8 @@ import { buildMobileBuffChips } from '../hud/mobile/mobileBuffChips';
 import { getJoystickSize, type HudVariant, type ViewportProfile } from './mobileLayout';
 import { HUD_TIMING } from '../hud/hudTokens';
 import type { ArtifactSlot, CompanionId, GameState, ShipId } from '../types';
+import type { WeaponState } from '../weapons/weaponState';
+import { WeaponHUD } from '../hud/WeaponHUD';
 
 export interface MobileCornerHudProps {
   health: number;
@@ -64,6 +66,7 @@ export interface MobileCornerHudProps {
   viewportH: number;
   loadoutExpanded: boolean;
   onToggleLoadout: () => void;
+  weaponState?: WeaponState | null;
 }
 
 export function MobileCornerHud({
@@ -108,6 +111,7 @@ export function MobileCornerHud({
   viewportH,
   loadoutExpanded,
   onToggleLoadout,
+  weaponState = null,
 }: MobileCornerHudProps) {
   const isLandscape = hudVariant === 'landscape';
   const joystickSize = getJoystickSize(viewportProfile, viewportW, viewportH);
@@ -201,6 +205,17 @@ export function MobileCornerHud({
       <div
         className={`game-hud__corner-bottom ${loadoutExpanded ? 'game-hud__corner-bottom--expanded' : 'game-hud__corner-bottom--collapsed'}`}
       >
+        {(gameMode === 'NORMAL' || gameMode === 'SURVIVAL') && (
+          <div className="pointer-events-auto mb-2 flex justify-center w-full px-2">
+            <WeaponHUD
+              weaponState={weaponState}
+              gameMode={gameMode as GameState['gameMode']}
+              onSwitch={onWeaponSwitch}
+              activeWeaponSlot={activeWeaponSlot}
+              compact
+            />
+          </div>
+        )}
         <MobileBottomDock
           equippedArtifacts={equippedArtifacts}
           activeWeaponSlot={activeWeaponSlot}

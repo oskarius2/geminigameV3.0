@@ -2,6 +2,7 @@ import { Vector2 } from './utils/vector';
 import type { RailsRunState } from './onRails/types';
 import type { CompanionRuntime } from './companions/companionTypes';
 import type { ShopItemId, ShopRunFlags } from './shop/shopTypes';
+import type { WeaponState } from './weapons/weaponState';
 
 export type GameMode = 'NORMAL' | 'SURVIVAL' | 'AIM_TRAINER' | 'CAMPAIGN' | 'ON_RAILS';
 
@@ -31,6 +32,10 @@ export enum ItemType {
   PIERCING = 'PIERCING',
   ARTIFACT = 'ARTIFACT',
   XP = 'XP',
+  /** Survival ammo system — +reserve for active weapon. */
+  AMMO_PACK = 'AMMO_PACK',
+  /** Survival ammo system — random secondary / refill. */
+  WEAPON_CRATE = 'WEAPON_CRATE',
 }
 
 export enum EnemyType {
@@ -74,6 +79,8 @@ export interface Entity {
   damage?: number;
   ownerId?: string;
   itemType?: ItemType;
+  /** Ammo packs: scrap rounds granted on pickup (default 30). */
+  ammoPickupAmount?: number;
   enemyType?: EnemyType;
   hitTimer?: number;
   knockback?: Vector2;
@@ -111,6 +118,9 @@ export interface Entity {
   bossPatternTimer?: number;
   /** Survival mini-boss archetype id (e.g. shockwave_sentinel). */
   miniBossId?: string;
+  /** Unscaled HP/damage before stage difficulty multipliers. */
+  baseHealth?: number;
+  baseDamage?: number;
   miniBossBurstShots?: number;
   miniBossBurstCooldown?: number;
   miniBossShockwaveTimer?: number;
@@ -419,11 +429,24 @@ export interface GameState {
   /** Survival stage bosses defeated this run (gates artifact power tiers). */
   runBossesDefeated: number;
 
+  /** Stage difficulty — artifact drop chance (0–1). */
+  artifactDropRate?: number;
+  /** Stage difficulty — loot pool tags allowed this stage. */
+  activeArtifactPool?: string[];
+  /** Stage difficulty — ms between wave spawns. */
+  difficultyScaleSpawnIntervalMs?: number;
+  /** Stage difficulty — procedural music BPM range. */
+  threatMusicBpmBase?: number;
+  threatMusicBpmMax?: number;
+
   /** Pre-run shop purchases applied this run. */
   shopPurchasedIds: ShopItemId[];
   shopRunFlags: ShopRunFlags;
   /** Meta scrap spent at run start (for summary). */
   shopScrapSpent: number;
+
+  /** Magazine / reserve / reload (NORMAL + SURVIVAL). */
+  weaponState: WeaponState;
 }
 
 export interface DamageText {

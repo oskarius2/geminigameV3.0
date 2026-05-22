@@ -1,5 +1,6 @@
 import { COMPANION_IDS } from '../companions/companionDefs';
 import { ARTIFACTS } from '../content/artifacts';
+import { getDifficultyForStage } from '../progression/difficultyConfig';
 import { CROSS_SHIP_LOOT, getShipLootPool, UNIVERSAL_LOOT_IDS } from './shipLootDefs';
 
 /** Catalog sizes for shop UI / balance docs (not purchasable SKUs). */
@@ -11,13 +12,9 @@ export const LOOT_VARIANT_COUNTS = {
   universal: UNIVERSAL_LOOT_IDS.length,
 } as const;
 
-/** Artifact drop chance per kill by survival stage (design doc). */
+/** Artifact drop chance per kill by survival stage. */
 export function getArtifactDropChance(stage: number): number {
-  if (stage <= 1) return 0.05;
-  if (stage === 2) return 0.15;
-  if (stage === 3) return 0.25;
-  if (stage === 4) return 0.4;
-  return 0.5;
+  return getDifficultyForStage(stage).artifactDropRate;
 }
 
 /** Additional companion unlock chance per kill (stage 2 first grant is guaranteed elsewhere). */

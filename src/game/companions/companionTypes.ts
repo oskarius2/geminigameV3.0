@@ -128,10 +128,15 @@ export interface CompanionRuntime {
   fireCooldown: number;
   /** Scout — mark pulse chip damage cooldown. */
   markPulseTimer?: number;
+  /** Active ability timers (persist across per-frame instance rebuild). */
+  evasionBurstTimer?: number;
+  tauntTimer?: number;
   health: number;
   maxHealth: number;
   abilityCooldownRemaining: number;
   energy: number;
+  abilityToastTimer?: number;
+  abilityToastName?: string;
   playerStats: PlayerCompanionStats;
   playerBaseSpeed?: number;
   lastSpeedMult?: number;

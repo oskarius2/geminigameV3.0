@@ -10,6 +10,7 @@ import {
 } from '../companions/companionLeveling';
 import { ARTIFACTS } from '../content/artifacts';
 import { getUnlockedArtifactIds, isCompanionUnlocked } from '../meta/metaProgress';
+import { artifactMatchesPoolTag } from '../progression/artifactPoolMap';
 import { pickRandomLockedArtifact } from '../meta/unlockSystem';
 import { getBossSpec } from '../bosses/bossSpecs';
 import { getEffectiveArtifactDropChance } from '../shop/shopEffects';
@@ -131,11 +132,22 @@ export function rollLootOnKill(
   const artifactChance = getEffectiveArtifactDropChance(state);
   if (artifactRoll >= artifactChance) return null;
 
-  const vaultId = pickRandomLockedArtifact(
-    getUnlockedArtifactIds(),
-    undefined,
-    () => artifactRoll,
-  );
+  const unlocked = getUnlockedArtifactIds();
+  const poolTags = state.activeArtifactPool;
+  let vaultId: string | null = null;
+  if (poolTags?.length) {
+    const pool = Object.values(ARTIFACTS).filter(
+      (a) =>
+        !unlocked.includes(a.id) &&
+        poolTags.some((tag) => artifactMatchesPoolTag(a, tag)),
+    );
+    if (pool.length > 0) {
+      vaultId = pool[Math.floor(artifactRoll * pool.length)].id;
+    }
+  }
+  if (!vaultId) {
+    vaultId = pickRandomLockedArtifact(unlocked, undefined, () => artifactRoll);
+  }
   if (vaultId && ARTIFACTS[vaultId]) {
     return {
       kind: 'vault_artifact',

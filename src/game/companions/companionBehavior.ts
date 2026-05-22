@@ -374,7 +374,9 @@ export function updateCompanionBehavior(
   runtime.stateTimer += dtSec;
 
   if (runtime.hitFlashTimer > 0) runtime.hitFlashTimer -= dtSec;
-  if (runtime.abilityPulseTimer > 0) runtime.abilityPulseTimer -= dtSec;
+  if (runtime.abilityToastTimer !== undefined && runtime.abilityToastTimer > 0) {
+    runtime.abilityToastTimer -= dtSec;
+  }
   if (runtime.attackPulseTimer > 0) runtime.attackPulseTimer -= dtSec;
   if (runtime.levelUpPulseTimer > 0) runtime.levelUpPulseTimer -= dtSec;
   if (runtime.playerHitBurstTimer > 0) {
@@ -434,6 +436,12 @@ export function notifyCompanionFired(runtime: CompanionRuntime): void {
   runtime.isAttacking = true;
 }
 
-export function notifyCompanionAbilityUsed(runtime: CompanionRuntime): void {
+export function notifyCompanionAbilityUsed(runtime: CompanionRuntime, abilityName?: string): void {
   runtime.abilityPulseTimer = 1;
+  if (abilityName) {
+    if ((window as any).dispatchAbilityNotification) {
+       // Assuming format is dispatch(abilityName, companionId)
+       (window as any).dispatchAbilityNotification(abilityName, 'companion'); 
+    }
+  }
 }

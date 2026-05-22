@@ -22,6 +22,7 @@ import {
 interface StartPageProps {
   onStartSurvival: () => void;
   onOpenHangar: () => void;
+  onOpenOptions: () => void;
   onOpenUnlocks?: () => void;
   hasPendingUnlocks?: boolean;
   onOnRails: () => void;
@@ -112,6 +113,7 @@ function StatRow({ label, value }: { label: string; value: string }) {
 export const StartPage: React.FC<StartPageProps> = ({
   onStartSurvival,
   onOpenHangar,
+  onOpenOptions,
   onOpenUnlocks,
   hasPendingUnlocks = false,
   onOnRails,
@@ -253,6 +255,7 @@ export const StartPage: React.FC<StartPageProps> = ({
 
         <div className="w-full flex flex-col gap-1.5 mt-1">
           {[
+            { delay: 0.34, onClick: onOpenOptions, icon: <GameIconFromKey iconKey="Settings" size={13} color="#a78bfa" />, label: 'Options', accent: 'default' as const },
             { delay: 0.36, onClick: onOpenHangar, icon: <GameIcon name="ui.wrench" size={13} color="#7df9ff" />, label: 'Hangar', accent: 'default' as const },
             onOpenUnlocks
               ? {

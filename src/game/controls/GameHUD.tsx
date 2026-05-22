@@ -19,6 +19,8 @@ import { MiniBossHud } from '../hud/MiniBossHud';
 import { MobileCornerHud } from './MobileCornerHud';
 import { useCornerHudLayout } from './mobileLayout';
 import type { CompanionId } from '../types';
+import type { WeaponState } from '../weapons/weaponState';
+import { WeaponHUD } from '../hud/WeaponHUD';
 
 interface HUDProps {
   health: number;
@@ -79,6 +81,7 @@ interface HUDProps {
   miniBossAuraColor?: string;
   survivalDifficultyLabel?: string;
   miniBossKillsThisRun?: number;
+  weaponState?: WeaponState | null;
 }
 
 export const GameHUD: React.FC<HUDProps> = ({
@@ -145,6 +148,7 @@ export const GameHUD: React.FC<HUDProps> = ({
   miniBossAuraColor = '#a855f7',
   survivalDifficultyLabel,
   miniBossKillsThisRun = 0,
+  weaponState = null,
 }) => {
   const [loadoutExpanded, setLoadoutExpanded] = useState(false);
 
@@ -240,6 +244,20 @@ export const GameHUD: React.FC<HUDProps> = ({
       />
     ) : null;
 
+  const secondaryUnlocked = weaponState?.slots[1]?.isUnlocked === true;
+  const secondaryDisabled = weaponState?.slots[1]?.isDisabledUI === true;
+
+  const weaponHudBlock =
+    gameMode === 'NORMAL' || gameMode === 'SURVIVAL' ? (
+      <WeaponHUD
+        weaponState={weaponState}
+        gameMode={gameMode}
+        onSwitch={onWeaponSwitch}
+        activeWeaponSlot={activeWeaponSlot}
+        compact={useStackedHud}
+      />
+    ) : null;
+
   const bottomLoadout = (
     <EquippedLoadoutStrip
       equippedArtifacts={equippedArtifacts}
@@ -249,9 +267,11 @@ export const GameHUD: React.FC<HUDProps> = ({
       maxEnergy={maxEnergy}
       ultimateCharge={ultimateCharge}
       hudVariant={hudVariant}
-      showWeapons={showDesktopWeapons}
+      showWeapons={showDesktopWeapons && !weaponHudBlock}
       hideArtifacts={hideArtifactsDefault && !loadoutExpanded}
       slimMobile={useStackedHud}
+      secondaryUnlocked={secondaryUnlocked}
+      secondaryDisabled={secondaryDisabled}
     />
   );
 
@@ -339,6 +359,7 @@ export const GameHUD: React.FC<HUDProps> = ({
         viewportH={viewportH}
         loadoutExpanded={loadoutExpanded}
         onToggleLoadout={toggleLoadout}
+        weaponState={weaponState}
       />
     );
   }
@@ -386,7 +407,8 @@ export const GameHUD: React.FC<HUDProps> = ({
       <div className={`z-20 w-full ${bottomPad}`}>
         {isDesktopHud ? (
           <div className="flex items-end justify-end gap-4 md:gap-6 w-full">
-            <div className="flex flex-col items-end gap-2 shrink-0">
+            <div className="flex flex-col items-end gap-2 shrink-0 pointer-events-auto">
+              {weaponHudBlock}
               {buffChips}
               {bottomLoadout}
             </div>
@@ -395,7 +417,8 @@ export const GameHUD: React.FC<HUDProps> = ({
           <div className="flex flex-col items-center gap-2 w-full">
             {threatBlock}
             <div className="w-full flex justify-end items-end gap-2 px-1">
-              <div className="flex flex-col items-end gap-2 shrink-0">
+              <div className="flex flex-col items-end gap-2 shrink-0 pointer-events-auto">
+                {weaponHudBlock}
                 {buffChips}
                 {bottomLoadout}
               </div>

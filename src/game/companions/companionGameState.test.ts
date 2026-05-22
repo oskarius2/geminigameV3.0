@@ -97,6 +97,27 @@ describe('companionGameState', () => {
     expect(app.enemies[0].health).toBe(5);
   });
 
+  it('fromGameState shares live projectiles array for companion bolts', () => {
+    const app = mockAppState();
+    const gs = fromGameState(app);
+    expect(gs.projectiles).toBe(app.projectiles);
+    gs.projectiles.push({
+      id: 'bolt-1',
+      type: EntityType.PROJECTILE,
+      pos: new Vector2(0, 0),
+      radius: 3,
+      health: 1,
+      maxHealth: 1,
+      speed: 10,
+      velocity: new Vector2(1, 0),
+      color: '#fff',
+      ownerId: 'companion_scout',
+      damage: 10,
+    });
+    expect(app.projectiles).toHaveLength(1);
+    expect(app.projectiles[0].ownerId).toBe('companion_scout');
+  });
+
   it('applyCompanionProgressToGameState loads persisted meta into app state', () => {
     gainXP('scout', 400);
     const app = mockAppState();

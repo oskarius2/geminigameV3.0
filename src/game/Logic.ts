@@ -11,6 +11,7 @@ import { getAugmentTier, getTierModifiers } from './balance/augmentTiers';
 import { getThreatMult } from './balance/threat';
 import { getStageQuota } from './balance/spawnCurve';
 import { applyShipStats, getShipDef } from './ships/shipDefs';
+import { createInitialWeaponState } from './weapons/weaponState';
 import { applyEquippedArtifacts } from './artifacts/applyArtifactStats';
 import {
   pickEnemyTypeForThreat,
@@ -22,6 +23,8 @@ import { tickSurvivalBossPattern } from './bosses/bossSurvivalAI';
 import { BOSS_DEFINITIONS, pickBossForStage } from './content/bosses';
 import { getBossSpawnPosition } from './content/bossArenas';
 import { hasLiveBoss } from './bossLifecycle';
+import { getDifficultyForStage } from './progression/difficultyConfig';
+import { initStageDifficulty } from './progression/difficultyScaler';
 import { getViewportProfile, useReducedEffects } from './controls/mobileLayout';
 
 /** Shared by updateEnemies separation grid and App projectile spatial hash. */
@@ -362,6 +365,7 @@ export const INITIAL_STATE = (
     shopPurchasedIds: [],
     shopRunFlags: {},
     shopScrapSpent: 0,
+    weaponState: createInitialWeaponState(),
   };
 
   const shipDef = getShipDef(selectedShip);
@@ -393,7 +397,7 @@ export const INITIAL_STATE = (
 
   applyEquippedArtifacts(state);
 
-  return state;
+  return initStageDifficulty(state);
 };
 
 export function handleEventChoice(state: GameState, choiceId: string) {
@@ -932,17 +936,31 @@ export function spawnEnemyFromWave(
     }
   }
 
+  const baseDamage = Math.floor(
+    (15 + tier * 2) * threatMult * timeRamp * (isBoss ? 2 : 1) * damageMult
+  );
+  const difficulty = getDifficultyForStage(stage);
+  const baseHealth = health;
+  const scaledHealth = isBoss
+    ? health
+    : baseHealth * difficulty.enemyHealthMultiplier;
+  const scaledDamage = isBoss
+    ? baseDamage
+    : baseDamage * difficulty.enemyDamageMultiplier;
+
   const entity: Entity = {
     id: Math.random().toString(36).substr(2, 9),
     type: EntityType.ENEMY,
     pos,
     radius,
-    health,
-    maxHealth: health,
+    health: scaledHealth,
+    maxHealth: scaledHealth,
     speed,
     velocity: new Vector2(0, 0),
     color,
-    damage: Math.floor((15 + tier * 2) * threatMult * timeRamp * (isBoss ? 2 : 1) * damageMult),
+    damage: scaledDamage,
+    baseHealth: isBoss ? undefined : baseHealth,
+    baseDamage: isBoss ? undefined : baseDamage,
     enemyType: finalEnemyType,
     lastShot: Date.now(),
     aiTimer: 0,

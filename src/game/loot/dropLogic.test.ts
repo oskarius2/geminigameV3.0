@@ -11,7 +11,8 @@ describe('dropLogic', () => {
   });
 
   it('scales artifact and companion drop rates by stage', () => {
-    expect(getArtifactDropChance(1)).toBeLessThan(getArtifactDropChance(5));
+    expect(getArtifactDropChance(1)).toBe(0.15);
+    expect(getArtifactDropChance(4)).toBeLessThan(getArtifactDropChance(2));
     expect(getCompanionDropChance(2)).toBe(0);
     expect(getCompanionDropChance(5)).toBeGreaterThan(getCompanionDropChance(3));
   });

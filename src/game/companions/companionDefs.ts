@@ -58,7 +58,9 @@ function toLegacyScaling(def: CompanionDef): CompanionLevelScaling[] {
       case CompanionType.SCOUT:
         row.revealRadius = s.detectionRange;
         row.speedAuraDuration = (s.speedBoost ?? 15) / 5;
-        if (level === 5) row.bonusPassive = 'Ghost Trail — speed aura also grants brief i-frames.';
+        row.gunnerDamageMult = (s.attackDamage ?? 12) / 100;
+        row.gunnerFireRate = s.fireRate ?? 4.5;
+        if (level === 5) row.bonusPassive = 'Twin Link — fires paired bolts; mark synergy +10%.';
         break;
       case CompanionType.HEALER:
         row.regenPctPerSec = (s.healRate ?? 3.5) / 100;
@@ -173,14 +175,15 @@ const scoutDroneDef: CompanionDef = {
     detectionRange: 400,
     speedBoost: 15,
     moveSpeed: 200,
-    attackDamage: 1,
+    attackDamage: 12,
+    fireRate: 4.5,
   },
   passivesSummary: [
-    'Reveals enemy positions on minimap',
-    'Player gains +15% speed while active',
-    'Highlights most dangerous enemy',
+    'Linked pulse lasers on marked targets',
+    'Your shots deal +28% vs marked enemies',
+    'Reveals threats on minimap · +speed aura',
   ],
-  abilitySummary: 'Evasion Burst — brief speed spike and damage reduction.',
+  abilitySummary: 'Evasion Burst — faster fire, speed spike, damage reduction.',
   passives: [
     {
       name: 'Enemy Radar',
@@ -221,11 +224,11 @@ const scoutDroneDef: CompanionDef = {
     },
   },
   levelScaling: {
-    1: { detectionRange: 400, speedBoost: 15, moveSpeed: 200 },
-    2: { detectionRange: 450, speedBoost: 18, moveSpeed: 200 },
-    3: { detectionRange: 500, speedBoost: 20, moveSpeed: 200 },
-    4: { detectionRange: 550, speedBoost: 22, moveSpeed: 200 },
-    5: { detectionRange: 600, speedBoost: 25, moveSpeed: 200 },
+    1: { detectionRange: 400, speedBoost: 15, moveSpeed: 200, attackDamage: 12, fireRate: 4.5 },
+    2: { detectionRange: 450, speedBoost: 18, moveSpeed: 200, attackDamage: 15, fireRate: 5 },
+    3: { detectionRange: 500, speedBoost: 20, moveSpeed: 200, attackDamage: 18, fireRate: 5.5 },
+    4: { detectionRange: 550, speedBoost: 22, moveSpeed: 200, attackDamage: 21, fireRate: 6 },
+    5: { detectionRange: 600, speedBoost: 25, moveSpeed: 200, attackDamage: 24, fireRate: 6.5 },
   },
 };
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { clsx } from 'clsx';
+import { AudioManager } from '../../game/audio/AudioManager';
 
 const CLIP = 'polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px)';
 
@@ -11,6 +12,8 @@ export const SecondaryButton: React.FC<SecondaryButtonProps> = ({
   children,
   className,
   accent = 'default',
+  onMouseEnter,
+  onClick,
   ...props
 }) => (
   <button
@@ -24,6 +27,14 @@ export const SecondaryButton: React.FC<SecondaryButtonProps> = ({
       className,
     )}
     style={{ clipPath: CLIP }}
+    onMouseEnter={(e) => {
+      if (AudioManager.isUiPackReady()) AudioManager.playUIHover();
+      onMouseEnter?.(e);
+    }}
+    onClick={(e) => {
+      if (AudioManager.isUiPackReady()) AudioManager.playUIClick();
+      onClick?.(e);
+    }}
     {...props}
   >
     <span

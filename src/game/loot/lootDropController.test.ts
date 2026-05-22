@@ -21,9 +21,9 @@ describe('lootDropController', () => {
   });
 
   it('returns stage-scaled artifact drop rates', () => {
-    expect(getArtifactDropChance(1)).toBe(0.05);
-    expect(getArtifactDropChance(2)).toBe(0.15);
-    expect(getArtifactDropChance(5)).toBe(0.5);
+    expect(getArtifactDropChance(1)).toBe(0.15);
+    expect(getArtifactDropChance(2)).toBe(0.12);
+    expect(getArtifactDropChance(5)).toBe(0.08);
   });
 
   it('pickLootPool respects 70/20/10 weights over many rolls', () => {

@@ -5,6 +5,7 @@ import { createCompanionInstance } from './companionDefs';
 import {
   applyCompanionPassives,
   computeCompanionPassiveStats,
+  mergeActiveAbilityBuffs,
   mitigateCompanionIncomingDamage,
 } from './companionPassives';
 
@@ -63,6 +64,19 @@ describe('companionPassives', () => {
     const before = state.player.health;
     applyCompanionPassives(state, instance, 1);
     expect(state.player.health).toBeGreaterThan(before);
+  });
+
+  it('mergeActiveAbilityBuffs keeps evasion burst while timer runs', () => {
+    const instance = createCompanionInstance('scout', 1);
+    instance.evasionBurstTimer = 1.5;
+    const stats = computeCompanionPassiveStats(
+      mockState({ activeCompanionId: 'scout' }),
+      instance,
+    );
+    expect(stats.evasionBurstActive).toBeUndefined();
+    mergeActiveAbilityBuffs(instance, stats);
+    expect(stats.evasionBurstActive).toBe(1);
+    expect(stats.damageReduction).toBeGreaterThan(0.3);
   });
 
   it('applyCompanionPassives boosts scout speed without compounding', () => {

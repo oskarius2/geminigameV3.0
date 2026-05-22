@@ -121,7 +121,9 @@ export function getLootDropChanceMultiplier(state: GameState): number {
 }
 
 export function getEffectiveArtifactDropChance(state: GameState): number {
-  return getArtifactDropChance(state.stage) * getLootDropChanceMultiplier(state);
+  const base =
+    state.artifactDropRate ?? getArtifactDropChance(state.stage);
+  return base * getLootDropChanceMultiplier(state);
 }
 
 /** Call when survival stage increments (after stage++). Buffs apply on stages 1–2 only. */

@@ -59,12 +59,7 @@ function copyUnlockedList(state: GameState): CompanionId[] {
   return Array.isArray(raw) ? [...raw] : [];
 }
 
-/** Maps a live entity to a ref (same object reference). */
-function entityToRef(e: Entity): CompanionEntityRef {
-  return e;
-}
-
-/** Build placeholder state from the live app GameState. */
+/** Build companion view from the live app GameState (shared entity arrays). */
 export function fromGameState(state: GameState): CompanionGameState {
   return {
     gameMode: state.gameMode,
@@ -79,8 +74,9 @@ export function fromGameState(state: GameState): CompanionGameState {
       velocity: state.player.velocity,
       aimDir: state.player.aimDir,
     },
-    enemies: state.enemies.map(entityToRef),
-    projectiles: state.projectiles.map(entityToRef),
+    /** Live arrays — companion combat must push into the same lists the sim uses. */
+    enemies: state.enemies,
+    projectiles: state.projectiles,
     world: { ...state.world },
     baseDamage: state.baseDamage,
     activeCompanionId: state.activeCompanionId,

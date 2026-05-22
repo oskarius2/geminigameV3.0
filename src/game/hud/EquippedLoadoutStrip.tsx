@@ -28,6 +28,8 @@ interface EquippedLoadoutStripProps {
   hideArtifacts?: boolean;
   /** Slim single panel for mobile footer (ult + nrg only). */
   slimMobile?: boolean;
+  secondaryUnlocked?: boolean;
+  secondaryDisabled?: boolean;
 }
 
 export function EquippedLoadoutStrip({
@@ -41,6 +43,8 @@ export function EquippedLoadoutStrip({
   showWeapons = false,
   hideArtifacts = false,
   slimMobile = false,
+  secondaryUnlocked = true,
+  secondaryDisabled = false,
 }: EquippedLoadoutStripProps) {
   const compact =
     hudVariant === 'compact' || hudVariant === 'landscape' || hudVariant === 'phone-narrow';
@@ -85,28 +89,45 @@ export function EquippedLoadoutStrip({
             {(['CANNON_A', 'CANNON_B'] as const).map((slot) => {
               const active = activeWeaponSlot === slot;
               const iconName = getSlotIconName(slot);
+              const locked = slot === 'CANNON_B' && !secondaryUnlocked;
+              const disabled = slot === 'CANNON_B' && secondaryDisabled && secondaryUnlocked;
               return (
                 <button
                   key={slot}
                   type="button"
-                  aria-label={slot === 'CANNON_A' ? 'Vapen A' : 'Vapen B'}
+                  disabled={locked}
+                  aria-label={
+                    locked
+                      ? 'Vapen B låst'
+                      : slot === 'CANNON_A'
+                        ? 'Vapen A'
+                        : 'Vapen B'
+                  }
                   onClick={(e) => {
                     e.stopPropagation();
-                    onWeaponSwitch?.(slot);
+                    if (!locked) onWeaponSwitch?.(slot);
                   }}
                   className="h-11 w-11 rounded-md flex items-center justify-center transition-all"
                   style={
-                    active
+                    locked
                       ? {
-                          background: 'rgba(0,212,255,0.15)',
-                          border: '1px solid rgba(0,212,255,0.5)',
-                          boxShadow: '0 0 12px rgba(0,212,255,0.25)',
+                          background: 'rgba(255,255,255,0.02)',
+                          border: '1px dashed rgba(255,255,255,0.12)',
+                          opacity: 0.35,
+                          cursor: 'not-allowed',
                         }
-                      : {
-                          background: 'rgba(255,255,255,0.04)',
-                          border: '1px solid rgba(255,255,255,0.08)',
-                          opacity: 0.55,
-                        }
+                      : active
+                        ? {
+                            background: 'rgba(0,212,255,0.15)',
+                            border: '1px solid rgba(0,212,255,0.5)',
+                            boxShadow: '0 0 12px rgba(0,212,255,0.25)',
+                          }
+                        : {
+                            background: 'rgba(255,255,255,0.04)',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            opacity: disabled ? 0.35 : 0.55,
+                            filter: disabled ? 'grayscale(0.85)' : undefined,
+                          }
                   }
                 >
                   <GameIcon

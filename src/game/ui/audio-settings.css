@@ -1,0 +1,109 @@
+.audio-settings-panel {
+  background: rgba(0, 0, 0, 0.8);
+  border: 2px solid #00ff00;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 400px;
+  font-family: 'Courier New', monospace;
+  color: #00ff00;
+}
+
+.audio-settings-panel h2 {
+  margin-top: 0;
+  text-align: center;
+  font-size: 18px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.audio-settings-panel__hint {
+  font-size: 10px;
+  text-align: center;
+  opacity: 0.65;
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.volume-control {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.volume-control label {
+  flex: 0 0 120px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.volume-slider {
+  flex: 1;
+  height: 6px;
+  background: #1a1a1a;
+  border: 1px solid #00ff00;
+  border-radius: 3px;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  background: #00ff00;
+  border: 2px solid #003300;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.6);
+}
+
+.volume-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  background: #00ff00;
+  border: 2px solid #003300;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(0, 255, 0, 0.6);
+}
+
+.volume-value {
+  flex: 0 0 40px;
+  text-align: right;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.mute-control {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+}
+
+.mute-button {
+  padding: 10px 20px;
+  background: #1a1a1a;
+  border: 2px solid #00ff00;
+  border-radius: 4px;
+  color: #00ff00;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mute-button:hover {
+  background: rgba(0, 255, 0, 0.1);
+  box-shadow: 0 0 12px rgba(0, 255, 0, 0.5);
+}
+
+.mute-button.muted {
+  opacity: 0.5;
+}

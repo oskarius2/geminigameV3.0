@@ -86,31 +86,85 @@ function drawGuardian(ctx: CanvasRenderingContext2D, glow: number, rot: number, 
   ctx.restore();
 }
 
-function drawScout(ctx: CanvasRenderingContext2D, glow: number, rot: number, scanPhase: number): void {
+function drawScout(
+  ctx: CanvasRenderingContext2D,
+  glow: number,
+  rot: number,
+  scanPhase: number,
+  attacking: boolean,
+): void {
   ctx.save();
-  ctx.rotate(rot * 0.3);
-  ctx.shadowBlur = 12 * glow;
-  ctx.shadowColor = 'rgba(0, 212, 255, 0.9)';
+  ctx.rotate(rot);
+  ctx.shadowBlur = (attacking ? 18 : 12) * glow;
+  ctx.shadowColor = 'rgba(192, 132, 252, 0.95)';
 
-  ctx.fillStyle = '#0891b2';
+  // Core hull
+  const grd = ctx.createRadialGradient(0, 0, 0, 0, 0, 14);
+  grd.addColorStop(0, '#e9d5ff');
+  grd.addColorStop(0.45, '#7c3aed');
+  grd.addColorStop(1, '#0891b2');
+  ctx.fillStyle = grd;
   ctx.strokeStyle = '#e0f2fe';
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(18, 0);
-  ctx.lineTo(-14, 12);
-  ctx.lineTo(-10, 0);
-  ctx.lineTo(-14, -12);
+  ctx.moveTo(22, 0);
+  ctx.lineTo(4, 14);
+  ctx.lineTo(-16, 10);
+  ctx.lineTo(-12, 0);
+  ctx.lineTo(-16, -10);
+  ctx.lineTo(4, -14);
   ctx.closePath();
   ctx.fill();
   ctx.stroke();
 
-  ctx.strokeStyle = `rgba(0, 212, 255, ${0.6 + scanPhase * 0.4})`;
-  ctx.lineWidth = 2;
-  const scanW = 8 + scanPhase * 4;
+  // Wing fins
+  ctx.fillStyle = 'rgba(6, 182, 212, 0.55)';
+  ctx.beginPath();
+  ctx.moveTo(-6, 16);
+  ctx.lineTo(-20, 22);
+  ctx.lineTo(-14, 8);
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(-6, -16);
+  ctx.lineTo(-20, -22);
+  ctx.lineTo(-14, -8);
+  ctx.closePath();
+  ctx.fill();
+
+  // Twin emitters
+  ctx.fillStyle = attacking ? '#f0abfc' : '#67e8f9';
+  ctx.beginPath();
+  ctx.arc(16, -7, 3.5, 0, Math.PI * 2);
+  ctx.arc(16, 7, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  if (attacking) {
+    ctx.strokeStyle = 'rgba(240, 171, 252, 0.85)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(20, -7);
+    ctx.lineTo(34, -7);
+    ctx.moveTo(20, 7);
+    ctx.lineTo(34, 7);
+    ctx.stroke();
+  }
+
+  // Sensor dish
+  ctx.strokeStyle = `rgba(0, 212, 255, ${0.5 + scanPhase * 0.45})`;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(-8, 0, 6 + scanPhase * 2, 0, Math.PI * 2);
+  ctx.stroke();
+
+  ctx.strokeStyle = `rgba(192, 132, 252, ${0.35 + scanPhase * 0.35})`;
+  ctx.lineWidth = 1;
+  const scanW = 10 + scanPhase * 6;
   ctx.beginPath();
   ctx.moveTo(-scanW, 0);
-  ctx.lineTo(scanW, 0);
+  ctx.lineTo(scanW * 0.6, 0);
   ctx.stroke();
+
   ctx.shadowBlur = 0;
   ctx.restore();
 }
@@ -249,7 +303,7 @@ export function drawCompanionOnCanvas(
       drawGuardian(ctx, glow, rot, scanPhase);
       break;
     case CompanionType.SCOUT:
-      drawScout(ctx, glow, rot, scanPhase);
+      drawScout(ctx, glow, rot, scanPhase, runtime.isAttacking);
       break;
     case CompanionType.HEALER:
       drawHealer(ctx, glow, scanPhase);

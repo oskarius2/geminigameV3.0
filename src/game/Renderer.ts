@@ -1,5 +1,6 @@
 import { GameState, Entity, EntityType, ItemType, EnemyType } from './types';
 import { drawCompanionOnCanvas } from './companions/companionCanvasDraw';
+import { getScoutMinimapRevealRadius } from './companions/companionPassives';
 import {
   getCampaignLevel,
   catmullRom,
@@ -849,6 +850,27 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     const isRocket = p.itemType === ItemType.BOMB;
     const time = Date.now() / 100;
 
+    // Companion support bolts
+    if (p.ownerId?.startsWith('companion_')) {
+      ctx.save();
+      const angle = Math.atan2(p.velocity.y, p.velocity.x);
+      ctx.translate(drawX, drawY);
+      ctx.rotate(angle);
+      const boltGrad = createSafeLinearGradient(0, 0, -22, 0);
+      boltGrad.addColorStop(0, p.color);
+      boltGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = boltGrad;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 14, p.radius * 0.9, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#f0f9ff';
+      ctx.beginPath();
+      ctx.arc(4, 0, p.radius * 0.55, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      return;
+    }
+
     // Enemy projectile danger zone (Higher visibility)
     if (p.ownerId !== 'player') {
       ctx.save();
@@ -1094,6 +1116,19 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     const drawY = e.pos.y - camera.y;
 
     if (drawX < -50 || drawX > width + 50 || drawY < -50 || drawY > height + 50) return;
+
+    const markedId = state.companionRuntime?.markedEnemyId;
+    if (markedId && e.id === markedId && e.health > 0) {
+      ctx.save();
+      ctx.translate(drawX, drawY);
+      const markPulse = 1 + Math.sin(Date.now() / 120) * 0.12;
+      ctx.beginPath();
+      ctx.arc(0, 0, (e.radius + 10) * markPulse, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(192, 132, 252, 0.85)';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.restore();
+    }
 
     // Enemy Trail
     const eVelLen = e.velocity.magnitude();
@@ -2236,16 +2271,28 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     ctx.fill();
   });
 
-  // Enemies
+  // Enemies (Scout: only within detection range on minimap)
+  const revealRadius = getScoutMinimapRevealRadius(state);
+  const markedId = state.companionRuntime?.markedEnemyId;
   state.enemies.forEach(e => {
+    if (e.health <= 0) return;
+    if (e.pos.distanceTo(state.player.pos) > revealRadius) return;
+    const ex = mapX + e.pos.x * scaleX;
+    const ey = mapY + e.pos.y * scaleY;
+    const isMarked = markedId && e.id === markedId;
     if (e.enemyType === EnemyType.BOSS) {
       ctx.fillStyle = `rgba(153, 27, 27, ${0.5 + mapPulse * 0.5})`;
       ctx.beginPath();
-      ctx.arc(mapX + e.pos.x * scaleX, mapY + e.pos.y * scaleY, 4 + mapPulse * 2, 0, Math.PI * 2);
+      ctx.arc(ex, ey, 4 + mapPulse * 2, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (isMarked) {
+      ctx.fillStyle = '#c084fc';
+      ctx.beginPath();
+      ctx.arc(ex, ey, 3 + mapPulse, 0, Math.PI * 2);
       ctx.fill();
     } else {
       ctx.fillStyle = '#ef4444';
-      ctx.fillRect(mapX + e.pos.x * scaleX, mapY + e.pos.y * scaleY, 2, 2);
+      ctx.fillRect(ex, ey, 2, 2);
     }
   });
 

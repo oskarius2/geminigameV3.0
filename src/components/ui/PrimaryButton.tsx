@@ -1,5 +1,6 @@
 import React from 'react';
 import { clsx } from 'clsx';
+import { AudioManager } from '../../game/audio/AudioManager';
 
 interface PrimaryButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'accent' | 'ghost' | 'danger';
@@ -53,6 +54,8 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
   children,
   className,
   variant = 'primary',
+  onMouseEnter,
+  onClick,
   ...props
 }) => {
   const v = VARIANT_STYLES[variant];
@@ -72,6 +75,14 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
         className,
       )}
       style={{ clipPath: CLIP }}
+      onMouseEnter={(e) => {
+        if (AudioManager.isUiPackReady()) AudioManager.playUIHover();
+        onMouseEnter?.(e);
+      }}
+      onClick={(e) => {
+        if (AudioManager.isUiPackReady()) AudioManager.playUIClick();
+        onClick?.(e);
+      }}
       {...props}
     >
       <span

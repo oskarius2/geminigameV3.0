@@ -72,6 +72,8 @@ let drumTimer: ReturnType<typeof setInterval> | null = null;
 let melodyTimer: ReturnType<typeof setInterval> | null = null;
 let currentTier: ThreatTier = 'calm';
 let currentBpm = 100;
+let stageBpmBase = 85;
+let stageBpmMax = 150;
 let bossTheme: BossMusicTheme | null = null;
 let stageLayerGain = 0.35;
 let bossIntensity = 1;
@@ -323,13 +325,25 @@ export function startSurvivalMusic(): void {
  * Smooth threat → frequency and stem mix; tempo steps only on threat tier change
  * (avoids clearing drum/melody intervals every frame). Call every frame during survival.
  */
+function bpmForThreatTier(tier: ThreatTier): number {
+  const step =
+    tier === 'calm' ? 0 : tier === 'pressure' ? 0.33 : tier === 'danger' ? 0.66 : 1;
+  return Math.round(stageBpmBase + (stageBpmMax - stageBpmBase) * step);
+}
+
+/** Stage difficulty curve — widens procedural music tempo range. */
+export function setStageThreatBpmRange(base: number, max: number): void {
+  stageBpmBase = base;
+  stageBpmMax = max;
+}
+
 export function updateMusicThreat(threatLevel: number): void {
   if (!running || bossTheme) return;
 
   const tier = getThreatTier(threatLevel);
   if (tier !== currentTier) {
     currentTier = tier;
-    const tierBpm = BPM_BY_TIER[tier];
+    const tierBpm = bpmForThreatTier(tier);
     if (Math.abs(tierBpm - currentBpm) >= THREAT_BPM_STEP_THRESHOLD) {
       setBpm(tierBpm);
     }
