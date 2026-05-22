@@ -46,10 +46,11 @@ export function shouldTriggerCompanionAbility(
       );
     case CompanionType.SCOUT:
       return (
-        playerHp < 0.4 ||
+        state.isPlayerDashing ||
+        playerHp < 0.45 ||
         countIncomingProjectiles(state, 180) >= 3 ||
-        (runtime.playerHitBurstTimer > 0 && runtime.playerHitsInBurst >= 3) ||
-        state.threatLevel > 55
+        (runtime.playerHitBurstTimer > 0 && runtime.playerHitsInBurst >= 2) ||
+        state.threatLevel > 50
       );
     case CompanionType.HEALER:
       return playerHp < 0.2 || (playerHp < 0.35 && (instance.energy ?? 0) >= 30);

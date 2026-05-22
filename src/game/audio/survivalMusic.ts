@@ -77,17 +77,16 @@ let stageLayerGain = 0.35;
 let bossIntensity = 1;
 let lastBossIntensitySample = -1;
 let lastThreatMusicSample = -1;
-let lastAppliedBpm = 100;
 
 /** Game threat scale (computeThreatLevel clamps to 0–100). */
 export const THREAT_MUSIC_MAX = 100;
 
+/** Min BPM delta before retuning drum/melody timers (was 3 → stutter; 20 matches tier steps). */
+const THREAT_BPM_STEP_THRESHOLD = 20;
+
 const THREAT_FREQ_MIN_HZ = 80;
 const THREAT_FREQ_MAX_HZ = 240;
-const THREAT_BPM_MIN = 100;
-const THREAT_BPM_MAX = 160;
 const THREAT_RAMP_SEC = 0.1;
-const THREAT_BPM_STEP_THRESHOLD = 3;
 
 /** Normalized threat 0–1 for audio mapping. */
 export function threatToMusicRatio(threatLevel: number, maxThreat = THREAT_MUSIC_MAX): number {
@@ -315,17 +314,26 @@ export function startSurvivalMusic(): void {
   if (!ac) return;
   running = true;
   lastThreatMusicSample = -1;
-  lastAppliedBpm = THREAT_BPM_MIN;
   startStems();
-  setBpm(THREAT_BPM_MIN);
+  setBpm(BPM_BY_TIER.calm);
   crossfadeStems('calm', 0.5);
 }
 
 /**
- * Smooth threat → frequency, stem mix, and tempo. Call every frame during survival.
+ * Smooth threat → frequency and stem mix; tempo steps only on threat tier change
+ * (avoids clearing drum/melody intervals every frame). Call every frame during survival.
  */
 export function updateMusicThreat(threatLevel: number): void {
   if (!running || bossTheme) return;
+
+  const tier = getThreatTier(threatLevel);
+  if (tier !== currentTier) {
+    currentTier = tier;
+    const tierBpm = BPM_BY_TIER[tier];
+    if (Math.abs(tierBpm - currentBpm) >= THREAT_BPM_STEP_THRESHOLD) {
+      setBpm(tierBpm);
+    }
+  }
 
   const ratio = threatToMusicRatio(threatLevel);
   if (Math.abs(ratio - lastThreatMusicSample) < 0.008) return;
@@ -335,25 +343,12 @@ export function updateMusicThreat(threatLevel: number): void {
   applyThreatOscillatorFrequencies(rootHz);
   applyContinuousStemGains(ratio);
   applyThreatMasterGain(ratio);
-
-  const targetBpm =
-    THREAT_BPM_MIN + (THREAT_BPM_MAX - THREAT_BPM_MIN) * ratio;
-  if (Math.abs(targetBpm - lastAppliedBpm) >= THREAT_BPM_STEP_THRESHOLD) {
-    lastAppliedBpm = targetBpm;
-    setBpm(Math.round(targetBpm));
-  }
-
-  const tier = getThreatTier(threatLevel);
-  if (tier !== currentTier) {
-    currentTier = tier;
-  }
 }
 
 export function stopSurvivalMusic(): void {
   running = false;
   lastBossIntensitySample = -1;
   lastThreatMusicSample = -1;
-  lastAppliedBpm = THREAT_BPM_MIN;
   if (drumTimer) clearInterval(drumTimer);
   if (melodyTimer) clearInterval(melodyTimer);
   drumTimer = null;

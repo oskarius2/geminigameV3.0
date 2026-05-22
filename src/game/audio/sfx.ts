@@ -8,7 +8,7 @@ import {
   resumeAudioContext,
   setChannelMuted,
 } from './audioEngine';
-import { playNoiseBurst, playTone, playToneSequence } from './sfxPresets';
+import { playGunshot, playNoiseBurst, playTone, playToneSequence } from './sfxPresets';
 
 export type SfxEvent =
   | 'augment'
@@ -118,6 +118,35 @@ export interface SfxPlayOptions {
 
 let shootPitchJitter = 1;
 
+const SHIP_SHOOT_FREQ: Record<ShipId, number> = {
+  interceptor: 320,
+  gunship: 260,
+  drone: 300,
+};
+
+export interface MainWeaponSfxOptions {
+  pan?: number;
+  gainScale?: number;
+  pitchMul?: number;
+  /** Base frequency Hz (200–400). */
+  baseFreq?: number;
+}
+
+/** Player main weapon — bass boom with fast attack and smooth decay (no square beep). */
+export function fireMainWeapon(options?: MainWeaponSfxOptions): void {
+  if (isSfxMuted()) return;
+  const scale = options?.gainScale ?? 1;
+  const pm = options?.pitchMul ?? 1;
+  const peak = Math.min(0.25, 0.2 * scale);
+  playGunshot({
+    freq: options?.baseFreq ?? 300,
+    gain: peak,
+    pan: options?.pan,
+    pitchMul: pm,
+    duration: 0.1,
+  });
+}
+
 export function resumeAudio(): void {
   resumeAudioContext();
 }
@@ -154,17 +183,15 @@ export function playSfx(event: SfxEvent, options?: SfxPlayOptions): void {
     case 'shoot_falcon':
     case 'shoot_a':
       shootPitchJitter = 0.95 + Math.random() * 0.1;
-      t(520 * shootPitchJitter, 0.03, 'square', 0.03);
+      fireMainWeapon({ baseFreq: 320, gainScale: scale, pan, pitchMul: pm * shootPitchJitter });
       break;
     case 'shoot_sentinel':
     case 'shoot_b':
-      t(140 * pm, 0.09, 'sawtooth', 0.045);
+      fireMainWeapon({ baseFreq: 260, gainScale: scale, pan, pitchMul: pm });
       break;
     case 'shoot_swarm':
     case 'shoot_c':
-      t(880 * pm, 0.03, 'square', 0.025);
-      setTimeout(() => t(1100 * pm, 0.03, 'square', 0.02), 35);
-      setTimeout(() => t(960 * pm, 0.03, 'square', 0.02), 70);
+      fireMainWeapon({ baseFreq: 300, gainScale: scale, pan, pitchMul: pm });
       break;
     case 'playerUltimate':
       t(120, 0.2, 'sawtooth', 0.1);
@@ -437,11 +464,17 @@ const SHIP_SHOOT: Record<ShipId, SfxEvent> = {
 
 export function playShipShootSfx(shipId: ShipId, screenX?: number, viewWidth?: number): void {
   const ev = SHIP_SHOOT[shipId] ?? 'shoot_falcon';
+  shootPitchJitter = 0.95 + Math.random() * 0.1;
   let pan: number | undefined;
   if (screenX != null && viewWidth != null && viewWidth > 0) {
     pan = (screenX / viewWidth) * 2 - 1;
   }
-  playSfx(ev, { pan, pitchMul: 0.95 + Math.random() * 0.1 });
+  fireMainWeapon({
+    baseFreq: SHIP_SHOOT_FREQ[shipId] ?? 300,
+    pan,
+    pitchMul: shootPitchJitter,
+    gainScale: SFX_VOLUME[ev] ?? 0.7,
+  });
 }
 
 export { loadAudioSettings };

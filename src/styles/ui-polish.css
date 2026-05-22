@@ -349,6 +349,51 @@
   cursor: not-allowed;
 }
 
+/* --- Pre-run shop cards --- */
+.shop-card {
+  cursor: pointer;
+}
+
+.shop-card:focus-visible {
+  outline: 2px solid rgba(0, 229, 255, 0.65);
+  outline-offset: 2px;
+}
+
+.shop-card--selected {
+  border-width: 2px;
+  border-color: rgba(0, 229, 255, 0.75) !important;
+}
+
+.shop-card__badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 800;
+  font-family: var(--primitive-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #e0f7ff;
+  background: rgba(0, 229, 255, 0.22);
+  border: 1px solid rgba(0, 229, 255, 0.55);
+  box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+}
+
+.shop-card__check {
+  font-size: 10px;
+  line-height: 1;
+  color: #7df9ff;
+}
+
+.shop-cart__lines {
+  scrollbar-width: thin;
+}
+
 /* --- Z-index: HUD ~50, vignette 8, achievements 170, artifact toast 175, modals 200+ --- */
 
 /* --- Achievement stack — right column, below score (never center) --- */

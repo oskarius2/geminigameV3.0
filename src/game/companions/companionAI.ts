@@ -1,5 +1,5 @@
 import { Vector2 } from '../utils/vector';
-import { GameState, type CompanionId } from '../types';
+import { EntityType, GameState, type CompanionId } from '../types';
 import {
   createCompanionInstance,
   getCompanionDef,
@@ -49,14 +49,28 @@ const ORBIT_RADIUS: Record<CompanionType, number> = {
   [CompanionType.GUNNER]: 64,
 };
 
-/** Per-frame player displacement above this ≈ dash (normal move is ~speed×dt). */
-const SCOUT_DASH_SPEED_MULT = 3.5;
-const SCOUT_LOST_TRACK_DIST = 500;
-const SCOUT_PREDICT_FRAMES = 2;
-const SCOUT_LOST_TRACK_DURATION = 0.5;
+/** Seconds ahead to lead the player (velocity × horizon). */
+export const SCOUT_PREDICT_HORIZON_SEC = 0.2;
+/** Smoothing for velocity estimate (0–1, higher = snappier). */
+const SCOUT_VELOCITY_SMOOTH = 0.38;
+/** Frame displacement above this ≈ dash teleport. */
+const SCOUT_DASH_SPEED_MULT = 2.4;
+/** Drone farther than this from player while dashing → lost track. */
+const SCOUT_LEASH_BREAK_DIST = 200;
+/** Move to lastKnownPosition for this long after dash / leash break. */
+const SCOUT_LOST_TRACK_DURATION = 0.55;
+/** Scout marks deal light chip damage on interval. */
+const SCOUT_MARK_PULSE_INTERVAL = 2.2;
+const SCOUT_MARK_DAMAGE_BASE = 8;
 
-function dashDisplacementThreshold(playerSpeed: number): number {
-  return Math.max(280, playerSpeed * SCOUT_DASH_SPEED_MULT);
+function dashDisplacementThreshold(
+  frameDeltaMag: number,
+  playerVelocityMag: number,
+  dtSec: number,
+): number {
+  const safeDt = Math.max(dtSec, 1 / 120);
+  const fromVel = playerVelocityMag * safeDt * SCOUT_DASH_SPEED_MULT;
+  return Math.max(55, Math.max(frameDeltaMag * 1.8, fromVel));
 }
 
 function ensureScoutTrackMemory(
@@ -68,53 +82,100 @@ function ensureScoutTrackMemory(
       lastPlayerPos: playerPos.clone(),
       lastKnownPosition: playerPos.clone(),
       lastPlayerVelocity: new Vector2(0, 0),
+      smoothedVelocity: new Vector2(0, 0),
       lostTrackTime: 0,
+      dashActive: false,
     };
   }
   return runtime.scoutTrack;
 }
 
 /**
- * Scout drone: remember player motion and predict landing after dash.
- * Call once per frame before movement; pass result into moveCompanionToward.
+ * Updates scout position memory + velocity prediction once per frame.
+ * Call before movement / targeting.
+ */
+export function tickScoutTracking(
+  runtime: CompanionRuntime,
+  state: CompanionGameState,
+  dtSec: number,
+): void {
+  const mem = ensureScoutTrackMemory(runtime, state.player.pos);
+  const currentPlayerPos = state.player.pos;
+  const frameDelta = currentPlayerPos.sub(mem.lastPlayerPos);
+  const safeDt = Math.max(dtSec, 1 / 240);
+
+  mem.lastPlayerVelocity = frameDelta;
+
+  const instantVel = frameDelta.mul(1 / safeDt);
+  mem.smoothedVelocity = mem.smoothedVelocity
+    .mul(1 - SCOUT_VELOCITY_SMOOTH)
+    .add(instantVel.mul(SCOUT_VELOCITY_SMOOTH));
+
+  const frameMag = frameDelta.magnitude();
+  const dashThreshold = dashDisplacementThreshold(
+    frameMag,
+    state.player.velocity.magnitude(),
+    safeDt,
+  );
+  const dashByMotion = frameMag > dashThreshold;
+  const dashDetected = state.isPlayerDashing || dashByMotion;
+  const dashStarted = dashDetected && !mem.dashActive;
+
+  const distToPlayer = runtime.pos.distanceTo(currentPlayerPos);
+
+  if (dashStarted) {
+    mem.lastKnownPosition = mem.lastPlayerPos.clone();
+    if (distToPlayer > SCOUT_LEASH_BREAK_DIST) {
+      mem.lostTrackTime = SCOUT_LOST_TRACK_DURATION;
+    }
+  } else if (dashDetected && distToPlayer > SCOUT_LEASH_BREAK_DIST) {
+    mem.lostTrackTime = Math.max(mem.lostTrackTime, SCOUT_LOST_TRACK_DURATION * 0.5);
+  } else if (mem.lostTrackTime > 0 && distToPlayer < SCOUT_LEASH_BREAK_DIST * 0.65) {
+    mem.lostTrackTime = Math.max(0, mem.lostTrackTime - safeDt * 2.5);
+  } else if (mem.lostTrackTime > 0) {
+    mem.lostTrackTime = Math.max(0, mem.lostTrackTime - safeDt);
+  }
+
+  mem.dashActive = dashDetected;
+  mem.lastPlayerPos = currentPlayerPos.clone();
+}
+
+/** Predicted player position for orbit / lead targeting. */
+export function getScoutPredictedPlayerPos(
+  mem: ScoutTrackMemory,
+  playerPos: Vector2,
+): Vector2 {
+  const lead = mem.smoothedVelocity.mul(SCOUT_PREDICT_HORIZON_SEC);
+  if (lead.magnitude() < 8) {
+    return playerPos.clone();
+  }
+  return playerPos.add(lead);
+}
+
+/**
+ * Scout drone: blend role orbit with prediction + last-known recovery after dash.
  */
 export function resolveScoutMoveTarget(
   runtime: CompanionRuntime,
   state: CompanionGameState,
   roleTarget: Vector2,
-  dtSec: number,
+  _dtSec: number,
 ): Vector2 {
-  const mem = ensureScoutTrackMemory(runtime, state.player.pos);
-  const currentPlayerPos = state.player.pos;
-  const playerVelocity = currentPlayerPos.sub(mem.lastPlayerPos);
-  const dashThreshold = dashDisplacementThreshold(state.player.speed);
-  const dashByMotion = playerVelocity.magnitude() > dashThreshold;
-  const dashDetected = state.isPlayerDashing || dashByMotion;
-  const distToPlayer = runtime.pos.distanceTo(currentPlayerPos);
+  const mem = runtime.scoutTrack ?? ensureScoutTrackMemory(runtime, state.player.pos);
+  const playerPos = state.player.pos;
+  const predicted = getScoutPredictedPlayerPos(mem, playerPos);
 
-  if (dashDetected) {
-    mem.lastKnownPosition = mem.lastPlayerPos.clone();
-    if (distToPlayer > SCOUT_LOST_TRACK_DIST) {
-      mem.lostTrackTime = SCOUT_LOST_TRACK_DURATION;
-    }
-  }
-
-  mem.lastPlayerVelocity = playerVelocity;
-  mem.lastPlayerPos = currentPlayerPos.clone();
+  const predictOffset = predicted.sub(playerPos);
+  const ledRole = roleTarget.add(predictOffset);
 
   if (mem.lostTrackTime > 0) {
-    mem.lostTrackTime = Math.max(0, mem.lostTrackTime - dtSec);
-    if (mem.lostTrackTime > 0) {
-      return mem.lastKnownPosition.clone();
-    }
+    const t = 1 - mem.lostTrackTime / SCOUT_LOST_TRACK_DURATION;
+    const blend = Math.max(0, Math.min(1, t * t));
+    return mem.lastKnownPosition.clone().lerp(ledRole, blend);
   }
 
-  if (dashDetected && playerVelocity.magnitude() > 1) {
-    const predictedPos = currentPlayerPos.add(playerVelocity.mul(SCOUT_PREDICT_FRAMES));
-    return roleTarget.lerp(predictedPos, 0.7);
-  }
-
-  return roleTarget;
+  const leadWeight = mem.dashActive ? 0.55 : 0.35;
+  return roleTarget.lerp(ledRole, leadWeight);
 }
 
 function createRuntimeDefaults(
@@ -133,6 +194,7 @@ function createRuntimeDefaults(
     targetEnemyId: null,
     markedEnemyId: null,
     fireCooldown: 0,
+    markPulseTimer: 0,
     health: defaultMax,
     maxHealth: defaultMax,
     abilityCooldownRemaining: 0,
@@ -167,13 +229,16 @@ function patchRuntimeDefaults(rt: CompanionRuntime): void {
   if (rt.visualTime === undefined) rt.visualTime = 0;
   if (rt.playerHitBurstTimer === undefined) rt.playerHitBurstTimer = 0;
   if (rt.playerHitsInBurst === undefined) rt.playerHitsInBurst = 0;
+  if (rt.markPulseTimer === undefined) rt.markPulseTimer = 0;
   if (rt.scoutTrack) {
     if (!rt.scoutTrack.lastPlayerPos) rt.scoutTrack.lastPlayerPos = new Vector2(0, 0);
     if (!rt.scoutTrack.lastKnownPosition) {
       rt.scoutTrack.lastKnownPosition = rt.scoutTrack.lastPlayerPos.clone();
     }
     if (!rt.scoutTrack.lastPlayerVelocity) rt.scoutTrack.lastPlayerVelocity = new Vector2(0, 0);
+    if (!rt.scoutTrack.smoothedVelocity) rt.scoutTrack.smoothedVelocity = new Vector2(0, 0);
     if (rt.scoutTrack.lostTrackTime === undefined) rt.scoutTrack.lostTrackTime = 0;
+    if (rt.scoutTrack.dashActive === undefined) rt.scoutTrack.dashActive = false;
   }
 }
 
@@ -320,13 +385,12 @@ function syncPlayerStatsFromGame(state: CompanionGameState, stats: PlayerCompani
   stats.moveSpeed = player.speed;
 }
 
-function applyCompanionCombat(
+function applyGunnerCombat(
   instance: CompanionInstance,
   runtime: CompanionRuntime,
   state: CompanionGameState,
   dtSec: number,
 ): void {
-  if (instance.type !== CompanionType.GUNNER) return;
   const targetId = runtime.targetEnemyId;
   if (!targetId) return;
 
@@ -349,6 +413,51 @@ function applyCompanionCombat(
   notifyCompanionFired(runtime);
 
   runtime.fireCooldown = 1 / Math.max(fireRate, 0.5);
+}
+
+/** Scout: periodic chip damage on marked threat (scanner ping). */
+function applyScoutMarkPulse(
+  instance: CompanionInstance,
+  runtime: CompanionRuntime,
+  state: CompanionGameState,
+  dtSec: number,
+): void {
+  const markId = runtime.markedEnemyId ?? runtime.targetEnemyId;
+  if (!markId) return;
+
+  const scaled = getScaledCompanionStats(instance.id, instance.currentLevel);
+  const range = scaled?.detectionRange ?? 400;
+
+  runtime.markPulseTimer = (runtime.markPulseTimer ?? 0) - dtSec;
+  if (runtime.markPulseTimer > 0) return;
+
+  const target = state.enemies.find(
+    (e) => e.id === markId && e.type === EntityType.ENEMY && e.health > 0,
+  );
+  if (!target) return;
+  if (runtime.pos.distanceTo(target.pos) > range) return;
+
+  const damage =
+    SCOUT_MARK_DAMAGE_BASE + instance.currentLevel * 3 + (scaled?.attackDamage ?? 1);
+  target.health -= damage;
+  target.hitTimer = 4;
+  runtime.markPulseTimer = SCOUT_MARK_PULSE_INTERVAL;
+  runtime.attackPulseTimer = 0.12;
+  notifyCompanionFired(runtime);
+}
+
+function applyCompanionCombat(
+  instance: CompanionInstance,
+  runtime: CompanionRuntime,
+  state: CompanionGameState,
+  dtSec: number,
+): void {
+  if (instance.type === CompanionType.GUNNER) {
+    applyGunnerCombat(instance, runtime, state, dtSec);
+  }
+  if (instance.type === CompanionType.SCOUT) {
+    applyScoutMarkPulse(instance, runtime, state, dtSec);
+  }
 }
 
 export function updateCompanionAILogic(state: CompanionGameState, dtSec: number): void {

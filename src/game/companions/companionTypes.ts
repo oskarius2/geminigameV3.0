@@ -126,6 +126,8 @@ export interface CompanionRuntime {
   targetEnemyId: string | null;
   markedEnemyId: string | null;
   fireCooldown: number;
+  /** Scout — mark pulse chip damage cooldown. */
+  markPulseTimer?: number;
   health: number;
   maxHealth: number;
   abilityCooldownRemaining: number;
@@ -161,10 +163,16 @@ export interface CompanionRuntime {
 /** Position memory for Scout drone follow-after-dash. */
 export interface ScoutTrackMemory {
   lastPlayerPos: Vector2;
+  /** Pre-dash / last stable player position when track is lost. */
   lastKnownPosition: Vector2;
+  /** Raw displacement last frame (px). */
   lastPlayerVelocity: Vector2;
+  /** Smoothed velocity (px/s) for leading the player. */
+  smoothedVelocity: Vector2;
   /** Seconds remaining in "lost track" recovery (move to last known first). */
   lostTrackTime: number;
+  /** Player was dashing last tick (edge-detect dash start). */
+  dashActive: boolean;
 }
 
 /** Meta progress entry (also stored in localStorage via companionLeveling). */

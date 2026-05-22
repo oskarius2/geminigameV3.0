@@ -152,8 +152,7 @@ export function tickSurvivalWaveSpawns(
   const nextType = state.waveSpawnQueue.shift();
   if (!nextType) return null;
 
-  const pick = getSpawnPickForEnemyType(nextType);
-  const entity = spawnFromPick(pick);
+  const entity = spawnFromPick(getSpawnPickForEnemyType(nextType));
   state.waveSpawnCooldown = cooldown;
   return entity;
 }

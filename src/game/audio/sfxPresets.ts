@@ -15,6 +15,45 @@ export interface ToneOpts {
   delayMs?: number;
 }
 
+export interface GunshotOpts {
+  /** Base frequency Hz (200–400 for bass boom). */
+  freq?: number;
+  /** Peak gain before channel master (0.15–0.25). */
+  gain?: number;
+  pan?: number;
+  /** Decay length in seconds. */
+  duration?: number;
+  pitchMul?: number;
+}
+
+/** Short bass gunshot: low triangle + attack/decay envelope (no square beep). */
+export function playGunshot(opts: GunshotOpts = {}): void {
+  resumeAudioContext();
+  const ac = getAudioContext();
+  if (!ac) return;
+
+  const pm = opts.pitchMul ?? 1;
+  const freq = (opts.freq ?? 300) * pm;
+  const peak = Math.min(0.25, Math.max(0.001, opts.gain ?? 0.2));
+  const decay = opts.duration ?? 0.1;
+  const now = ac.currentTime;
+
+  const osc = ac.createOscillator();
+  const g = ac.createGain();
+  osc.type = 'triangle';
+  osc.frequency.setValueAtTime(freq, now);
+  osc.frequency.exponentialRampToValueAtTime(Math.max(30, freq * 0.65), now + decay);
+
+  g.gain.setValueAtTime(0, now);
+  g.gain.linearRampToValueAtTime(peak, now + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.001, now + decay);
+
+  osc.connect(g);
+  connectToSfx(g, { pan: opts.pan, gain: 1 });
+  osc.start(now);
+  osc.stop(now + decay + 0.03);
+}
+
 export function playTone(opts: ToneOpts): void {
   resumeAudioContext();
   const ac = getAudioContext();

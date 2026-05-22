@@ -92,18 +92,23 @@ export function PreRunShop({
 
         <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-4 mt-4">
           <div className="flex-1 min-h-0 overflow-y-auto grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 content-start pr-1">
-            {items.map((item) => (
-              <ShopCard
-                key={item.id}
-                item={item}
-                selected={selected.includes(item.id)}
-                affordable={metaScrap >= item.costScrap || selected.includes(item.id)}
-                onToggle={toggle}
-              />
-            ))}
+            {items.map((item) => {
+              const isSelected = selected.includes(item.id);
+              const canAdd = cartTotal + item.costScrap <= metaScrap;
+              return (
+                <ShopCard
+                  key={item.id}
+                  item={item}
+                  selected={isSelected}
+                  canToggle={isSelected || canAdd}
+                  onToggle={toggle}
+                />
+              );
+            })}
           </div>
           <ShopCart
             metaScrap={metaScrap}
+            cart={cart}
             cartTotal={cartTotal}
             canConfirm={validation.ok}
             onConfirm={handleConfirm}

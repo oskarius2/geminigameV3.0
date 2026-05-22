@@ -15,6 +15,7 @@ export interface CompanionPlayerRef {
   health: number;
   maxHealth: number;
   speed: number;
+  velocity: Vector2;
   aimDir?: Vector2;
 }
 
@@ -40,6 +41,7 @@ export interface CompanionGameState {
   companionRuntime: CompanionRuntime | null;
   /** True while the player is in a mobility dash (NORMAL survival). */
   isPlayerDashing: boolean;
+  threatLevel: number;
 }
 
 /** Subset written by meta XP / loadout (leveling module). */
@@ -74,6 +76,7 @@ export function fromGameState(state: GameState): CompanionGameState {
       health: state.player.health,
       maxHealth: state.player.maxHealth,
       speed: state.player.speed,
+      velocity: state.player.velocity,
       aimDir: state.player.aimDir,
     },
     enemies: state.enemies.map(entityToRef),
@@ -88,6 +91,7 @@ export function fromGameState(state: GameState): CompanionGameState {
     selectedShip: state.selectedShip,
     companionRuntime: state.companionRuntime,
     isPlayerDashing: state.isDashing ?? false,
+    threatLevel: state.threatLevel ?? 0,
   };
 }
 

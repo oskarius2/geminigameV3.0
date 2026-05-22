@@ -23,11 +23,12 @@ export function ShopCategoryTabs({ active, onChange }: ShopCategoryTabsProps) {
         <button
           key={tab.id}
           type="button"
+          aria-pressed={active === tab.id}
           onClick={() => onChange(tab.id)}
-          className={`shrink-0 min-h-10 px-4 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+          className={`shrink-0 min-h-10 px-4 rounded-full text-[10px] font-black uppercase tracking-wider border transition-colors cursor-pointer ${
             active === tab.id
-              ? 'bg-cyan-500/20 border-cyan-400/50 text-white'
-              : 'bg-white/5 border-white/10 text-white/50'
+              ? 'bg-cyan-500/20 border-cyan-400/50 text-white shadow-[0_0_12px_rgba(0,229,255,0.2)]'
+              : 'bg-white/5 border-white/10 text-white/50 hover:border-white/25 hover:text-white/70'
           }`}
         >
           {tab.label}

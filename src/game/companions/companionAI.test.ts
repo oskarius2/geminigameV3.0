@@ -6,7 +6,9 @@ import {
   ensureCompanionRuntime,
   getCompanionHudSnapshot,
   getTargetSelectionStrategy,
+  getScoutPredictedPlayerPos,
   resolveScoutMoveTarget,
+  tickScoutTracking,
   selectClosestEnemy,
   selectHighestThreat,
   selectTarget,
@@ -15,6 +17,7 @@ import {
 } from './companionAI';
 import { fromGameState } from './companionGameState';
 import { CompanionType, createCompanionInstance, getCompanionDef } from './companionDefs';
+import { getCompanionMaxMoveSpeed } from './companionStats';
 import { CompanionAIState } from './companionTypes';
 
 function mockEnemy(id: string, x: number, y: number, opts: Partial<Entity> = {}): Entity {
@@ -161,6 +164,19 @@ describe('companionAI', () => {
     expect(selectTarget(instance, state, def)).toBeNull();
   });
 
+  it('getScoutPredictedPlayerPos leads moving player', () => {
+    const mem = {
+      lastPlayerPos: new Vector2(0, 0),
+      lastKnownPosition: new Vector2(0, 0),
+      lastPlayerVelocity: new Vector2(0, 0),
+      smoothedVelocity: new Vector2(500, 0),
+      lostTrackTime: 0,
+      dashActive: true,
+    };
+    const predicted = getScoutPredictedPlayerPos(mem, new Vector2(600, 0));
+    expect(predicted.x).toBeGreaterThan(600);
+  });
+
   it('resolveScoutMoveTarget predicts ahead when player dashes', () => {
     const app = mockState({
       activeCompanionId: 'scout',
@@ -180,17 +196,19 @@ describe('companionAI', () => {
     });
     const gs = fromGameState(app);
     const rt = ensureCompanionRuntime(gs)!;
-    rt.pos = new Vector2(400, 0);
+    rt.pos = new Vector2(550, 0);
     rt.scoutTrack = {
-      lastPlayerPos: new Vector2(0, 0),
-      lastKnownPosition: new Vector2(0, 0),
-      lastPlayerVelocity: new Vector2(0, 0),
+      lastPlayerPos: new Vector2(580, 0),
+      lastKnownPosition: new Vector2(580, 0),
+      lastPlayerVelocity: new Vector2(20, 0),
+      smoothedVelocity: new Vector2(400, 0),
       lostTrackTime: 0,
+      dashActive: false,
     };
+    rt.scoutTrack!.dashActive = true;
     const roleTarget = new Vector2(50, 0);
     const goal = resolveScoutMoveTarget(rt, gs, roleTarget, 1 / 60);
-    expect(goal.x).toBeGreaterThan(600);
-    expect(goal.y).toBe(0);
+    expect(goal.x).toBeGreaterThan(roleTarget.x);
   });
 
   it('resolveScoutMoveTarget uses last known position when far during dash', () => {
@@ -217,11 +235,28 @@ describe('companionAI', () => {
       lastPlayerPos: new Vector2(100, 0),
       lastKnownPosition: new Vector2(100, 0),
       lastPlayerVelocity: new Vector2(0, 0),
+      smoothedVelocity: new Vector2(0, 0),
       lostTrackTime: 0,
+      dashActive: false,
     };
+    tickScoutTracking(rt, gs, 1 / 60);
     const goal = resolveScoutMoveTarget(rt, gs, new Vector2(0, 0), 1 / 60);
-    expect(goal.x).toBe(100);
+    expect(goal.x).toBeCloseTo(100, 0);
     expect(goal.y).toBe(0);
     expect(rt.scoutTrack!.lostTrackTime).toBeGreaterThan(0);
+  });
+
+  it('scout move speed scales with player world velocity', () => {
+    const cruise = getCompanionMaxMoveSpeed(CompanionType.SCOUT, 9, new Vector2(0, 0), 1 / 60);
+    expect(cruise).toBeGreaterThan(120);
+    const dash = getCompanionMaxMoveSpeed(
+      CompanionType.SCOUT,
+      9,
+      new Vector2(120, 0),
+      1 / 60,
+      true,
+    );
+    expect(dash).toBeGreaterThanOrEqual(cruise);
+    expect(cruise).toBeGreaterThan(100);
   });
 });

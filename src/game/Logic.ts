@@ -971,13 +971,13 @@ export function spawnEnemy(
   typeOverride?: number | EnemyType,
   posOverride?: { x: number; y: number }
 ): Entity | null {
-  // If typeOverride is already EnemyType enum, use new function
-  if (typeof typeOverride !== 'number' || typeOverride >= 0) {
+  if (typeof typeOverride === 'number') {
+    const enemyType = getEnemyTypeForPick(typeOverride) ?? EnemyType.CHASER;
+    return spawnEnemyFromWave(state, enemyType, posOverride);
+  }
+  if (typeof typeOverride === 'string') {
     return spawnEnemyFromWave(state, typeOverride as EnemyType, posOverride);
   }
-
-  // Otherwise, if it's an old numeric ID, map it (this is the OLD path)
-  // For now, default to CHASER to avoid crashes
   return spawnEnemyFromWave(state, EnemyType.CHASER, posOverride);
 }
 export function spawnXpOrb(pos: Vector2, amount = 25): Entity {

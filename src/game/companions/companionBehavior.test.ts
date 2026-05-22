@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Vector2 } from '../utils/vector';
 import { EntityType, type GameState } from '../types';
-import { determineCompanionState, getTargetPosition } from './companionBehavior';
+import {
+  determineCompanionState,
+  getTargetPosition,
+  updateCompanionBehavior,
+} from './companionBehavior';
 import { createCompanionInstance, getCompanionDef } from './companionDefs';
 import { CompanionAIState, CompanionType } from './companionTypes';
 import { fromGameState } from './companionGameState';
@@ -16,7 +20,7 @@ function mockState(partial: Partial<GameState> = {}): GameState {
       radius: 20,
       health: 100,
       maxHealth: 100,
-      speed: 100,
+      speed: 9,
       velocity: new Vector2(0, 0),
       color: '#0ff',
     },
@@ -107,5 +111,46 @@ describe('companionBehavior', () => {
     const goal = getTargetPosition(rt.aiState, instance, rt, gs, def);
     expect(goal.x).toBeGreaterThan(0);
     expect(goal.x).toBeLessThan(100);
+  });
+
+  it('scout follows player in positive world coordinates', () => {
+    const app = mockState({
+      activeCompanionId: 'scout',
+      world: { width: 4000, height: 4000 },
+      player: {
+        id: 'player',
+        type: EntityType.PLAYER,
+        pos: new Vector2(2800, 2100),
+        radius: 20,
+        health: 100,
+        maxHealth: 100,
+        speed: 9,
+        velocity: new Vector2(9, 0),
+        color: '#0ff',
+        aimDir: new Vector2(1, 0),
+      },
+    });
+    const gs = fromGameState(app);
+    const instance = createCompanionInstance('scout', 1);
+    const def = getCompanionDef(CompanionType.SCOUT)!;
+    const rt = ensureCompanionRuntime(gs)!;
+    rt.pos = new Vector2(2400, 2100);
+    rt.scoutTrack = {
+      lastPlayerPos: new Vector2(2750, 2100),
+      lastKnownPosition: new Vector2(2750, 2100),
+      lastPlayerVelocity: new Vector2(0, 0),
+      smoothedVelocity: new Vector2(0, 0),
+      lostTrackTime: 0,
+      dashActive: false,
+    };
+
+    for (let i = 0; i < 60; i++) {
+      gs.player.pos = gs.player.pos.add(gs.player.velocity);
+      updateCompanionBehavior(instance, rt, gs, def, 1 / 60);
+    }
+
+    expect(rt.pos.x).toBeGreaterThan(2500);
+    expect(rt.pos.x).toBeLessThan(gs.player.pos.x + 50);
+    expect(rt.pos.y).toBeGreaterThan(2000);
   });
 });

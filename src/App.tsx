@@ -1466,7 +1466,6 @@ export default function App() {
         applyThreatVisualEffects(next, dtSec);
         updateSurvivalAudio(next);
         tickShopRunFlags(next, dtSec);
-        updateCompanionAI(next, dtSec);
         tickMiniBossPassiveRuntime(next, dtSec);
         tickMiniBossWorldEffects(next, dtSec);
         if ((next.miniBossPopupTimer ?? 0) > 0) {
@@ -1785,6 +1784,10 @@ export default function App() {
       }
       player.pos.x = Math.max(player.radius, Math.min(next.world.width - player.radius, player.pos.x));
       player.pos.y = Math.max(player.radius, Math.min(next.world.height - player.radius, player.pos.y));
+
+      if (next.gameMode === 'NORMAL' && next.activeCompanionId && !next.isPaused) {
+        updateCompanionAI(next, dtSec);
+      }
 
       // Campaign corridor: hard lateral clamp + zoom + camera
       if (next.gameMode === 'CAMPAIGN' && next.campaignLevelId) {

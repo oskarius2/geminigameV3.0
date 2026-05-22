@@ -2,25 +2,34 @@ import { Vector2 } from '../utils/vector';
 import { EntityType, EnemyType } from '../types';
 import type { CompanionGameState } from './companionGameState';
 import { selectClosestEnemy, selectTarget } from './companionTargeting';
-import { resolveScoutMoveTarget } from './companionAI';
+import {
+  getScoutPredictedPlayerPos,
+  resolveScoutMoveTarget,
+  tickScoutTracking,
+} from './companionAI';
+import { getCompanionMaxMoveSpeed } from './companionStats';
+
+const SCOUT_FOLLOW_LEASH = 95;
+const SCOUT_CATCHUP_LEASH = 160;
 import type { CompanionDef, CompanionInstance, CompanionRuntime } from './companionTypes';
 import { CompanionAIState, CompanionType } from './companionTypes';
 
 const COMPANION_RADIUS = 14;
 const PLAYER_REPEL = 32;
 
-const MOVE_SPEED: Record<CompanionType, number> = {
-  [CompanionType.GUARDIAN]: 150,
-  [CompanionType.SCOUT]: 250,
-  [CompanionType.HEALER]: 120,
-  [CompanionType.GUNNER]: 200,
-};
-
 const ACCEL: Record<CompanionType, number> = {
   [CompanionType.GUARDIAN]: 420,
-  [CompanionType.SCOUT]: 680,
+  [CompanionType.SCOUT]: 520,
   [CompanionType.HEALER]: 360,
   [CompanionType.GUNNER]: 560,
+};
+
+/** Max turn rate (rad/s) — eases direction changes, no snap turns. */
+const TURN_RATE: Record<CompanionType, number> = {
+  [CompanionType.GUARDIAN]: 9,
+  [CompanionType.SCOUT]: 11,
+  [CompanionType.HEALER]: 7,
+  [CompanionType.GUNNER]: 10,
 };
 
 const IDLE_ORBIT = 120;
@@ -129,11 +138,16 @@ export function getTargetPosition(
     runtime.orbitRadiusOffset +
     Math.sin(runtime.visualTime * 2.3) * 8;
 
-  const lead =
-    aimDir && aimDir.magnitude() > 0.1
-      ? aimDir.normalize().mul((state.player.speed ?? 100) * 0.12)
-      : new Vector2(0, 0);
-  const playerPredict = playerPos.add(lead);
+  let playerPredict = playerPos.clone();
+  if (type === CompanionType.SCOUT && runtime.scoutTrack) {
+    playerPredict = getScoutPredictedPlayerPos(runtime.scoutTrack, playerPos);
+  } else {
+    const lead =
+      aimDir && aimDir.magnitude() > 0.1
+        ? aimDir.normalize().mul((state.player.speed ?? 100) * 0.12)
+        : new Vector2(0, 0);
+    playerPredict = playerPos.add(lead);
+  }
 
   let radius = IDLE_ORBIT + jitter;
   let angle = runtime.orbitAngle + ROLE_ORBIT_BIAS[type];
@@ -234,6 +248,38 @@ function applyRepulsion(
   return out;
 }
 
+/** Pull goal toward a slot behind the player when the drone falls behind. */
+export function applyCompanionLeash(
+  runtime: CompanionRuntime,
+  goal: Vector2,
+  state: CompanionGameState,
+  type: CompanionType,
+): Vector2 {
+  const playerPos = state.player.pos;
+  const dist = runtime.pos.distanceTo(playerPos);
+  const leash = type === CompanionType.SCOUT ? SCOUT_CATCHUP_LEASH : 150;
+  if (dist <= leash) return goal;
+
+  const aim =
+    state.player.aimDir && state.player.aimDir.magnitude() > 0.1
+      ? state.player.aimDir.normalize()
+      : state.player.velocity.magnitude() > 1
+        ? state.player.velocity.normalize()
+        : new Vector2(1, 0);
+  const offset = type === CompanionType.SCOUT ? 58 : 72;
+  const slot = playerPos.sub(aim.mul(offset));
+  const t = Math.min(1, (dist - leash) / 220);
+  return goal.lerp(slot, t);
+}
+
+function clampCompanionToWorld(pos: Vector2, world: { width: number; height: number }): Vector2 {
+  const pad = COMPANION_RADIUS;
+  return new Vector2(
+    Math.max(pad, Math.min(world.width - pad, pos.x)),
+    Math.max(pad, Math.min(world.height - pad, pos.y)),
+  );
+}
+
 export function moveCompanionToward(
   runtime: CompanionRuntime,
   targetPos: Vector2,
@@ -241,13 +287,27 @@ export function moveCompanionToward(
   state: CompanionGameState,
   dtSec: number,
 ): void {
-  const maxSpeed = MOVE_SPEED[type];
-  const accel = ACCEL[type];
+  const distToPlayer = runtime.pos.distanceTo(state.player.pos);
+  const catchingUp =
+    type === CompanionType.SCOUT && distToPlayer > SCOUT_FOLLOW_LEASH;
+  const maxSpeed = getCompanionMaxMoveSpeed(
+    type,
+    state.player.speed,
+    state.player.velocity,
+    dtSec,
+    catchingUp,
+  );
+  const accel = ACCEL[type] * (catchingUp ? 1.35 : 1);
+  const turnRate = TURN_RATE[type];
 
   let urgency = 1;
-  if (runtime.aiState === CompanionAIState.COMBAT) urgency = 1.25;
-  if (runtime.aiState === CompanionAIState.PLAYER_DISTRESSED) urgency = 1.15;
+  if (runtime.aiState === CompanionAIState.COMBAT) urgency = 1.15;
+  if (runtime.aiState === CompanionAIState.PLAYER_DISTRESSED) urgency = 1.1;
   if (runtime.aiState === CompanionAIState.LOW_HP) urgency = 0.75;
+  if (catchingUp) urgency = 1.35;
+  if (type === CompanionType.SCOUT && runtime.scoutTrack?.lostTrackTime) {
+    urgency = 1.25;
+  }
 
   const desired = applyRepulsion(targetPos, state.player.pos, state.enemies);
   const toTarget = desired.sub(runtime.pos);
@@ -264,27 +324,43 @@ export function moveCompanionToward(
     } else {
       runtime.moveVelocity = wishVel;
     }
+
+    const curSpeed = runtime.moveVelocity.magnitude();
+    if (curSpeed > 0.01) {
+      const curDir = runtime.moveVelocity.normalize();
+      const targetDir = wishDir;
+      const dot = Math.max(-1, Math.min(1, curDir.x * targetDir.x + curDir.y * targetDir.y));
+      const angle = Math.acos(dot);
+      const maxTurn = turnRate * dtSec;
+      if (angle > maxTurn && angle > 0.001) {
+        const t = maxTurn / angle;
+        const blended = new Vector2(
+          curDir.x + (targetDir.x - curDir.x) * t,
+          curDir.y + (targetDir.y - curDir.y) * t,
+        ).normalize();
+        runtime.moveVelocity = blended.mul(curSpeed);
+      }
+    }
   } else {
     runtime.moveVelocity = runtime.moveVelocity.mul(Math.max(0, 1 - dtSec * 4));
   }
 
   const speed = runtime.moveVelocity.magnitude();
-  if (speed > maxSpeed * urgency) {
-    runtime.moveVelocity = runtime.moveVelocity.normalize().mul(maxSpeed * urgency);
+  const cap = maxSpeed * urgency;
+  if (speed > cap) {
+    runtime.moveVelocity = runtime.moveVelocity.normalize().mul(cap);
   }
 
   const prev = runtime.pos.clone();
-  runtime.pos = runtime.pos.add(runtime.moveVelocity.mul(dtSec));
+  runtime.pos = clampCompanionToWorld(
+    runtime.pos.add(runtime.moveVelocity.mul(dtSec)),
+    state.world,
+  );
   runtime.velocity = runtime.pos.sub(prev).mul(1 / Math.max(dtSec, 0.001));
 
   if (runtime.velocity.magnitude() > 5) {
     runtime.facingAngle = Math.atan2(runtime.velocity.y, runtime.velocity.x);
   }
-
-  const halfW = state.world.width * 0.5 - COMPANION_RADIUS;
-  const halfH = state.world.height * 0.5 - COMPANION_RADIUS;
-  runtime.pos.x = Math.max(-halfW, Math.min(halfW, runtime.pos.x));
-  runtime.pos.y = Math.max(-halfH, Math.min(halfH, runtime.pos.y));
 }
 
 export function updateCompanionBehavior(
@@ -330,10 +406,15 @@ export function updateCompanionBehavior(
     runtime.markedEnemyId = null;
   }
 
+  if (instance.type === CompanionType.SCOUT) {
+    tickScoutTracking(runtime, state, dtSec);
+  }
+
   let goal = getTargetPosition(runtime.aiState, instance, runtime, state, def);
   if (instance.type === CompanionType.SCOUT) {
     goal = resolveScoutMoveTarget(runtime, state, goal, dtSec);
   }
+  goal = applyCompanionLeash(runtime, goal, state, instance.type);
   moveCompanionToward(runtime, goal, instance.type, state, dtSec);
   runtime.isAttacking = runtime.attackPulseTimer > 0;
 }
