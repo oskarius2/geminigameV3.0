@@ -1,6 +1,6 @@
 # Boom-bap audio pack (90s)
 
-Place licensed assets at these paths for Howler playback. Until files exist, the game falls back to procedural Web Audio.
+Place licensed assets at these paths for Howler playback. **Placeholder silent files** ship for dev (regenerate with `node scripts/generate-placeholder-audio.mjs`). Until real assets exist, playback is silent but Howler loads successfully; procedural Web Audio still runs when packs are not ready.
 
 ## Music (`music/`)
 - `menu-boombap.mp3` — mellow menu loop

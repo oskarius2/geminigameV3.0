@@ -8,6 +8,8 @@ import {
 } from './miniBossDifficulty';
 import { EnemyType, Entity, GameState } from '../types';
 import { getSpawnIntervalMs } from '../progression/difficultyScaler';
+import { getEffectiveTypeCap, countEnemiesByType } from './spawnComposition';
+import { getLevelProgress, getStageQuota } from './spawnCurve';
 import { getWaveForStage, WaveTemplate } from './waveCompositions';
 
 /** Maps wave EnemyType → spawnEnemy() switch index (Logic.ts). */
@@ -139,10 +141,14 @@ export function tickSurvivalWaveSpawns(
     return null;
   }
 
-  const delayScale = state.stage === 1 ? 0.88 : 1;
+    const delayScale = state.stage === 1 ? 0.88 : 1;
   const diffDelay = getSurvivalSpawnModifiers().waveSpawnDelayMult;
-  const pacingSec =
-    (state.difficultyScaleSpawnIntervalMs ?? getSpawnIntervalMs(state.stage)) / 1000;
+  
+  // Apply threat scaling to pacing
+  const basePacingSec = (state.difficultyScaleSpawnIntervalMs ?? getSpawnIntervalMs(state.stage)) / 1000;
+  const threatScale = 0.5 + (Math.min(100, state.threatLevel) / 100) * 0.5; // Up to 50% faster at max threat
+  const pacingSec = basePacingSec * threatScale;
+  
   const cooldown = pacingSec * delayScale * diffDelay;
 
   if (state.waveMiniBossQueue.length > 0 && spawnMiniBoss) {
@@ -152,7 +158,26 @@ export function tickSurvivalWaveSpawns(
     return entity;
   }
 
-  const nextType = state.waveSpawnQueue.shift();
+  // Calculate current level progress for type caps
+  const totalQuota = getStageQuota(state.stage);
+  const progress = getLevelProgress(state.enemiesToKill, totalQuota);
+  const currentCounts = countEnemiesByType(state.enemies);
+
+  // Find next valid type in queue that hasn't hit cap
+  let nextType: EnemyType | undefined;
+  while (state.waveSpawnQueue.length > 0) {
+    const candidateType = state.waveSpawnQueue.shift();
+    if (!candidateType) continue;
+    
+    const cap = getEffectiveTypeCap(candidateType, progress);
+    const current = currentCounts[candidateType] ?? 0;
+    
+    if (current < cap) {
+      nextType = candidateType;
+      break;
+    }
+  }
+
   if (!nextType) return null;
 
   const entity = spawnFromPick(getSpawnPickForEnemyType(nextType));

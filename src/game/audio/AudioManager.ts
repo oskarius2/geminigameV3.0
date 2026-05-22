@@ -1,4 +1,9 @@
 import { Howl, Howler } from 'howler';
+
+/** Must run before any `new Howl()` in this module. */
+Howler.autoUnlock = true;
+(Howler as typeof Howler & { html5PoolSize?: number }).html5PoolSize = 20;
+
 import {
   persistMusicMuted,
   persistMusicVolume,
@@ -34,31 +39,56 @@ interface ManagedSound {
   loaded: boolean;
   failed: boolean;
   baseVolume: number;
+  srcLabel: string;
+  loop: boolean;
 }
+
+const warnedMissingSrc = new Set<string>();
 
 function createManaged(
   src: string[],
   opts: { loop?: boolean; volume: number }
 ): ManagedSound {
+  const srcLabel = src[0] ?? 'unknown';
   const managed: ManagedSound = {
     howl: null as unknown as Howl,
     loaded: false,
     failed: false,
     baseVolume: opts.volume,
-  };
-  managed.howl = new Howl({
-    src,
+    srcLabel,
     loop: opts.loop ?? false,
-    volume: opts.volume,
-    preload: true,
-    html5: src.some((s) => s.endsWith('.mp3')),
-    onload: () => {
-      managed.loaded = true;
-    },
-    onloaderror: () => {
-      managed.failed = true;
-    },
-  });
+  };
+
+  try {
+    managed.howl = new Howl({
+      src,
+      loop: opts.loop ?? false,
+      volume: opts.volume,
+      preload: true,
+      /** Web Audio decode — avoids exhausting the small HTML5 `<audio>` pool. */
+      html5: false,
+      onload: () => {
+        managed.loaded = true;
+      },
+      onloaderror: (_id, error) => {
+        managed.failed = true;
+        if (!warnedMissingSrc.has(srcLabel)) {
+          warnedMissingSrc.add(srcLabel);
+          console.warn(`[Audio] File not found or failed to load: ${srcLabel}`, error);
+        }
+      },
+      onplayerror: (_id, error) => {
+        if (!warnedMissingSrc.has(`${srcLabel}:play`)) {
+          warnedMissingSrc.add(`${srcLabel}:play`);
+          console.warn(`[Audio] Playback failed: ${srcLabel}`, error);
+        }
+      },
+    });
+  } catch (error) {
+    managed.failed = true;
+    console.warn(`[Audio] Failed to create Howl for: ${srcLabel}`, error);
+  }
+
   return managed;
 }
 
@@ -137,6 +167,7 @@ function sfxGain(base: number): number {
 }
 
 function applyManagedVolume(managed: ManagedSound, channel: 'music' | 'sfx'): void {
+  if (managed.failed) return;
   const vol =
     channel === 'music'
       ? musicGain(managed.baseVolume)
@@ -199,16 +230,29 @@ export function loadBoomBapAudioSettings(): void {
 }
 
 function canPlay(managed: ManagedSound): boolean {
-  return managed.loaded && !managed.failed && effectiveMaster() > 0;
+  return (
+    !managed.failed &&
+    managed.howl != null &&
+    managed.loaded &&
+    effectiveMaster() > 0
+  );
 }
 
 function playManaged(managed: ManagedSound, channel: 'music' | 'sfx'): void {
   if (!canPlay(managed)) return;
   applyManagedVolume(managed, channel);
-  managed.howl.play();
+  try {
+    if (!managed.loop && managed.howl.playing()) {
+      managed.howl.stop();
+    }
+    managed.howl.play();
+  } catch (error) {
+    console.warn(`[Audio] play() failed: ${managed.srcLabel}`, error);
+  }
 }
 
 function stopManaged(managed: ManagedSound): void {
+  if (managed.failed) return;
   managed.howl.stop();
 }
 
@@ -231,6 +275,11 @@ function playMusicKey(key: MusicKey): void {
 }
 
 export const AudioManager = {
+  /** Console/debug: `AudioManager.MUSIC.menuTheme.howl` */
+  MUSIC,
+  UI_SOUNDS,
+  WEAPON_SOUNDS,
+
   useHowlerMusic(): boolean {
     return (
       MUSIC.battleStage1.loaded &&
@@ -369,6 +418,10 @@ export const AudioManager = {
               return;
             }
             const done = () => resolve();
+            if (managed.failed) {
+              done();
+              return;
+            }
             managed.howl.once('load', done);
             managed.howl.once('loaderror', done);
             window.setTimeout(done, 4000);
