@@ -1,3 +1,4 @@
+import { playArtifactAcquireSfx } from '../audio/sfx';
 import { ARTIFACTS } from '../content/artifacts';
 import { Artifact, BuffRarity, GameState } from '../types';
 import { getMiniBossDef, type MiniBossDef, type MiniBossId } from './miniBossDefs';
@@ -13,6 +14,22 @@ export interface MiniBossDefeatRewards {
   artifact: Artifact;
   passive: PassiveBuff | null;
   threatReduced: number;
+}
+
+const ARTIFACT_DROP_HEADLINE: Record<BuffRarity, string> = {
+  [BuffRarity.COMMON]: 'Artifact found',
+  [BuffRarity.RARE]: 'Rare artifact',
+  [BuffRarity.EPIC]: 'Epic artifact',
+  [BuffRarity.LEGENDARY]: 'Legendary artifact',
+  [BuffRarity.EXCLUSIVE]: 'Exclusive artifact',
+  [BuffRarity.MYSTERY]: 'Mystery artifact',
+};
+
+/** Plays rarity SFX; returns English toast line for HUD. */
+export function notifyMiniBossArtifactDrop(artifact: Artifact): string {
+  playArtifactAcquireSfx(artifact.rarity);
+  const headline = ARTIFACT_DROP_HEADLINE[artifact.rarity] ?? 'Artifact found';
+  return `${headline} — ${artifact.name}`;
 }
 
 function rollLootRarity(def: MiniBossDef, rng = Math.random()): BuffRarity {

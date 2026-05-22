@@ -161,15 +161,20 @@ export const STAGE_3_WAVES: WaveTemplate[] = [
 ];
 
 /** Stage 4 — ESCALATION: adds ELITE + special threats (~4 min target). */
+/** ~+20% enemy counts for late survival stages (launch balance pass). */
+function scaleWaveCount(count: number): number {
+  return Math.max(1, Math.round(count * 1.2));
+}
+
 export const STAGE_4_WAVES: WaveTemplate[] = [
   {
     stage: 4,
     waveIndex: 0,
     spawnDelay: 1.06,
     enemies: [
-      { type: EnemyType.CHASER, count: 4 },
-      { type: EnemyType.RANGED, count: 4 },
-      { type: EnemyType.ELITE, count: 2 },
+      { type: EnemyType.CHASER, count: scaleWaveCount(4) },
+      { type: EnemyType.RANGED, count: scaleWaveCount(4) },
+      { type: EnemyType.ELITE, count: scaleWaveCount(2) },
     ],
     duration: 60,
   },
@@ -179,9 +184,9 @@ export const STAGE_4_WAVES: WaveTemplate[] = [
     spawnDelay: 0.99,
     miniBosses: [{ id: 'void_harbinger', count: 1 }],
     enemies: [
-      { type: EnemyType.TANK, count: 2 },
-      { type: EnemyType.SPLINTER, count: 2 },
-      { type: EnemyType.SWARM_V2, count: 6 },
+      { type: EnemyType.TANK, count: scaleWaveCount(2) },
+      { type: EnemyType.SPLINTER, count: scaleWaveCount(2) },
+      { type: EnemyType.SWARM_V2, count: scaleWaveCount(6) },
     ],
     duration: 60,
   },
@@ -190,9 +195,9 @@ export const STAGE_4_WAVES: WaveTemplate[] = [
     waveIndex: 2,
     spawnDelay: 0.92,
     enemies: [
-      { type: EnemyType.ELITE, count: 3 },
-      { type: EnemyType.NOVA, count: 2 },
-      { type: EnemyType.RANGED, count: 4 },
+      { type: EnemyType.ELITE, count: scaleWaveCount(3) },
+      { type: EnemyType.NOVA, count: scaleWaveCount(2) },
+      { type: EnemyType.RANGED, count: scaleWaveCount(4) },
     ],
     duration: 60,
   },
@@ -202,10 +207,10 @@ export const STAGE_4_WAVES: WaveTemplate[] = [
     spawnDelay: 0.77,
     miniBosses: [{ id: 'void_harbinger', count: 1 }],
     enemies: [
-      { type: EnemyType.DASHER, count: 3 },
-      { type: EnemyType.ELITE, count: 2 },
-      { type: EnemyType.WRAITH, count: 2 },
-      { type: EnemyType.SWARMER, count: 5 },
+      { type: EnemyType.DASHER, count: scaleWaveCount(3) },
+      { type: EnemyType.ELITE, count: scaleWaveCount(2) },
+      { type: EnemyType.WRAITH, count: scaleWaveCount(2) },
+      { type: EnemyType.SWARMER, count: scaleWaveCount(5) },
     ],
     duration: 60,
   },
@@ -218,9 +223,9 @@ export const STAGE_5_WAVES: WaveTemplate[] = [
     waveIndex: 0,
     spawnDelay: 0.7,
     enemies: [
-      { type: EnemyType.FAST, count: 6 },
-      { type: EnemyType.RANGED, count: 4 },
-      { type: EnemyType.CHASER, count: 4 },
+      { type: EnemyType.FAST, count: scaleWaveCount(6) },
+      { type: EnemyType.RANGED, count: scaleWaveCount(4) },
+      { type: EnemyType.CHASER, count: scaleWaveCount(4) },
     ],
     duration: 50,
   },
@@ -230,9 +235,9 @@ export const STAGE_5_WAVES: WaveTemplate[] = [
     spawnDelay: 0.63,
     miniBosses: [{ id: 'rotating', count: 1 }],
     enemies: [
-      { type: EnemyType.ELITE, count: 2 },
-      { type: EnemyType.TANK, count: 2 },
-      { type: EnemyType.ZAPPER, count: 3 },
+      { type: EnemyType.ELITE, count: scaleWaveCount(2) },
+      { type: EnemyType.TANK, count: scaleWaveCount(2) },
+      { type: EnemyType.ZAPPER, count: scaleWaveCount(3) },
     ],
     duration: 50,
   },
@@ -241,9 +246,9 @@ export const STAGE_5_WAVES: WaveTemplate[] = [
     waveIndex: 2,
     spawnDelay: 0.6,
     enemies: [
-      { type: EnemyType.SWARM_V2, count: 10 },
-      { type: EnemyType.STRIKER, count: 3 },
-      { type: EnemyType.PHANTOM, count: 2 },
+      { type: EnemyType.SWARM_V2, count: scaleWaveCount(10) },
+      { type: EnemyType.STRIKER, count: scaleWaveCount(3) },
+      { type: EnemyType.PHANTOM, count: scaleWaveCount(2) },
     ],
     duration: 50,
   },
@@ -253,10 +258,10 @@ export const STAGE_5_WAVES: WaveTemplate[] = [
     spawnDelay: 0.56,
     miniBosses: [{ id: 'rotating', count: 1 }],
     enemies: [
-      { type: EnemyType.TRACKER, count: 2 },
-      { type: EnemyType.FORTIFIED, count: 2 },
-      { type: EnemyType.NOVA, count: 2 },
-      { type: EnemyType.REGENERATING, count: 2 },
+      { type: EnemyType.TRACKER, count: scaleWaveCount(2) },
+      { type: EnemyType.FORTIFIED, count: scaleWaveCount(2) },
+      { type: EnemyType.NOVA, count: scaleWaveCount(2) },
+      { type: EnemyType.REGENERATING, count: scaleWaveCount(2) },
     ],
     duration: 50,
   },
@@ -265,10 +270,10 @@ export const STAGE_5_WAVES: WaveTemplate[] = [
     waveIndex: 4,
     spawnDelay: 0.53,
     enemies: [
-      { type: EnemyType.SHIELDED, count: 3 },
-      { type: EnemyType.SNIPER, count: 2 },
-      { type: EnemyType.PHALANX, count: 2 },
-      { type: EnemyType.SPLINTER, count: 3 },
+      { type: EnemyType.SHIELDED, count: scaleWaveCount(3) },
+      { type: EnemyType.SNIPER, count: scaleWaveCount(2) },
+      { type: EnemyType.PHALANX, count: scaleWaveCount(2) },
+      { type: EnemyType.SPLINTER, count: scaleWaveCount(3) },
     ],
     duration: 50,
   },

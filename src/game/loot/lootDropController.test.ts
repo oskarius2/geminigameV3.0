@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { INITIAL_STATE } from '../Logic';
 import {
   getArtifactDropChance,
@@ -53,8 +53,40 @@ describe('lootDropController', () => {
   it('rollBossLoot can grant bonus drops on guaranteed roll', () => {
     const state = INITIAL_STATE(800, 600, 'interceptor');
     state.stage = 4;
-    const drop = rollBossLoot(state, 'crimson_tyrant', () => 0);
+    state.companionGrantedThisRun = true;
+    state.activeCompanionId = 'scout';
+    const drop = rollBossLoot(state, 'crimson_tyrant', 0);
     expect(drop).not.toBeNull();
+  });
+
+  it('rollLootOnKill vault artifact path does not throw at stage 4', () => {
+    const state = INITIAL_STATE(800, 600, 'interceptor');
+    state.stage = 4;
+    state.companionGrantedThisRun = true;
+    state.activeCompanionId = 'scout';
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+    expect(() => rollLootOnKill(state, 0.99)).not.toThrow();
+    randomSpy.mockRestore();
+  });
+
+  it('rollLootOnKill vault artifact path does not throw at stage 5', () => {
+    const state = INITIAL_STATE(800, 600, 'interceptor');
+    state.stage = 5;
+    state.companionGrantedThisRun = true;
+    state.activeCompanionId = 'scout';
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+    expect(() => rollLootOnKill(state, 0.99)).not.toThrow();
+    randomSpy.mockRestore();
+  });
+
+  it('rollBossLoot vault artifact bonus path does not throw', () => {
+    const state = INITIAL_STATE(800, 600, 'interceptor');
+    state.stage = 5;
+    state.companionGrantedThisRun = true;
+    state.activeCompanionId = 'scout';
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
+    expect(() => rollBossLoot(state, 'crimson_tyrant', 0)).not.toThrow();
+    randomSpy.mockRestore();
   });
 
   it('applyLootDrop tracks collected ship loot', () => {

@@ -68,27 +68,29 @@ export function HangarScreen({
       className="absolute inset-0 z-[600] overflow-hidden flex flex-col pointer-events-auto"
       style={{
         background:
-          'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,212,255,0.08) 0%, transparent 70%), #020617',
+          'radial-gradient(ellipse 80% 55% at 50% 0%, rgba(0,229,255,0.1) 0%, transparent 65%), radial-gradient(ellipse 50% 40% at 90% 80%, rgba(139,43,226,0.08) 0%, transparent 60%), var(--bg-void)',
         paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
         paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
         paddingLeft: 'max(1rem, env(safe-area-inset-left))',
         paddingRight: 'max(1rem, env(safe-area-inset-right))',
       }}
     >
-      <SpaceBackground />
+      <SpaceBackground scanlines />
+      <div className="absolute inset-0 nebula-layer nebula-layer-animate pointer-events-none opacity-70" />
       <div className="relative z-10 flex flex-col flex-1 max-w-7xl mx-auto w-full min-h-0 p-4 sm:p-6">
         <header className="flex flex-wrap items-center justify-between gap-4 shrink-0 mb-4">
           <div>
+            <p className="hud-micro-label mb-1">Orbital Bay</p>
             <h1
-              className="font-display font-bold tracking-[0.15em] text-white uppercase"
+              className="font-display font-black tracking-[0.12em] text-white uppercase"
               style={{
                 fontSize: 'clamp(1.5rem, 4vw, 2rem)',
-                textShadow: '0 0 40px rgba(0,212,255,0.35)',
+                textShadow: '0 0 48px rgba(0,229,255,0.4), 0 0 80px rgba(0,229,255,0.12)',
               }}
             >
               Hangar
             </h1>
-            <p className="font-mono text-[10px] uppercase tracking-[0.3em] text-cyan-400/60 mt-1">
+            <p className="font-mono text-[10px] uppercase tracking-[0.32em] text-cyan-400/55 mt-1.5">
               {metaScrap.toLocaleString()} scrap · {unlockedArtifactIds.length} relics
             </p>
           </div>
@@ -127,9 +129,10 @@ export function HangarScreen({
           {tab === 'progress' && <UnlockProgressTab />}
         </div>
 
-        <footer className="shrink-0 pt-4 flex flex-wrap justify-end gap-3 border-t border-white/10 mt-4">
+        <footer className="shrink-0 pt-4 flex flex-wrap justify-end gap-3 border-t border-cyan-500/15 mt-4">
           {survivalMode ? (
             <PrimaryButton
+              variant="accent"
               className="!w-auto min-w-[200px] px-8"
               disabled={!selectedShip}
               onClick={() => selectedShip && onConfirmLaunch(selectedShip)}
@@ -137,7 +140,7 @@ export function HangarScreen({
               Confirm and Launch
             </PrimaryButton>
           ) : (
-            <PrimaryButton className="!w-auto min-w-[160px] px-6" onClick={onBack}>
+            <PrimaryButton variant="primary" className="!w-auto min-w-[160px] px-6" onClick={onBack}>
               Done
             </PrimaryButton>
           )}

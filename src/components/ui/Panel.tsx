@@ -1,18 +1,16 @@
 import React from 'react';
 import { clsx } from 'clsx';
+import { TacticalFrame } from './TacticalFrame';
 
 interface PanelProps {
   children: React.ReactNode;
   className?: string;
+  glow?: boolean;
+  gold?: boolean;
 }
 
-export const Panel: React.FC<PanelProps> = ({ children, className }) => (
-  <div
-    className={clsx(
-      'rounded-2xl border border-white/10 bg-slate-950/70 backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]',
-      className
-    )}
-  >
+export const Panel: React.FC<PanelProps> = ({ children, className, glow, gold }) => (
+  <TacticalFrame size="md" glow={glow} gold={gold} scanlines className={clsx('p-4 sm:p-5', className)}>
     {children}
-  </div>
+  </TacticalFrame>
 );

@@ -1,6 +1,6 @@
 ﻿import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Flame, Play, RotateCcw, Shield, Swords, Zap, Trophy, Target } from 'lucide-react';
+import { Circle, Flame, Gem, Play, RotateCcw, Shield, Sparkles, Swords, Zap, Trophy, Target } from 'lucide-react';
 import { StartPage } from './game/controls/StartPage';
 import { Joystick } from './game/controls/Joystick';
 import { GameHUD } from './game/controls/GameHUD';
@@ -11,6 +11,7 @@ import {
   subscribeViewport,
   getJoystickSize,
   getTouchActionSize,
+  getHudVariant,
   getSynergyBarLayout,
   type ViewportProfile,
 } from './game/controls/mobileLayout';
@@ -21,10 +22,15 @@ import {
 } from './game/balance/waveSpawnController';
 import { spawnMiniBoss } from './game/bosses/miniBossSpawn';
 import type { MiniBossId } from './game/bosses/miniBossDefs';
-import { getMiniBossDef } from './game/bosses/miniBossDefs';
+import {
+  getMiniBossAuraColor,
+  getMiniBossDisplayName,
+  tryGetMiniBossDef,
+} from './game/bosses/miniBossDefs';
 import {
   applyMiniBossDefeatRewards,
   applyMiniBossDefeatJuice,
+  notifyMiniBossArtifactDrop,
 } from './game/bosses/miniBossLoot';
 import {
   getMiniBossIncomingDamageMult,
@@ -34,6 +40,10 @@ import {
 } from './game/bosses/miniBossPassives';
 import { applyMiniBossSpawnJuice } from './game/bosses/miniBossJuice';
 import { playMiniBossDefeatSfx, playMiniBossSpawnSfx } from './game/bosses/miniBossSfx';
+import {
+  logArtifactSpawned,
+  logArtifactStateSync,
+} from './game/debug/inventoryDebug';
 import {
   applyPlasmaExplosion,
   fireMiniBossShockwave,
@@ -191,6 +201,7 @@ import {
   ARTIFACT_POPUP_DURATION_MS,
   type ArtifactAcquiredEvent,
 } from './game/hud/artifactPopup';
+import { HUD_RARITY_HEX } from './game/hud/hudTokens';
 import { ArtifactAcquireOverlay } from './game/hud/ArtifactAcquireOverlay';
 import { addMetaScrap, getMetaScrap, spendMetaScrap } from './lib/metaStore';
 import {
@@ -203,6 +214,15 @@ import {
   resumeAudio,
 } from './game/audio/sfx';
 import { startMusic, stopMusic, duckMusic, loadMusicSettings, setMusicMuted, setMusicVolume } from './game/audio/music';
+import {
+  startSurvivalAudio,
+  stopSurvivalAudio,
+  updateSurvivalAudio,
+  onBossWarpBegin,
+  onBossDefeated,
+  onPlayerDeath,
+  onUltimate,
+} from './game/audio/survivalAudio';
 import { spawnDamageNumber } from './game/juice/damageNumbers';
 import {
   applyPlayerDamageGlitch,
@@ -375,7 +395,11 @@ export default function App() {
   const [devCheatToast, setDevCheatToast] = useState<string | null>(null);
   const devCheatsActive = isDevCheatsEnabled();
   const devCheatToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [notification, setNotification] = useState<{ message: string; type: 'info' | 'success' | 'warning' } | null>(null);
+  const [notification, setNotification] = useState<{
+    message: string;
+    type: 'info' | 'success' | 'warning';
+    rarity?: BuffRarity;
+  } | null>(null);
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPauseMenuOpen, setIsPauseMenuOpen] = useState(false);
   const [stageIntroStage, setStageIntroStage] = useState<number | null>(null);
@@ -518,6 +542,7 @@ export default function App() {
     null,
   );
   const artifactPopupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const forceUiSyncRef = useRef(false);
 
   useEffect(() => {
     reconcileAllCompanionProgress();
@@ -680,8 +705,11 @@ export default function App() {
     // Visual feedback for equipped artifacts
     const equippedCount = Object.values(equippedArtifactIds).filter(a => a !== null).length;
     if (equippedCount > 0) {
-      showNotification(`${equippedCount} artefakt(er) utrustad`, 'info');
       playSfx('artifact');
+      const snap = getViewportSnapshot(dimensions.width, dimensions.height);
+      if (snap.profile === 'desktop') {
+        showNotification(`${equippedCount} artefakt(er) utrustad`, 'info');
+      }
     }
     if (shopSpent > 0) {
       showNotification(`Loadout shop: −${shopSpent} scrap`, 'info');
@@ -735,7 +763,9 @@ export default function App() {
     setStageIntroKey((k) => k + 1);
     setStageIntroStage(1);
     resumeAudio();
-    if (!musicMuted) startMusic();
+    if (!musicMuted) {
+      startSurvivalAudio();
+    }
 
     if (devCheatsActive) {
       const bossId = readBossIdFromUrl();
@@ -973,8 +1003,12 @@ export default function App() {
       setMetaScrap(getMetaScrap());
     }
     setLastRunScrapEarned(banked);
-    playSfx('gameOver');
-    stopMusic();
+    if (next.gameMode === 'NORMAL') {
+      onPlayerDeath();
+    } else {
+      playSfx('gameOver');
+      stopSurvivalAudio();
+    }
     applyPlayerDamageGlitch(next, player, 'fatal');
     return true;
   };
@@ -1031,11 +1065,18 @@ export default function App() {
     devCheatToastTimerRef.current = setTimeout(() => setDevCheatToast(null), 2600);
   }, []);
 
-  const showNotification = useCallback((message: string, type: 'info' | 'success' | 'warning' = 'info') => {
-    setNotification({ message, type });
-    if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
-    notificationTimerRef.current = setTimeout(() => setNotification(null), 3000);
-  }, []);
+  const showNotification = useCallback(
+    (
+      message: string,
+      type: 'info' | 'success' | 'warning' = 'info',
+      rarity?: BuffRarity,
+    ) => {
+      setNotification({ message, type, rarity });
+      if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
+      notificationTimerRef.current = setTimeout(() => setNotification(null), 3000);
+    },
+    [],
+  );
 
   const devCheatHandlersRef = useRef({
     onBossWarp: (_boss: BossDefinition) => {},
@@ -1359,6 +1400,7 @@ export default function App() {
         applyShopThreat(next);
         next.threatPeak = Math.max(next.threatPeak, next.threatLevel);
         applyThreatVisualEffects(next, dtSec);
+        updateSurvivalAudio(next);
         tickShopRunFlags(next, dtSec);
         updateCompanionAI(next, dtSec);
         tickMiniBossPassiveRuntime(next, dtSec);
@@ -1508,7 +1550,7 @@ export default function App() {
           }
           if (next.rails?.outcome === 'failed') {
             playSfx('gameOver');
-            stopMusic();
+            stopSurvivalAudio();
           }
           syncUi();
         }
@@ -1604,6 +1646,7 @@ export default function App() {
       // Ultimate Initiation
       if (controls.current.wantUltimate && next.ultimateCharge >= 100) {
         next.ultimateCharge = 0;
+        if (next.gameMode === 'NORMAL') onUltimate();
         const dmg = 200 + next.threatLevel * 2;
         next.enemies.forEach((en) => {
           en.health -= dmg;
@@ -1833,8 +1876,13 @@ export default function App() {
           });
         }
         
-        shootSfxForSlot(next.activeWeaponSlot);
         const muzzlePos = player.pos.add(aimDir.normalize().mul(player.radius + 5));
+        shootSfxForSlot(
+          next.activeWeaponSlot,
+          next.selectedShip,
+          muzzlePos.x - next.camera.x,
+          dimensions.width
+        );
         
         // Muzzle Flash Particle
         next.particles.push({
@@ -2143,8 +2191,15 @@ export default function App() {
         const HARD_CAP = mobile ? 25 : 40;
         if (next.enemies.length > HARD_CAP) {
           let toRemove = next.enemies.length - HARD_CAP;
-          next.enemies = next.enemies.filter(e => {
-            if (toRemove > 0 && e.enemyType !== EnemyType.BOSS) { toRemove--; return false; }
+          next.enemies = next.enemies.filter((e) => {
+            if (
+              toRemove > 0 &&
+              e.enemyType !== EnemyType.BOSS &&
+              !e.miniBossId
+            ) {
+              toRemove--;
+              return false;
+            }
             return true;
           });
         }
@@ -2213,7 +2268,7 @@ export default function App() {
               p.health = 0;
               if (applyRailsPlayerHit(next, next.survivalTime)) {
                 playSfx('gameOver');
-                stopMusic();
+                stopSurvivalAudio();
                 next.particles.push(...createImpact(player.pos, '#ef4444', 6));
                 if (next.isGameOver) syncUi();
               }
@@ -2474,15 +2529,38 @@ export default function App() {
                         unlockedArtifactIdsRef.current,
                       );
                       if (rewards) {
+                        logArtifactSpawned(rewards.artifact.id);
                         equipRunArtifact(next, rewards.artifact.id);
-                        persistArtifactUnlock(rewards.artifact.id, false);
-                        showArtifactAcquireFeedback(rewards.artifact);
+                        if (!next.runArtifactsUnlockedThisRun.includes(rewards.artifact.id)) {
+                          next.runArtifactsUnlockedThisRun.push(rewards.artifact.id);
+                        }
+                        logArtifactStateSync(
+                          next.equippedArtifacts,
+                          next.runArtifactsUnlockedThisRun,
+                        );
+                        forceUiSyncRef.current = true;
+                        persistArtifactUnlock(rewards.artifact.id, true);
+                        const dropLine = notifyMiniBossArtifactDrop(rewards.artifact);
+                        showNotification(dropLine, 'success', rewards.artifact.rarity);
+                        applyArtifactAcquireJuice(next, rewards.artifact);
+                        if (rewards.artifact.rarity === BuffRarity.LEGENDARY) {
+                          const event = buildArtifactAcquiredEvent(rewards.artifact);
+                          setArtifactAcquirePopup(event);
+                          if (artifactPopupTimerRef.current) {
+                            clearTimeout(artifactPopupTimerRef.current);
+                          }
+                          artifactPopupTimerRef.current = setTimeout(() => {
+                            setArtifactAcquirePopup(null);
+                          }, ARTIFACT_POPUP_DURATION_MS);
+                        }
                         applyMiniBossDefeatJuice(next, mbId, rewards);
                         playMiniBossDefeatSfx(mbId);
-                        const mbDef = getMiniBossDef(mbId);
-                        next.particles.push(
-                          ...createExplosion(e.pos, mbDef.auraColor, 12, 1.8),
-                        );
+                        const mbDef = tryGetMiniBossDef(mbId);
+                        if (mbDef) {
+                          next.particles.push(
+                            ...createExplosion(e.pos, mbDef.auraColor, 12, 1.8),
+                          );
+                        }
                       }
                       next.enemies.forEach((oe) => {
                         if (oe.miniBossParentId === e.id) oe.health = 0;
@@ -2589,9 +2667,11 @@ export default function App() {
                     next.screenshake = Math.min(next.screenshake + (e.enemyType === EnemyType.BOSS ? 8 : 2) * shakeMult, 15);
 
                     if (e.enemyType !== EnemyType.BOSS) {
-                      // 1-frame flash only â€” not a value ramp
                       next.screenFlash = Math.max(next.screenFlash, 1);
                       next.runScrapEarned += scrapFromKill(next);
+                      if (next.gameMode === 'NORMAL' && Math.random() < 0.35 / chaosFactor) {
+                        playSfx(isHeavy ? 'enemyDeathHeavy' : 'enemyDeath');
+                      }
                     }
                     
                     const item = spawnItem(e.pos);
@@ -2660,6 +2740,9 @@ export default function App() {
                         const defeatedBossId = next.activeBossId;
                         applyBossDefeatState(next);
                         next.lastBossDefeatedId = defeatedBossId;
+                        if (next.gameMode === 'NORMAL' && defeatedBossId) {
+                          onBossDefeated(next, defeatedBossId);
+                        }
                         next.bossVictoryBannerTimer = 150;
                         logBossLifecycle(next, 'boss-killed');
                         next.postBossBuffPick = true;
@@ -2728,6 +2811,9 @@ export default function App() {
                           const upcoming = pickRandomBoss(next.stage, next.lastBossId);
                           next.lastBossId = upcoming.id;
                           beginBossWarp(next, upcoming);
+                          if (next.gameMode === 'NORMAL') {
+                            onBossWarpBegin(upcoming.id, next.stage);
+                          }
                           syncUi();
                         }
                       }
@@ -2827,7 +2913,7 @@ export default function App() {
               for (let h = 0; h < hits; h++) {
                 if (applyRailsPlayerHit(next, next.survivalTime)) {
                   playSfx('gameOver');
-                  stopMusic();
+                  stopSurvivalAudio();
                   if (next.isGameOver) syncUi();
                   break;
                 }
@@ -2914,8 +3000,10 @@ export default function App() {
       missionController.update(dt * (16.67 / 1000));
 
       // Sync UI each frame during boss warp (overlay animation); otherwise throttle
-      if (next.bossArenaTransition > 0) {
+      if (next.bossArenaTransition > 0 || forceUiSyncRef.current) {
         syncUi();
+        forceUiSyncRef.current = false;
+        lastUiSync = currentTime;
       } else if (currentTime - lastUiSync > 250) {
         syncUi();
         lastUiSync = currentTime;
@@ -3054,21 +3142,38 @@ export default function App() {
       )}
 
       {screen === 'GAME' && devCheatsActive && (
-        <DevCheatsHud toast={devCheatToast} />
+        <DevCheatsHud toast={devCheatToast} compact={viewportProfile !== 'desktop'} />
       )}
 
       {/* General notifications */}
       {notification && (
         <div
-          className="pointer-events-none fixed top-4 left-1/2 z-[100] -translate-x-1/2 max-w-[min(100vw-2rem,20rem)]"
+          className={`pointer-events-none fixed left-1/2 z-[100] -translate-x-1/2 max-w-[min(92vw,20rem)] px-2 ${
+            viewportProfile !== 'desktop'
+              ? 'top-[max(5.25rem,env(safe-area-inset-top))]'
+              : 'top-4'
+          }`}
           aria-live="polite"
         >
-          <div className={`rounded-lg px-4 py-2 text-center font-medium shadow-lg ${
+          <div className={`rounded-lg px-4 py-2 font-medium shadow-lg flex items-center justify-center gap-2 ${
             notification.type === 'success' ? 'bg-green-900/90 text-green-100 ring-1 ring-green-500/40' :
             notification.type === 'warning' ? 'bg-yellow-900/90 text-yellow-100 ring-1 ring-yellow-500/40' :
             'bg-blue-900/90 text-blue-100 ring-1 ring-blue-500/40'
           }`}>
-            {notification.message}
+            {notification.rarity != null && (
+              <span className="shrink-0" aria-hidden>
+                {notification.rarity === BuffRarity.LEGENDARY ||
+                notification.rarity === BuffRarity.EXCLUSIVE ? (
+                  <Sparkles size={18} color={HUD_RARITY_HEX[notification.rarity]} />
+                ) : notification.rarity === BuffRarity.EPIC ||
+                  notification.rarity === BuffRarity.RARE ? (
+                  <Gem size={18} color={HUD_RARITY_HEX[notification.rarity]} />
+                ) : (
+                  <Circle size={18} color={HUD_RARITY_HEX[notification.rarity]} />
+                )}
+              </span>
+            )}
+            <span className="text-center text-sm">{notification.message}</span>
           </div>
         </div>
       )}
@@ -3240,9 +3345,7 @@ export default function App() {
               const mb = gameStateRef.current?.enemies.find(
                 (e) => e.miniBossId && e.health > 0
               );
-              return mb?.miniBossId
-                ? getMiniBossDef(mb.miniBossId as MiniBossId).displayName
-                : '';
+              return mb?.miniBossId ? getMiniBossDisplayName(mb.miniBossId) : '';
             })()}
             miniBossHealth={
               gameStateRef.current?.enemies.find(
@@ -3258,17 +3361,30 @@ export default function App() {
               const mb = gameStateRef.current?.enemies.find(
                 (e) => e.miniBossId && e.health > 0
               );
-              return mb?.miniBossId
-                ? getMiniBossDef(mb.miniBossId as MiniBossId).auraColor
-                : '#a855f7';
+              return mb?.miniBossId ? getMiniBossAuraColor(mb.miniBossId) : '#a855f7';
             })()}
+            hudVariant={getHudVariant(
+              viewportProfile,
+              dimensions.width,
+              dimensions.height,
+            )}
           />
-          {gameStateRef.current && uiState.gameMode === 'NORMAL' && (
-            <SynergyBar
-              lines={getActiveSynergies(gameStateRef.current)}
-              layout={getSynergyBarLayout(viewportProfile)}
-            />
-          )}
+          {gameStateRef.current &&
+            uiState.gameMode === 'NORMAL' &&
+            (() => {
+              const hv = getHudVariant(
+                viewportProfile,
+                dimensions.width,
+                dimensions.height,
+              );
+              if (hv === 'phone-narrow' || hv === 'compact') return null;
+              return (
+                <SynergyBar
+                  lines={getActiveSynergies(gameStateRef.current)}
+                  layout={getSynergyBarLayout(viewportProfile)}
+                />
+              );
+            })()}
 
           {(gameStateRef.current?.miniBossIncomingTimer ?? 0) > 0 && (
             <div
@@ -3324,7 +3440,11 @@ export default function App() {
           )}
 
           {showTouchControls && uiState?.gameMode !== 'ON_RAILS' && (() => {
-            const joystickSize = getJoystickSize(viewportProfile);
+            const joystickSize = getJoystickSize(
+              viewportProfile,
+              dimensions.width,
+              dimensions.height,
+            );
             const touchSize = getTouchActionSize(viewportProfile);
             const touchBtnClass =
               touchSize === 'compact'
@@ -3333,28 +3453,46 @@ export default function App() {
                   ? 'w-14 h-14 border-white/30'
                   : 'w-14 h-14 md:w-16 md:h-16 border-white/30';
             const touchIconSize = touchSize === 'compact' ? 24 : touchSize === 'medium' ? 28 : 32;
+            const hudVar = getHudVariant(
+              viewportProfile,
+              dimensions.width,
+              dimensions.height,
+            );
+            const stackedTouch = hudVar === 'phone-narrow' || hudVar === 'compact';
             const safeCorner = compactHud || landscapeHud;
+            const touchBottomStyle: React.CSSProperties | undefined = stackedTouch
+              ? {
+                  bottom: `max(${joystickSize + 12}px, calc(env(safe-area-inset-bottom) + ${joystickSize + 8}px))`,
+                }
+              : undefined;
             const moveCornerClass =
               mobileLayout === 'LEFT_HANDED'
                 ? safeCorner
-                  ? 'right-[max(0.5rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
+                  ? 'right-[max(0.5rem,env(safe-area-inset-right))]'
                   : 'bottom-6 right-6 md:bottom-10 md:right-10'
                 : safeCorner
-                  ? 'left-[max(0.5rem,env(safe-area-inset-left))] bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
+                  ? 'left-[max(0.5rem,env(safe-area-inset-left))]'
                   : 'bottom-6 left-6 md:bottom-10 md:left-10';
             const aimCornerClass =
               mobileLayout === 'LEFT_HANDED'
                 ? safeCorner
-                  ? 'left-[max(0.5rem,env(safe-area-inset-left))] bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
+                  ? 'left-[max(0.5rem,env(safe-area-inset-left))]'
                   : 'bottom-6 left-6 md:bottom-10 md:left-10'
                 : safeCorner
-                  ? 'right-[max(0.5rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))]'
+                  ? 'right-[max(0.5rem,env(safe-area-inset-right))]'
                   : 'bottom-6 right-6 md:bottom-10 md:right-10';
+            const moveCornerStyle =
+              safeCorner && touchBottomStyle ? touchBottomStyle : undefined;
+            const aimCornerStyle =
+              safeCorner && touchBottomStyle ? touchBottomStyle : undefined;
             const actionStackClass = landscapeHud ? 'flex flex-col gap-2 mb-1' : 'flex gap-3 mb-2';
 
             return (
               <>
-                <motion.div className={`absolute flex flex-col items-center gap-2 pointer-events-none ${moveCornerClass}`}>
+                <motion.div
+                  className={`absolute flex flex-col items-center gap-2 pointer-events-none ${moveCornerClass}`}
+                  style={moveCornerStyle}
+                >
                   <div className={`${actionStackClass} pointer-events-auto`}>
                     <motion.button
                       whileTap={{ scale: 0.9 }}
@@ -3406,7 +3544,10 @@ export default function App() {
                     }}
                   />
                 </motion.div>
-                <motion.div className={`absolute flex flex-col items-center gap-2 pointer-events-none ${aimCornerClass}`}>
+                <motion.div
+                  className={`absolute flex flex-col items-center gap-2 pointer-events-none ${aimCornerClass}`}
+                  style={aimCornerStyle}
+                >
                   <motion.div className="flex gap-2 mb-1 pointer-events-auto">
                     <motion.button
                       whileTap={{ scale: 0.9 }}

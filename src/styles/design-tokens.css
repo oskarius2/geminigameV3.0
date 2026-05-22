@@ -1,34 +1,46 @@
 /**
- * SpaceHero design tokens — primitive → semantic → component
- * Single source of truth for Relic Vault and hangar UI.
+ * SpaceHero — PREMIUM TACTICAL NEURAL INTERFACE
+ * Primitive → semantic → component
  */
 
 :root {
+  /* --- Primitive: premium accents --- */
+  --primitive-color-gold: #e8b84a;
+  --primitive-color-gold-dim: #ca8a04;
+  --primitive-color-holo: #7df9ff;
+  --primitive-color-magenta: #ff2d9b;
+
   /* --- Primitive: rarity --- */
-  --primitive-color-legendary: #ffd700;
-  --primitive-color-epic: #9d4edd;
-  --primitive-color-rare: #3b82f6;
-  --primitive-color-common: #888888;
-  --primitive-color-exclusive: #00d4ff;
-  --primitive-color-mystery: #c084fc;
+  --primitive-color-legendary: #ffc400;
+  --primitive-color-epic: #8b2be2;
+  --primitive-color-rare: #2563eb;
+  --primitive-color-common: #64748b;
+  --primitive-color-exclusive: #00e5ff;
+  --primitive-color-mystery: #c026d3;
 
   /* --- Primitive: accents --- */
-  --primitive-color-cyan: #00d4ff;
-  --primitive-color-success: #33ff88;
-  --primitive-color-warning: #ff3333;
-  --primitive-color-white: #ffffff;
-  --primitive-color-gray-dark: #a0a0a0;
+  --primitive-color-cyan: #00e5ff;
+  --primitive-color-amber: #ffaa00;
+  --primitive-color-success: #00ff6a;
+  --primitive-color-warning: #ff2244;
+  --primitive-color-white: #f0f8ff;
+  --primitive-color-gray-dark: #7a8ba0;
 
   /* --- Primitive: background --- */
-  --primitive-color-bg-dark: #0a0e27;
-  --primitive-color-bg-card: #0f1436;
-  --primitive-color-bg-overlay: #0a0e27dd;
+  --primitive-color-bg-void: #010208;
+  --primitive-color-bg-dark: #040812;
+  --primitive-color-bg-card: #081018;
+  --primitive-color-bg-elevated: #0c1628;
+  --primitive-color-bg-overlay: #040812f0;
+  --primitive-color-bg-glass: rgba(4, 10, 24, 0.68);
 
   /* --- Primitive: typography --- */
-  --primitive-font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
-  --primitive-font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --primitive-font-display: 'Exo 2', 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+  --primitive-font-sans: 'Exo 2', ui-sans-serif, system-ui, sans-serif;
+  --primitive-font-mono: 'Share Tech Mono', 'Fira Code', 'IBM Plex Mono', ui-monospace, monospace;
+  --primitive-font-data: 'Fira Code', 'Share Tech Mono', ui-monospace, monospace;
 
-  --primitive-size-xs: 11px;
+  --primitive-size-xs: 10px;
   --primitive-size-sm: 12px;
   --primitive-size-md: 14px;
   --primitive-size-lg: 16px;
@@ -38,6 +50,7 @@
   --primitive-weight-regular: 400;
   --primitive-weight-semibold: 600;
   --primitive-weight-bold: 700;
+  --primitive-weight-black: 900;
 
   /* --- Primitive: spacing --- */
   --primitive-space-xs: 4px;
@@ -49,40 +62,56 @@
   --primitive-space-3xl: 48px;
 
   /* --- Primitive: shadows --- */
-  --primitive-shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
-  --primitive-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
-  --primitive-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --primitive-shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --primitive-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.6);
+  --primitive-shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.7);
 
   /* --- Primitive: glows --- */
-  --primitive-glow-cyan: 0 0 20px rgba(0, 212, 255, 0.4);
-  --primitive-glow-cyan-intense: 0 0 30px rgba(0, 212, 255, 0.6);
-  --primitive-glow-gold: 0 0 20px rgba(255, 215, 0, 0.4);
-  --primitive-glow-gold-intense: 0 0 30px rgba(255, 215, 0, 0.6);
-  --primitive-glow-purple: 0 0 20px rgba(157, 76, 221, 0.4);
-  --primitive-glow-purple-intense: 0 0 24px rgba(157, 76, 221, 0.5);
+  --primitive-glow-cyan: 0 0 20px rgba(0, 229, 255, 0.4), 0 0 40px rgba(0, 229, 255, 0.15);
+  --primitive-glow-cyan-intense: 0 0 24px rgba(0, 229, 255, 0.7), 0 0 56px rgba(0, 229, 255, 0.3), 0 0 90px rgba(0, 229, 255, 0.1);
+  --primitive-glow-gold: 0 0 20px rgba(255, 196, 0, 0.5), 0 0 40px rgba(255, 196, 0, 0.2);
+  --primitive-glow-gold-intense: 0 0 32px rgba(255, 196, 0, 0.8), 0 0 64px rgba(255, 196, 0, 0.3);
+  --primitive-glow-purple: 0 0 20px rgba(139, 43, 226, 0.5), 0 0 40px rgba(139, 43, 226, 0.2);
+  --primitive-glow-purple-intense: 0 0 28px rgba(139, 43, 226, 0.7), 0 0 60px rgba(139, 43, 226, 0.3);
+  --primitive-glow-amber: 0 0 16px rgba(255, 170, 0, 0.5);
+  --primitive-glow-red: 0 0 20px rgba(255, 34, 68, 0.5), 0 0 40px rgba(255, 34, 68, 0.2);
+  --primitive-glow-gold: 0 0 22px rgba(232, 184, 74, 0.55), 0 0 44px rgba(232, 184, 74, 0.2);
+  --primitive-glow-gold-intense: 0 0 32px rgba(232, 184, 74, 0.85), 0 0 64px rgba(232, 184, 74, 0.35);
 
-  /* --- Primitive: radius --- */
-  --primitive-radius-sm: 4px;
-  --primitive-radius-md: 8px;
-  --primitive-radius-lg: 12px;
+  /* --- Primitive: radius — sharper angular aesthetic --- */
+  --primitive-radius-xs: 2px;
+  --primitive-radius-sm: 3px;
+  --primitive-radius-md: 5px;
+  --primitive-radius-lg: 6px;
+
+  /* --- Primitive: clip-path corners (angular military cuts) --- */
+  --clip-corner-xs: polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px);
+  --clip-corner-sm: polygon(6px 0%, 100% 0%, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0% 100%, 0% 6px);
+  --clip-corner-md: polygon(10px 0%, 100% 0%, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0% 100%, 0% 10px);
+  --clip-corner-lg: polygon(16px 0%, 100% 0%, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0% 100%, 0% 16px);
+  --clip-corner-card: polygon(20px 0%, 100% 0%, 100% calc(100% - 20px), calc(100% - 20px) 100%, 0% 100%, 0% 20px);
 
   /* --- Primitive: motion --- */
-  --primitive-duration-fast: 0.05s;
-  --primitive-duration-normal: 0.2s;
-  --primitive-duration-slow: 0.4s;
-  --primitive-easing-ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --primitive-duration-instant: 0.05s;
+  --primitive-duration-fast: 0.12s;
+  --primitive-duration-normal: 0.25s;
+  --primitive-duration-slow: 0.45s;
+  --primitive-easing-ease-out: cubic-bezier(0.2, 0, 0, 1);
+  --primitive-easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* --- Semantic: interactive --- */
   --color-primary: var(--primitive-color-cyan);
-  --color-primary-dark: #00a8cc;
-  --color-primary-darker: #007399;
-
+  --color-primary-dark: #00b8cc;
+  --color-primary-darker: #008899;
+  --color-gold: var(--primitive-color-gold);
+  --color-gold-dim: var(--primitive-color-gold-dim);
+  --color-amber: var(--primitive-color-amber);
   --color-success: var(--primitive-color-success);
   --color-warning: var(--primitive-color-warning);
   --color-text-primary: var(--primitive-color-white);
   --color-text-secondary: var(--primitive-color-gray-dark);
-  --color-border: rgba(0, 212, 255, 0.3);
-  --color-border-hover: var(--primitive-color-cyan);
+  --color-border: rgba(0, 229, 255, 0.22);
+  --color-border-hover: rgba(0, 229, 255, 0.8);
 
   --color-rarity-legendary: var(--primitive-color-legendary);
   --color-rarity-epic: var(--primitive-color-epic);
@@ -91,13 +120,16 @@
   --color-rarity-exclusive: var(--primitive-color-exclusive);
   --color-rarity-mystery: var(--primitive-color-mystery);
 
+  --bg-void: var(--primitive-color-bg-void);
   --bg-base: var(--primitive-color-bg-dark);
   --bg-card: var(--primitive-color-bg-card);
+  --bg-elevated: var(--primitive-color-bg-elevated);
   --bg-overlay: var(--primitive-color-bg-overlay);
-  --bg-hover: #1a1f3f;
-  --bg-selected: #2a2f4f;
+  --bg-hover: #121d38;
+  --bg-selected: #1a2848;
 
-  --font-heading: var(--primitive-font-mono);
+  --font-display: var(--primitive-font-display);
+  --font-heading: var(--primitive-font-display);
   --font-body: var(--primitive-font-sans);
   --size-heading: var(--primitive-size-2xl);
   --size-title: var(--primitive-size-lg);
@@ -111,6 +143,10 @@
   --glow-default: var(--primitive-glow-cyan);
   --glow-hover: var(--primitive-glow-cyan-intense);
   --glow-accent: var(--primitive-glow-gold);
+  --glow-gold: var(--primitive-glow-gold);
+  --glow-gold-intense: var(--primitive-glow-gold-intense);
+  --glass-bg: var(--primitive-color-bg-glass);
+  --glass-blur: 20px;
 
   /* --- Component: relic card --- */
   --card-width: 280px;
@@ -119,46 +155,46 @@
   --card-padding: var(--primitive-space-lg);
   --card-bg: var(--bg-card);
   --card-border: 1px solid var(--color-border);
-  --card-border-hover: 2px solid var(--color-border-hover);
+  --card-border-hover: 1px solid var(--color-border-hover);
   --card-shadow: var(--shadow-card);
   --card-shadow-hover: var(--shadow-card-hover);
   --card-glow: var(--glow-default);
   --card-glow-hover: var(--glow-hover);
-  --card-scale-hover: 1.05;
-  --card-scale-active: 0.98;
+  --card-scale-hover: 1.04;
+  --card-scale-active: 0.97;
 
-  --rarity-bar-height: 8px;
-  --rarity-bar-radius-top: var(--primitive-radius-lg);
+  --rarity-bar-height: 3px;
+  --rarity-bar-radius-top: 0;
 
   --badge-size: 32px;
-  --badge-glow: 0 0 12px rgba(255, 215, 0, 0.8);
+  --badge-glow: 0 0 16px rgba(255, 196, 0, 0.9);
   --badge-spin-duration: 3s;
   --badge-spin-duration-hover: 1.5s;
 
-  --text-rarity-size: var(--primitive-size-xs);
-  --text-rarity-weight: 600;
+  --text-rarity-size: 9px;
+  --text-rarity-weight: 700;
   --text-rarity-transform: uppercase;
-  --text-rarity-letter-spacing: 1.5px;
+  --text-rarity-letter-spacing: 2px;
 
   --text-card-name-size: var(--primitive-size-lg);
-  --text-card-name-weight: var(--primitive-weight-bold);
+  --text-card-name-weight: var(--primitive-weight-black);
   --text-card-name-color: var(--color-text-primary);
 
   --text-desc-size: var(--primitive-size-sm);
   --text-desc-weight: var(--primitive-weight-regular);
   --text-desc-color: var(--color-text-secondary);
-  --text-desc-line-height: 1.4;
+  --text-desc-line-height: 1.5;
   --text-desc-max-lines: 2;
 
   --text-power-size: var(--primitive-size-sm);
-  --text-power-weight: 600;
+  --text-power-weight: 700;
   --text-power-color: var(--color-success);
   --text-power-font: var(--font-heading);
 
-  --locked-opacity: 0.65;
-  --locked-blur: 2px;
+  --locked-opacity: 0.5;
+  --locked-blur: 3px;
   --locked-overlay: var(--bg-overlay);
-  --locked-border: 1px dashed #555555;
+  --locked-border: 1px dashed rgba(100, 116, 139, 0.4);
 
   /* Bridge legacy HUD vars */
   --hud-accent: var(--color-primary);

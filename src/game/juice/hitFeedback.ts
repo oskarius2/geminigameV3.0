@@ -1,5 +1,6 @@
 import { EnemyType, Entity, GameState } from '../types';
-import { playSfx, SfxEvent } from '../audio/sfx';
+import { playSfx, playShipShootSfx, type SfxEvent } from '../audio/sfx';
+import type { ShipId } from '../types';
 
 export type HitKind = 'normal' | 'crit' | 'shield' | 'boss';
 
@@ -39,7 +40,7 @@ export function triggerHitFeedback(state: GameState, kind: HitKind): void {
       state.screenshake = Math.max(state.screenshake || 0, 0.8);
       break;
     case 'boss':
-      playSfx('hit');
+      playSfx('bossHit');
       state.hitStop = Math.max(state.hitStop || 0, 1.2);
       state.screenFlash = Math.max(state.screenFlash || 0, 1.5);
       state.screenshake = Math.max(state.screenshake || 0, 1.2);
@@ -52,14 +53,23 @@ export function triggerHitFeedback(state: GameState, kind: HitKind): void {
       break;
     case 'normal':
     default:
-      playSfx('hit');
+      playSfx('playerHit');
       state.screenFlash = Math.max(state.screenFlash || 0, 0.15);
       state.screenshake = Math.max(state.screenshake || 0, 0.25);
       break;
   }
 }
 
-export function shootSfxForSlot(slot: 'CANNON_A' | 'CANNON_B'): void {
+export function shootSfxForSlot(
+  slot: 'CANNON_A' | 'CANNON_B',
+  shipId?: ShipId,
+  screenX?: number,
+  viewWidth?: number
+): void {
+  if (shipId) {
+    playShipShootSfx(shipId, screenX, viewWidth);
+    return;
+  }
   const map: Record<string, SfxEvent> = {
     CANNON_A: 'shoot_a',
     CANNON_B: 'shoot_b',

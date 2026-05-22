@@ -49,7 +49,10 @@ export function CompanionHUD({
   const def = getCompanionDef(companionId);
   if (!def) return null;
 
-  const compact = hudVariant === 'compact' || hudVariant === 'landscape';
+  const compact =
+    hudVariant === 'compact' || hudVariant === 'landscape' || hudVariant === 'phone-narrow';
+  const phoneNarrow =
+    hudVariant === 'phone-narrow' || hudVariant === 'compact';
   const color = COMPANION_COLORS[companionId];
   const safeMax = Math.max(1, maxHealth);
   const hpPct = Math.max(0, Math.min(100, (health / safeMax) * 100));
@@ -62,12 +65,45 @@ export function CompanionHUD({
       : 100;
   const abilityReady = abilityCooldownRemaining <= 0.05;
 
+  if (phoneNarrow) {
+    return (
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className={`pointer-events-none w-full ${className}`}
+        role="status"
+      >
+        <HudPanel className="p-1.5 border-opacity-40">
+          <div className="flex items-center gap-2 min-w-0">
+            <CompanionIcon id={companionId} size={14} />
+            <span className="text-[9px] font-bold uppercase text-white truncate">{def.name}</span>
+            <span className="text-[9px] font-mono text-slate-400 shrink-0">Lv{level}</span>
+            <div className="flex-1 min-w-[3rem] h-1 rounded-full bg-black/50 overflow-hidden">
+              <div
+                className="h-full rounded-full"
+                style={{
+                  width: `${hpPct}%`,
+                  background: lowHp ? HUD_COLORS.danger : color,
+                }}
+              />
+            </div>
+            <span
+              className={`text-[8px] font-mono uppercase shrink-0 ${abilityReady ? 'text-emerald-400' : 'text-slate-500'}`}
+            >
+              {abilityReady ? 'RDY' : `${Math.ceil(abilityCooldownRemaining)}s`}
+            </span>
+          </div>
+        </HudPanel>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25 }}
-      className={`pointer-events-none w-full ${compact ? 'max-w-full' : 'max-w-[320px]'} ${className}`}
+      className={`pointer-events-none w-full ${phoneNarrow ? 'max-w-[min(92vw,18rem)]' : compact ? 'max-w-full' : 'max-w-[320px]'} ${className}`}
       role="status"
       aria-label={`Companion ${def.name}, level ${level}, ${Math.round(hpPct)} percent hull`}
     >

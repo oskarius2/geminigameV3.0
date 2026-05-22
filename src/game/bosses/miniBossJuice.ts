@@ -1,9 +1,10 @@
 import { GameState } from '../types';
-import { getMiniBossDef, type MiniBossId } from './miniBossDefs';
+import { tryGetMiniBossDef, type MiniBossId } from './miniBossDefs';
 
 /** Announce mini-boss entry (spawn popup + light flash). */
 export function applyMiniBossSpawnJuice(state: GameState, miniBossId: MiniBossId): void {
-  const def = getMiniBossDef(miniBossId);
+  const def = tryGetMiniBossDef(miniBossId);
+  if (!def) return;
   state.miniBossSpawnPopupTimer = 2.5;
   state.miniBossSpawnPopupText = def.displayName.toUpperCase();
   state.miniBossSpawnPopupSubtext = 'Miniboss';

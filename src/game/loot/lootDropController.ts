@@ -131,7 +131,11 @@ export function rollLootOnKill(
   const artifactChance = getEffectiveArtifactDropChance(state);
   if (artifactRoll >= artifactChance) return null;
 
-  const vaultId = pickRandomLockedArtifact(getUnlockedArtifactIds(), undefined, artifactRoll);
+  const vaultId = pickRandomLockedArtifact(
+    getUnlockedArtifactIds(),
+    undefined,
+    () => artifactRoll,
+  );
   if (vaultId && ARTIFACTS[vaultId]) {
     return {
       kind: 'vault_artifact',
@@ -221,7 +225,11 @@ export function rollBossLoot(
   const boosted = { ...state, stage: Math.max(state.stage, 3) };
   const artifactChance = getEffectiveArtifactDropChance(boosted) + 0.25;
   if (Math.random() < Math.min(0.95, artifactChance)) {
-    const vaultId = pickRandomLockedArtifact(getUnlockedArtifactIds(), undefined, rng);
+    const vaultId = pickRandomLockedArtifact(
+      getUnlockedArtifactIds(),
+      undefined,
+      () => rng,
+    );
     if (vaultId && ARTIFACTS[vaultId]) {
       return {
         kind: 'vault_artifact',

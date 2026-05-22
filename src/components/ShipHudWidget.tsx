@@ -26,7 +26,8 @@ export function ShipHudWidget({
 }: ShipHudWidgetProps): JSX.Element | null {
   if (isPaused) return null;
 
-  const phoneCompact = hudVariant === 'compact';
+  const phoneNarrow = hudVariant === 'phone-narrow';
+  const phoneCompact = hudVariant === 'compact' || phoneNarrow;
   const landscape = hudVariant === 'landscape';
   const hpPct = playerMaxHP > 0 ? Math.max(0, Math.min(100, (playerHP / playerMaxHP) * 100)) : 0;
   const lowHp = hpPct < 25;
@@ -40,9 +41,9 @@ export function ShipHudWidget({
       initial={{ opacity: 0, x: -12 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ duration: 0.3 }}
-      className={`pointer-events-none w-full ${phoneCompact ? 'max-w-full' : 'max-w-[320px]'}`}
+      className={`pointer-events-none w-full ${phoneNarrow ? 'max-w-[9.5rem]' : phoneCompact ? 'max-w-full' : 'max-w-[320px]'}`}
     >
-      <HudPanel className={`p-3 ${phoneCompact ? 'p-2' : 'p-3 md:p-4'}`}>
+      <HudPanel className={`${phoneNarrow ? 'p-1.5' : phoneCompact ? 'p-2' : 'p-3 md:p-4'}`}>
         <div className="flex items-center gap-2 mb-2">
           <div
             className="w-8 h-8 rounded-lg shrink-0 flex items-center justify-center border"
@@ -56,7 +57,11 @@ export function ShipHudWidget({
             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: ship.color }} />
           </div>
           <div className="min-w-0">
-            <p className="text-sm font-bold uppercase tracking-wide text-white truncate">{ship.name}</p>
+            <p
+              className={`font-bold uppercase tracking-wide text-white truncate ${phoneNarrow ? 'text-xs' : 'text-sm'}`}
+            >
+              {ship.name}
+            </p>
             {!phoneCompact && !landscape && (
               <p className="text-[10px] font-mono uppercase tracking-widest text-cyan-400/60">
                 Stage {stage} · Wave {wave}

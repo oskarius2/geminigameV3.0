@@ -1,34 +1,45 @@
 import type { MiniBossId } from './miniBossDefs';
 import { playSfx } from '../audio/sfx';
+import { onMiniBossSpawn } from '../audio/survivalAudio';
+
+function stingMiniBossSpawn(): void {
+  onMiniBossSpawn();
+  playSfx('miniBossSpawn');
+}
 
 /** Per-archetype spawn sting (falls back to generic miniBossSpawn). */
 export function playMiniBossSpawnSfx(id: MiniBossId): void {
   switch (id) {
     case 'shockwave_sentinel':
-      playSfx('miniBossSpawn');
+      stingMiniBossSpawn();
       break;
     case 'eclipse_dasher':
       playSfx('rails_death_dasher');
-      setTimeout(() => playSfx('miniBossSpawn'), 80);
+      setTimeout(() => stingMiniBossSpawn(), 80);
       break;
     case 'void_harbinger':
       playSfx('rails_void_tear');
       break;
     case 'plasma_splitter':
       playSfx('rails_death_ranged');
-      setTimeout(() => playSfx('miniBossSpawn'), 60);
+      setTimeout(() => stingMiniBossSpawn(), 60);
       break;
     case 'chronos_guardian':
       playSfx('rails_weak_ding');
-      setTimeout(() => playSfx('miniBossSpawn'), 100);
+      setTimeout(() => stingMiniBossSpawn(), 100);
       break;
     case 'swarm_overlord':
       playSfx('rails_death_swarm');
-      setTimeout(() => playSfx('miniBossSpawn'), 50);
+      setTimeout(() => stingMiniBossSpawn(), 50);
       break;
     default:
-      playSfx('miniBossSpawn');
+      stingMiniBossSpawn();
   }
+}
+
+/** Heavy boom for shockwave / plasma detonation / swarm summon bursts. */
+export function playMiniBossExplosionSfx(): void {
+  playSfx('miniBossExplosion');
 }
 
 /** Per-archetype defeat sting. */

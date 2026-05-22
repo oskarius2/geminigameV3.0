@@ -1,0 +1,30 @@
+/**
+ * Premium sci-fi UI — HUD / FUI + glassmorphism layer
+ * Consumed via design tokens + component classes in index.css
+ */
+
+:root {
+  --premium-gold: #e8b84a;
+  --premium-gold-dim: #ca8a04;
+  --premium-gold-glow: 0 0 24px rgba(232, 184, 74, 0.45), 0 0 48px rgba(232, 184, 74, 0.15);
+  --premium-cyan-glow: 0 0 20px rgba(0, 229, 255, 0.35), 0 0 40px rgba(0, 229, 255, 0.12);
+  --premium-glass-bg: rgba(4, 8, 22, 0.72);
+  --premium-glass-border: rgba(0, 229, 255, 0.2);
+  --premium-scanline: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 229, 255, 0.03) 2px,
+    rgba(0, 229, 255, 0.03) 4px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scanline-overlay,
+  .nebula-layer-animate,
+  .logo-pulse,
+  .text-glitch,
+  .data-blink {
+    animation: none !important;
+  }
+}

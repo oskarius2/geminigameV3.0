@@ -6,13 +6,26 @@ interface MiniBossHudProps {
   health: number;
   maxHealth: number;
   auraColor: string;
+  /** inline = inside stacked mobile HUD; overlay = desktop absolute */
+  placement?: 'inline' | 'overlay';
 }
 
-export function MiniBossHud({ displayName, health, maxHealth, auraColor }: MiniBossHudProps) {
+export function MiniBossHud({
+  displayName,
+  health,
+  maxHealth,
+  auraColor,
+  placement = 'overlay',
+}: MiniBossHudProps) {
   const pct = maxHealth > 0 ? Math.max(0, Math.min(100, (health / maxHealth) * 100)) : 0;
 
+  const wrapClass =
+    placement === 'inline'
+      ? 'w-full pointer-events-none'
+      : 'absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-28 w-full max-w-[min(92vw,360px)] px-3 sm:px-4 pointer-events-none';
+
   return (
-    <div className="absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-28 w-full max-w-[360px] px-4 pointer-events-none">
+    <div className={wrapClass}>
       <div
         className="rounded-lg border bg-black/65 backdrop-blur-md p-2"
         style={{ borderColor: `${auraColor}66`, boxShadow: `0 0 20px ${auraColor}33` }}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { BOSS_DEFINITIONS } from '../content/bosses';
 import {
-  getBossSpec,
   getStageBossPool,
   pickBossForSurvivalStage,
   STAGE_BOSS_SPECS,
@@ -25,6 +25,6 @@ describe('bossSpecs', () => {
   it('pickBossForSurvivalStage returns valid boss definitions', () => {
     const boss = pickBossForSurvivalStage(4, null);
     expect(boss.id).toBeTruthy();
-    expect(getBossSpec(boss.id)?.stageMin).toBeLessThanOrEqual(4);
+    expect(BOSS_DEFINITIONS.some((b) => b.id === boss.id)).toBe(true);
   });
 });

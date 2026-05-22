@@ -165,9 +165,31 @@ export const MINI_BOSS_DEFINITIONS: Record<MiniBossId, MiniBossDef> = {
   },
 };
 
+const MINI_BOSS_IDS = Object.keys(MINI_BOSS_DEFINITIONS) as MiniBossId[];
+
+export function isMiniBossId(id: string | undefined | null): id is MiniBossId {
+  return !!id && id in MINI_BOSS_DEFINITIONS;
+}
+
 export function getMiniBossDef(id: MiniBossId): MiniBossDef {
   return MINI_BOSS_DEFINITIONS[id];
 }
+
+/** Safe lookup — returns undefined for missing/invalid ids (avoids render/combat crashes). */
+export function tryGetMiniBossDef(id: string | undefined | null): MiniBossDef | undefined {
+  if (!isMiniBossId(id)) return undefined;
+  return MINI_BOSS_DEFINITIONS[id];
+}
+
+export function getMiniBossDisplayName(id: string | undefined | null): string {
+  return tryGetMiniBossDef(id)?.displayName ?? 'Miniboss';
+}
+
+export function getMiniBossAuraColor(id: string | undefined | null): string {
+  return tryGetMiniBossDef(id)?.auraColor ?? '#c084fc';
+}
+
+export { MINI_BOSS_IDS };
 
 /** Stage 5+ cycles through implemented mini-bosses by wave index. */
 export function pickRotatingMiniBossId(stage: number, waveIndex: number): MiniBossId {

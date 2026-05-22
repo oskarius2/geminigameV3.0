@@ -50,7 +50,7 @@ export const ArtifactInventory: React.FC<ArtifactInventoryProps> = ({
         paddingRight: 'max(1rem, env(safe-area-inset-right))',
       }}
     >
-      <SpaceBackground />
+      <SpaceBackground scanlines />
       <div className="relative z-10 flex flex-col h-full max-w-6xl mx-auto w-full">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-4 gap-4 shrink-0">
           <div>

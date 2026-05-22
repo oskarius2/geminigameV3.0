@@ -11,18 +11,27 @@ interface StatBarProps {
   compact?: boolean;
 }
 
-const VARIANT_CLASS: Record<NonNullable<StatBarProps['variant']>, string> = {
-  health: 'bg-gradient-to-r from-emerald-600 to-emerald-400',
-  energy: 'bg-gradient-to-l from-amber-400 to-amber-500',
-  ultimate: 'bg-gradient-to-r from-fuchsia-500 to-purple-400',
-  neutral: 'bg-gradient-to-r from-cyan-500 to-cyan-400',
-};
-
-const VARIANT_GLOW: Record<NonNullable<StatBarProps['variant']>, string> = {
-  health: '0 0 8px rgba(52,211,153,0.5)',
-  energy: '0 0 8px rgba(251,191,36,0.4)',
-  ultimate: '0 0 8px rgba(217,70,239,0.5)',
-  neutral: '0 0 8px rgba(6,182,212,0.4)',
+const VARIANT: Record<NonNullable<StatBarProps['variant']>, { fill: string; glow: string; track: string }> = {
+  health: {
+    fill: 'linear-gradient(90deg, #008a3a, #00ff6a)',
+    glow: '0 0 10px rgba(0,255,106,0.65), 0 0 20px rgba(0,255,106,0.25)',
+    track: 'rgba(0,255,106,0.05)',
+  },
+  energy: {
+    fill: 'linear-gradient(90deg, #cc8000, #ffaa00)',
+    glow: '0 0 10px rgba(255,170,0,0.6), 0 0 20px rgba(255,170,0,0.2)',
+    track: 'rgba(255,170,0,0.05)',
+  },
+  ultimate: {
+    fill: 'linear-gradient(90deg, #6d1aaa, #c026d3)',
+    glow: '0 0 10px rgba(192,38,211,0.65), 0 0 20px rgba(192,38,211,0.25)',
+    track: 'rgba(192,38,211,0.05)',
+  },
+  neutral: {
+    fill: 'linear-gradient(90deg, #0090a8, #00e5ff)',
+    glow: '0 0 10px rgba(0,229,255,0.55), 0 0 20px rgba(0,229,255,0.2)',
+    track: 'rgba(0,229,255,0.05)',
+  },
 };
 
 export const StatBar: React.FC<StatBarProps> = ({
@@ -34,36 +43,37 @@ export const StatBar: React.FC<StatBarProps> = ({
   compact = false,
 }) => {
   const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  const c = VARIANT[variant];
 
   return (
     <div className={clsx('flex flex-col', align === 'right' && 'items-end')}>
       {(label || align === 'right') && (
         <div
           className={clsx(
-            'flex w-full justify-between mb-1 text-[9px] font-mono uppercase tracking-[0.25em] text-cyan-400/50',
-            compact && 'text-[8px]'
+            'flex w-full justify-between mb-1 font-mono uppercase',
+            compact ? 'text-[8px] tracking-[0.25em]' : 'text-[9px] tracking-[0.3em]',
           )}
+          style={{ color: 'rgba(0,229,255,0.42)' }}
         >
           {align === 'left' && label && <span>{label}</span>}
-          <span className="tabular-nums font-mono text-white/80">{pct.toFixed(0)}%</span>
+          <span className="tabular-nums" style={{ color: 'rgba(240,248,255,0.65)' }}>
+            {pct.toFixed(0)}%
+          </span>
           {align === 'right' && label && <span>{label}</span>}
         </div>
       )}
       <div
-        className={clsx(
-          'w-full rounded-full overflow-hidden',
-          compact ? 'h-1.5' : 'h-2'
-        )}
+        className={clsx('w-full overflow-hidden relative', compact ? 'h-[3px]' : 'h-[5px]')}
         style={{
-          background: 'rgba(15,23,42,0.7)',
-          border: '1px solid rgba(6,182,212,0.08)',
+          background: c.track,
+          boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.06)',
         }}
       >
         <motion.div
-          className={clsx('h-full rounded-full', VARIANT_CLASS[variant], align === 'right' && 'ml-auto')}
+          className={clsx('h-full', align === 'right' && 'ml-auto')}
           animate={{ width: `${pct}%` }}
-          transition={{ type: 'spring', bounce: 0, duration: 0.4 }}
-          style={{ boxShadow: VARIANT_GLOW[variant] }}
+          transition={{ type: 'spring', bounce: 0, duration: 0.32 }}
+          style={{ background: c.fill, boxShadow: c.glow }}
         />
       </div>
     </div>

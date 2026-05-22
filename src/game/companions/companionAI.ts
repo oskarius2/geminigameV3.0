@@ -13,6 +13,7 @@ import {
   type CompanionGameState,
 } from './companionGameState';
 import { applyCompanionPassivesLogic } from './companionPassives';
+import { onCompanionAbility } from '../audio/survivalAudio';
 import {
   updateCompanionBehavior,
   notifyCompanionAbilityUsed,
@@ -220,6 +221,7 @@ export function useActiveAbility(
   syncPlayerStatsFromGame(state, runtime.playerStats);
   const fired = useCompanionAbility(instance, runtime.playerStats, 0);
   if (fired) {
+    onCompanionAbility(instance.id);
     notifyCompanionAbilityUsed(runtime);
     if (runtime.playerStats.currentHealth !== undefined) {
       state.player.health = Math.min(

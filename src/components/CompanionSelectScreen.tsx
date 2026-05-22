@@ -211,7 +211,7 @@ export function CompanionSelectScreen({ onConfirm, onBack }: CompanionSelectScre
         paddingRight: 'max(1rem, env(safe-area-inset-right))',
       }}
     >
-      <SpaceBackground />
+      <SpaceBackground scanlines />
       <div className="relative z-10 flex flex-col flex-1 max-w-7xl mx-auto w-full min-h-0 p-4 sm:p-6">
         <header className="flex flex-wrap items-center justify-between gap-4 shrink-0 mb-4">
           <div>

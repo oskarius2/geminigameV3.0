@@ -26,6 +26,8 @@ interface EquippedLoadoutStripProps {
   showWeapons?: boolean;
   /** Hide artifact chips on narrow phones (swipe / secondary UI later) */
   hideArtifacts?: boolean;
+  /** Slim single panel for mobile footer (ult + nrg only). */
+  slimMobile?: boolean;
 }
 
 export function EquippedLoadoutStrip({
@@ -38,14 +40,20 @@ export function EquippedLoadoutStrip({
   hudVariant,
   showWeapons = false,
   hideArtifacts = false,
+  slimMobile = false,
 }: EquippedLoadoutStripProps) {
-  const compact = hudVariant === 'compact' || hudVariant === 'landscape';
+  const compact =
+    hudVariant === 'compact' || hudVariant === 'landscape' || hudVariant === 'phone-narrow';
+  const centerStack =
+    hudVariant === 'phone-narrow' || hudVariant === 'compact';
   const slots = (['CANNON_A', 'CANNON_B', 'ULTIMATE', 'ARMOR', 'MOBILITY'] as ArtifactSlot[]).filter(
     (s) => equippedArtifacts[s],
   );
 
   return (
-    <div className={`flex flex-col items-end gap-2 ${compact ? 'max-w-[280px]' : 'max-w-[320px]'}`}>
+    <div
+      className={`flex flex-col gap-2 ${centerStack ? 'items-center max-w-[17.5rem] w-full' : `items-end ${compact ? 'max-w-[280px]' : 'max-w-[320px]'}`}`}
+    >
       {!hideArtifacts && slots.length > 0 && (
         <HudPanel className="p-2 flex flex-wrap gap-1.5 justify-end">
           {slots.map((slot) => {
@@ -71,7 +79,7 @@ export function EquippedLoadoutStrip({
         </HudPanel>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className={`flex gap-2 ${centerStack ? 'items-center justify-center w-full' : 'items-end'}`}>
         {showWeapons && (
           <HudPanel className="p-1 flex gap-1 pointer-events-auto">
             {(['CANNON_A', 'CANNON_B'] as const).map((slot) => {
@@ -108,7 +116,9 @@ export function EquippedLoadoutStrip({
           </HudPanel>
         )}
 
-        <HudPanel className={`p-2 space-y-1.5 ${compact ? 'w-24' : 'w-28'}`}>
+        <HudPanel
+          className={`${slimMobile ? 'p-1.5 w-full max-w-[17.5rem]' : `p-2 space-y-1.5 ${compact ? 'w-24' : 'w-28'}`}`}
+        >
           <div>
             <div className="flex justify-between text-[9px] font-mono uppercase text-cyan-400/60 mb-0.5">
               <span>Ult</span>

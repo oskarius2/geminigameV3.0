@@ -8,7 +8,8 @@ import {
   markFired,
   pushProjectile,
 } from '../ai/enemyBehaviors';
-import { getMiniBossDef, type MiniBossId } from './miniBossDefs';
+import { getMiniBossDef, isMiniBossId, tryGetMiniBossDef, type MiniBossId } from './miniBossDefs';
+import { playMiniBossExplosionSfx } from './miniBossSfx';
 import { getMiniBossIncomingDamageMult } from './miniBossPassives';
 
 const SHOCKWAVE_INTERVAL_MS = 4000;
@@ -71,7 +72,8 @@ function fireShockwaveSentinelBurst(
 }
 
 export function fireMiniBossShockwave(state: GameState, enemy: Entity): void {
-  const def = getMiniBossDef(enemy.miniBossId as MiniBossId);
+  const def = tryGetMiniBossDef(enemy.miniBossId);
+  const auraColor = def?.auraColor ?? '#c084fc';
   const player = state.player;
   const dist = player.pos.distanceTo(enemy.pos);
   const maxRadius = 180;
@@ -85,11 +87,12 @@ export function fireMiniBossShockwave(state: GameState, enemy: Entity): void {
     const mag = dir.magnitude() || 1;
     state.player.knockback = dir.normalize().mul(14 + falloff * 10);
     state.screenFlash = Math.max(state.screenFlash, 4);
-    state.screenFlashColor = def.auraColor;
+    state.screenFlashColor = auraColor;
     state.screenshake = Math.min(state.screenshake + 6, 12);
   }
 
-  state.particles.push(...createExplosion(enemy.pos, def.auraColor, 14, 1.2));
+  playMiniBossExplosionSfx();
+  state.particles.push(...createExplosion(enemy.pos, auraColor, 14, 1.2));
   for (let ring = 0; ring < 3; ring++) {
     for (let a = 0; a < 16; a++) {
       const ang = (a / 16) * Math.PI * 2;
@@ -99,7 +102,7 @@ export function fireMiniBossShockwave(state: GameState, enemy: Entity): void {
         velocity: new Vector2(Math.cos(ang) * (2 + ring), Math.sin(ang) * (2 + ring)),
         life: 0.5 + ring * 0.15,
         maxLife: 0.65 + ring * 0.15,
-        color: def.auraColor,
+        color: auraColor,
         size: (40 + ring * 50) * 0.08,
         particleType: 'ring',
       });
@@ -371,7 +374,7 @@ function pushPlasmaBolt(
   const dmg = (enemy.damage ?? 22) * (slow ? 0.9 : 1);
   pushProjectile(state, enemy, angle + spread, 6.5, 9, '#fb923c', dmg * 0.85);
   const bolt = state.projectiles[state.projectiles.length - 1];
-  bolt.explosiveRadius = PLASMA_EXPLOSION_RADIUS;
+  if (bolt) bolt.explosiveRadius = PLASMA_EXPLOSION_RADIUS;
 }
 
 export function applyPlasmaExplosion(
@@ -391,6 +394,7 @@ export function applyPlasmaExplosion(
     state.screenFlash = Math.max(state.screenFlash, 2);
     state.screenFlashColor = '#fb923c';
   }
+  playMiniBossExplosionSfx();
   state.particles.push(...createExplosion(pos, '#fb923c', 12, 1.5));
   state.screenshake = Math.min(state.screenshake + 4, 12);
 }
@@ -428,6 +432,7 @@ function tickChronosGuardian(
   const angleToPlayer = Math.atan2(dy, dx);
   if (dist < 620 && fireCooldownReady(enemy, slow ? 2800 : 1800, state)) {
     markFired(enemy);
+    playMiniBossExplosionSfx();
     fireAtPlayer(state, enemy, angleToPlayer, {
       speed: 8,
       radius: 8,
@@ -481,8 +486,11 @@ function tickSwarmOverlord(
     enemy.miniBossShockwaveTimer = SWARM_SUMMON_INTERVAL_MS;
     const existing = countSwarmMinions(state, enemy.id);
     const toSpawn = Math.min(SWARM_PACK_SIZE, SWARM_MAX_MINIONS - existing);
-    for (let i = 0; i < toSpawn; i++) spawnSwarmPackmate(state, enemy);
-    state.particles.push(...createExplosion(enemy.pos, '#fbbf24', 6, 0.85));
+    if (toSpawn > 0) {
+      playMiniBossExplosionSfx();
+      for (let i = 0; i < toSpawn; i++) spawnSwarmPackmate(state, enemy);
+      state.particles.push(...createExplosion(enemy.pos, '#fbbf24', 6, 0.85));
+    }
   }
 
   const angleToPlayer = Math.atan2(dy, dx);
@@ -537,7 +545,7 @@ export function runMiniBossAttacks(
   dx: number,
   dy: number,
 ): boolean {
-  if (!enemy.miniBossId) return false;
+  if (!isMiniBossId(enemy.miniBossId)) return false;
   const slow = hasTimeSlowEffect(state);
 
   switch (enemy.miniBossId) {

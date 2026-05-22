@@ -1,6 +1,11 @@
-import React from 'react';
+import React, { useCallback, useState } from 'react';
+import { logInventoryOpen } from '../debug/inventoryDebug';
 import { motion } from 'motion/react';
-import { getHudVariant, type HudVariant, type ViewportProfile } from './mobileLayout';
+import {
+  getHudVariant,
+  type HudVariant,
+  type ViewportProfile,
+} from './mobileLayout';
 import { ShipHudWidget } from '../../components/ShipHudWidget';
 import { getShipDef } from '../ships/shipDefs';
 import { ArtifactSlot, GameState, ShipId } from '../types';
@@ -11,6 +16,8 @@ import { ActiveBuffChips } from '../hud/ActiveBuffChips';
 import { HUD_COLORS, HUD_TIMING } from '../hud/hudTokens';
 import { CompanionHUD } from '../../components/CompanionHUD';
 import { MiniBossHud } from '../hud/MiniBossHud';
+import { MobileCornerHud } from './MobileCornerHud';
+import { useCornerHudLayout } from './mobileLayout';
 import type { CompanionId } from '../types';
 
 interface HUDProps {
@@ -97,7 +104,7 @@ export const GameHUD: React.FC<HUDProps> = ({
   compactHud = false,
   isMobile = false,
   hudVariant: hudVariantProp,
-  viewportProfile,
+  viewportProfile = 'desktop',
   landscapeHud = false,
   bossArenaTransition = 0,
   bossActive = false,
@@ -139,46 +146,208 @@ export const GameHUD: React.FC<HUDProps> = ({
   survivalDifficultyLabel,
   miniBossKillsThisRun = 0,
 }) => {
+  const [loadoutExpanded, setLoadoutExpanded] = useState(false);
+
+  const toggleLoadout = useCallback(() => {
+    setLoadoutExpanded((wasExpanded) => {
+      const opening = !wasExpanded;
+      if (opening) {
+        logInventoryOpen(
+          'GameHUD.loadout',
+          equippedArtifacts,
+          threatGameState?.runArtifactsUnlockedThisRun,
+        );
+      }
+      return opening;
+    });
+  }, [equippedArtifacts, threatGameState]);
+
+  const viewportW = typeof window !== 'undefined' ? window.innerWidth : 390;
+  const viewportH = typeof window !== 'undefined' ? window.innerHeight : 844;
+
   const hudVariant: HudVariant =
     hudVariantProp ??
     (viewportProfile
-      ? getHudVariant(
-          viewportProfile,
-          typeof window !== 'undefined' ? window.innerWidth : 390,
-          typeof window !== 'undefined' ? window.innerHeight : 844,
-        )
+      ? getHudVariant(viewportProfile, viewportW, viewportH)
       : landscapeHud
         ? 'landscape'
         : compactHud || isMobile
           ? 'compact'
           : 'full');
 
-  const isPhone = hudVariant === 'compact';
+  const isPhoneNarrow = hudVariant === 'phone-narrow';
   const isLandscape = hudVariant === 'landscape';
+  const isTabletCompact =
+    hudVariant === 'compact' &&
+    (viewportProfile === 'tablet' || viewportProfile === 'phone-portrait');
+  const useStackedHud = isPhoneNarrow || isTabletCompact;
+  const useCornerHud = useCornerHudLayout(viewportProfile, viewportW, viewportH);
   const isDesktopHud = hudVariant === 'full' || hudVariant === 'tablet-landscape';
   const showThreat = gameMode === 'NORMAL' && threatGameState;
   const showDesktopWeapons = hudVariant === 'full';
-  const hideArtifactsOnPhone = isPhone;
+  const hideArtifactsDefault = useStackedHud;
   const hudColumnMax = isDesktopHud ? 'max-w-[320px]' : 'max-w-[300px]';
   const showCompanionHud =
     companionId && companionMaxHealth > 0 && gameMode === 'NORMAL';
   const bossHpPct =
     bossMaxHealth > 0 ? Math.max(0, Math.min(100, (bossHealth / bossMaxHealth) * 100)) : 0;
 
-  const bottomPad = isPhone
-    ? 'pb-[max(5.5rem,env(safe-area-inset-bottom))]'
-    : isLandscape
-      ? 'pb-[max(0.5rem,env(safe-area-inset-bottom))]'
-      : 'pb-[max(1rem,env(safe-area-inset-bottom))]';
+  const scorePanelProps = {
+    score,
+    survivalTime,
+    threatLevel,
+    stage,
+    enemiesToKill,
+    stageTransition,
+    bossArenaTransition,
+    bossActive,
+    gameMode,
+    cardTimer,
+    cardInterval,
+    augmentTier,
+    hudVariant,
+    onOpenMenu,
+    survivalDifficultyLabel,
+    miniBossKillsThisRun,
+  };
+
+  const shipWidget =
+    selectedShip && getShipDef(selectedShip) ? (
+      <ShipHudWidget
+        ship={getShipDef(selectedShip)!}
+        playerHP={health}
+        playerMaxHP={maxHealth}
+        stage={stage}
+        wave={wave}
+        isPaused={isPaused}
+        hudVariant={hudVariant}
+      />
+    ) : null;
+
+  const companionBlock =
+    showCompanionHud && companionId ? (
+      <CompanionHUD
+        companionId={companionId}
+        level={companionLevel}
+        health={companionHealth}
+        maxHealth={companionMaxHealth}
+        abilityName={companionAbilityName}
+        abilityCooldownRemaining={companionAbilityCooldown}
+        abilityCooldownMax={companionAbilityCooldownMax}
+        energy={companionEnergy}
+        hudVariant={hudVariant}
+        className={isPhoneNarrow ? 'mt-1' : 'mt-2'}
+      />
+    ) : null;
+
+  const bottomLoadout = (
+    <EquippedLoadoutStrip
+      equippedArtifacts={equippedArtifacts}
+      activeWeaponSlot={activeWeaponSlot}
+      onWeaponSwitch={onWeaponSwitch}
+      energy={energy}
+      maxEnergy={maxEnergy}
+      ultimateCharge={ultimateCharge}
+      hudVariant={hudVariant}
+      showWeapons={showDesktopWeapons}
+      hideArtifacts={hideArtifactsDefault && !loadoutExpanded}
+      slimMobile={useStackedHud}
+    />
+  );
+
+  const buffChips = !useStackedHud ? (
+    <ActiveBuffChips buffs={buffs} extraLifeCharges={extraLifeCharges} hudVariant={hudVariant} />
+  ) : null;
+
+  const threatBlock =
+    showThreat && threatGameState ? (
+      <ThreatBar
+        state={threatGameState}
+        size={useStackedHud ? 'md' : isDesktopHud ? 'lg' : 'md'}
+        layout="stacked"
+        showTierAboveBar={!useStackedHud}
+        className="w-full"
+      />
+    ) : null;
+
+  const bossBar =
+    bossActive && bossMaxHealth > 0 ? (
+      <div className={`w-full ${useStackedHud || isLandscape ? '' : 'absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-30 px-4'}`}>
+        <div className="rounded-lg border border-rose-500/40 bg-black/60 backdrop-blur-md p-2">
+          <p className="text-[10px] font-mono uppercase tracking-widest text-rose-300 mb-1 text-center">
+            Boss
+          </p>
+          <div className="h-3 rounded-full overflow-hidden bg-black/50 border border-white/10">
+            <div
+              className="h-full rounded-full transition-[width] duration-300 ease-out"
+              style={{
+                width: `${bossHpPct}%`,
+                background: `linear-gradient(90deg, ${HUD_COLORS.danger}, #f97316)`,
+              }}
+            />
+          </div>
+        </div>
+      </div>
+    ) : null;
+
+  /** Mobile / tablet portrait / phone landscape: corner zones. */
+  if (useCornerHud) {
+    return (
+      <MobileCornerHud
+        health={health}
+        maxHealth={maxHealth}
+        survivalTime={survivalTime}
+        score={score}
+        stage={stage}
+        enemiesToKill={enemiesToKill}
+        stageTransition={stageTransition}
+        bossArenaTransition={bossArenaTransition}
+        bossActive={bossActive}
+        gameMode={gameMode}
+        onOpenMenu={onOpenMenu}
+        onWeaponSwitch={onWeaponSwitch}
+        activeWeaponSlot={activeWeaponSlot}
+        energy={energy}
+        maxEnergy={maxEnergy}
+        ultimateCharge={ultimateCharge}
+        selectedShip={selectedShip}
+        companionId={companionId}
+        companionLevel={companionLevel}
+        companionHealth={companionHealth}
+        companionMaxHealth={companionMaxHealth}
+        companionAbilityCooldown={companionAbilityCooldown}
+        companionAbilityCooldownMax={companionAbilityCooldownMax}
+        equippedArtifacts={equippedArtifacts}
+        threatGameState={threatGameState}
+        buffs={buffs}
+        extraLifeCharges={extraLifeCharges}
+        survivalDifficultyLabel={survivalDifficultyLabel}
+        miniBossActive={miniBossActive}
+        miniBossDisplayName={miniBossDisplayName}
+        miniBossHealth={miniBossHealth}
+        miniBossMaxHealth={miniBossMaxHealth}
+        miniBossAuraColor={miniBossAuraColor}
+        bossHealth={bossHealth}
+        bossMaxHealth={bossMaxHealth}
+        hudVariant={hudVariant}
+        viewportProfile={viewportProfile}
+        viewportW={viewportW}
+        viewportH={viewportH}
+        loadoutExpanded={loadoutExpanded}
+        onToggleLoadout={toggleLoadout}
+      />
+    );
+  }
+
+  /** Desktop / tablet landscape: spread layout. */
+  const bottomPad = 'pb-[max(1rem,env(safe-area-inset-bottom))]';
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: HUD_TIMING.fadeIn }}
-      className={`absolute inset-0 pointer-events-none flex flex-col font-sans z-10 ${
-        isLandscape ? 'p-1' : isPhone ? 'p-2 pt-[max(0.5rem,env(safe-area-inset-top))]' : 'p-4 md:p-6'
-      }`}
+      className="absolute inset-0 pointer-events-none flex flex-col font-sans z-10 p-4 md:p-6"
     >
       {miniBossActive && miniBossMaxHealth > 0 && !bossActive && (
         <MiniBossHud
@@ -189,122 +358,15 @@ export const GameHUD: React.FC<HUDProps> = ({
         />
       )}
 
-      {bossActive && bossMaxHealth > 0 && (
-        <div className="absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-30 w-full max-w-[400px] px-4">
-          <div className="rounded-lg border border-rose-500/40 bg-black/60 backdrop-blur-md p-2">
-            <p className="text-[10px] font-mono uppercase tracking-widest text-rose-300 mb-1 text-center">
-              Boss
-            </p>
-            <div className="h-3 rounded-full overflow-hidden bg-black/50 border border-white/10">
-              <div
-                className="h-full rounded-full transition-[width] duration-300 ease-out"
-                style={{
-                  width: `${bossHpPct}%`,
-                  background: `linear-gradient(90deg, ${HUD_COLORS.danger}, #f97316)`,
-                }}
-              />
-            </div>
-          </div>
-        </div>
-      )}
+      {bossBar}
 
-      {/* TOP: ship left, score right (phone: score full width above ship) */}
-      {isPhone ? (
-        <div className="z-20 flex flex-col gap-2 w-full">
-          <ScorePanel
-            score={score}
-            survivalTime={survivalTime}
-            threatLevel={threatLevel}
-            stage={stage}
-            enemiesToKill={enemiesToKill}
-            stageTransition={stageTransition}
-            bossArenaTransition={bossArenaTransition}
-            bossActive={bossActive}
-            gameMode={gameMode}
-            cardTimer={cardTimer}
-            cardInterval={cardInterval}
-            augmentTier={augmentTier}
-            hudVariant={hudVariant}
-            onOpenMenu={onOpenMenu}
-            survivalDifficultyLabel={survivalDifficultyLabel}
-            miniBossKillsThisRun={miniBossKillsThisRun}
-          />
-          {selectedShip && (
-            <ShipHudWidget
-              ship={getShipDef(selectedShip)!}
-              playerHP={health}
-              playerMaxHP={maxHealth}
-              stage={stage}
-              wave={wave}
-              isPaused={isPaused}
-              hudVariant={hudVariant}
-            />
-          )}
-          {showCompanionHud && (
-            <CompanionHUD
-              companionId={companionId}
-              level={companionLevel}
-              health={companionHealth}
-              maxHealth={companionMaxHealth}
-              abilityName={companionAbilityName}
-              abilityCooldownRemaining={companionAbilityCooldown}
-              abilityCooldownMax={companionAbilityCooldownMax}
-              energy={companionEnergy}
-              hudVariant={hudVariant}
-              className="mt-2"
-            />
-          )}
+      <div className="z-20 flex justify-between items-start gap-3 md:gap-5 w-full">
+        <div className={`min-w-0 flex-1 ${hudColumnMax}`}>
+          {shipWidget}
+          {companionBlock}
         </div>
-      ) : (
-        <div className="z-20 flex justify-between items-start gap-3 md:gap-5 w-full">
-          <div className={`min-w-0 flex-1 ${hudColumnMax}`}>
-            {selectedShip && (
-              <ShipHudWidget
-                ship={getShipDef(selectedShip)!}
-                playerHP={health}
-                playerMaxHP={maxHealth}
-                stage={stage}
-                wave={wave}
-                isPaused={isPaused}
-                hudVariant={hudVariant}
-              />
-            )}
-            {showCompanionHud && (
-              <CompanionHUD
-                companionId={companionId}
-                level={companionLevel}
-                health={companionHealth}
-                maxHealth={companionMaxHealth}
-                abilityName={companionAbilityName}
-                abilityCooldownRemaining={companionAbilityCooldown}
-                abilityCooldownMax={companionAbilityCooldownMax}
-                energy={companionEnergy}
-                hudVariant={hudVariant}
-                className="mt-2"
-              />
-            )}
-          </div>
-          <ScorePanel
-            score={score}
-            survivalTime={survivalTime}
-            threatLevel={threatLevel}
-            stage={stage}
-            enemiesToKill={enemiesToKill}
-            stageTransition={stageTransition}
-            bossArenaTransition={bossArenaTransition}
-            bossActive={bossActive}
-            gameMode={gameMode}
-            cardTimer={cardTimer}
-            cardInterval={cardInterval}
-            augmentTier={augmentTier}
-            hudVariant={hudVariant}
-            onOpenMenu={onOpenMenu}
-            className="shrink-0"
-            survivalDifficultyLabel={survivalDifficultyLabel}
-            miniBossKillsThisRun={miniBossKillsThisRun}
-          />
-        </div>
-      )}
+        <ScorePanel {...scorePanelProps} className="shrink-0" />
+      </div>
 
       <div className="flex-1 min-h-0" aria-hidden />
 
@@ -317,57 +379,21 @@ export const GameHUD: React.FC<HUDProps> = ({
         </div>
       )}
 
-      {/* BOTTOM: loadout + buffs; mobile = threat centered above loadout */}
       <div className={`z-20 w-full ${bottomPad}`}>
         {isDesktopHud ? (
           <div className="flex items-end justify-end gap-4 md:gap-6 w-full">
             <div className="flex flex-col items-end gap-2 shrink-0">
-              <ActiveBuffChips
-                buffs={buffs}
-                extraLifeCharges={extraLifeCharges}
-                hudVariant={hudVariant}
-              />
-              <EquippedLoadoutStrip
-                equippedArtifacts={equippedArtifacts}
-                activeWeaponSlot={activeWeaponSlot}
-                onWeaponSwitch={onWeaponSwitch}
-                energy={energy}
-                maxEnergy={maxEnergy}
-                ultimateCharge={ultimateCharge}
-                hudVariant={hudVariant}
-                showWeapons={showDesktopWeapons}
-                hideArtifacts={hideArtifactsOnPhone}
-              />
+              {buffChips}
+              {bottomLoadout}
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2 w-full">
-            {showThreat && (
-              <ThreatBar
-                state={threatGameState}
-                size={isPhone ? 'md' : 'lg'}
-                layout="stacked"
-                className="px-1"
-              />
-            )}
+            {threatBlock}
             <div className="w-full flex justify-end items-end gap-2 px-1">
               <div className="flex flex-col items-end gap-2 shrink-0">
-                <ActiveBuffChips
-                  buffs={buffs}
-                  extraLifeCharges={extraLifeCharges}
-                  hudVariant={hudVariant}
-                />
-                <EquippedLoadoutStrip
-                  equippedArtifacts={equippedArtifacts}
-                  activeWeaponSlot={activeWeaponSlot}
-                  onWeaponSwitch={onWeaponSwitch}
-                  energy={energy}
-                  maxEnergy={maxEnergy}
-                  ultimateCharge={ultimateCharge}
-                  hudVariant={hudVariant}
-                  showWeapons={showDesktopWeapons}
-                  hideArtifacts={hideArtifactsOnPhone}
-                />
+                {buffChips}
+                {bottomLoadout}
               </div>
             </div>
           </div>

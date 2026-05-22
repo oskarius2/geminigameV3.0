@@ -1,9 +1,22 @@
 export const MIN_TOUCH_PX = 48;
 export const PHONE_SHORT_SIDE_PX = 600;
 export const DESKTOP_MIN_WIDTH_PX = 768;
+export const MOBILE_NARROW_SHORT_SIDE_PX = 480;
+export const PHONE_JOYSTICK_PX = 80;
 
 export type ViewportProfile = 'desktop' | 'tablet' | 'phone-portrait' | 'phone-landscape';
-export type HudVariant = 'full' | 'compact' | 'landscape' | 'tablet-landscape';
+export type HudVariant = 'full' | 'compact' | 'landscape' | 'tablet-landscape' | 'phone-narrow';
+
+export interface HudInsets {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
+export function isNarrowViewport(w: number, h: number): boolean {
+  return Math.min(w, h) <= MOBILE_NARROW_SHORT_SIDE_PX;
+}
 
 export function isCoarsePointer(): boolean {
   if (typeof window === 'undefined') return false;
@@ -28,7 +41,19 @@ export function getViewportProfile(
   const coarse = opts?.coarse ?? isCoarsePointer();
   const fine = opts?.fine ?? isFinePointer();
 
-  if ((fine && !coarse) || (!coarse && w >= DESKTOP_MIN_WIDTH_PX)) {
+  // Width-first: DevTools device mode still has a fine pointer — use mobile HUD at ≤768px.
+  if (w <= DESKTOP_MIN_WIDTH_PX) {
+    if (shortSide >= PHONE_SHORT_SIDE_PX) {
+      return 'tablet';
+    }
+    return isPortraitViewport(w, h) ? 'phone-portrait' : 'phone-landscape';
+  }
+
+  if (fine && !coarse) {
+    return 'desktop';
+  }
+
+  if (!coarse) {
     return 'desktop';
   }
 
@@ -47,7 +72,17 @@ export function useReducedEffects(profile: ViewportProfile): boolean {
   return profile !== 'desktop';
 }
 
+/** Mobile/tablet portrait + phone landscape: absolute corner HUD (not center stack). */
+export function useCornerHudLayout(profile: ViewportProfile, w: number, h: number): boolean {
+  if (profile === 'desktop') return false;
+  const variant = getHudVariant(profile, w, h);
+  return variant === 'phone-narrow' || variant === 'compact' || variant === 'landscape';
+}
+
 export function getHudVariant(profile: ViewportProfile, w: number, h: number): HudVariant {
+  if (profile !== 'desktop' && isNarrowViewport(w, h)) {
+    return 'phone-narrow';
+  }
   switch (profile) {
     case 'desktop':
       return 'full';
@@ -60,17 +95,71 @@ export function getHudVariant(profile: ViewportProfile, w: number, h: number): H
   }
 }
 
-export function getJoystickSize(profile: ViewportProfile): number {
+export function getJoystickSize(profile: ViewportProfile, w?: number, h?: number): number {
+  const width = w ?? (typeof window !== 'undefined' ? window.innerWidth : 390);
+  const height = h ?? (typeof window !== 'undefined' ? window.innerHeight : 844);
+  const variant = getHudVariant(profile, width, height);
+  if (variant === 'phone-narrow') return PHONE_JOYSTICK_PX;
+  if (variant === 'landscape') return 100;
   switch (profile) {
     case 'phone-portrait':
-      return 76;
+      return PHONE_JOYSTICK_PX;
     case 'phone-landscape':
-      return 68;
+      return PHONE_JOYSTICK_PX;
     case 'tablet':
       return 88;
     default:
       return 128;
   }
+}
+
+/** Reserve space so HUD does not overlap move/aim joysticks. */
+export function getMobileHudInsets(
+  profile: ViewportProfile,
+  hudVariant: HudVariant,
+  joystickSize: number,
+  leftHanded = false,
+): HudInsets {
+  const joyPad = joystickSize + 20;
+  const aimPad = joystickSize + 12;
+  const moveSide = leftHanded ? 'right' : 'left';
+  const aimSide = leftHanded ? 'left' : 'right';
+
+  const base: HudInsets = {
+    top: 4,
+    bottom: joystickSize + 56,
+    left: moveSide === 'left' ? joyPad : aimPad,
+    right: moveSide === 'left' ? aimPad : joyPad,
+  };
+
+  if (hudVariant === 'phone-narrow') {
+    return {
+      top: 4,
+      bottom: joystickSize + 96,
+      left: moveSide === 'left' ? joyPad : 12,
+      right: moveSide === 'left' ? 12 : joyPad,
+    };
+  }
+  if (hudVariant === 'landscape') {
+    return {
+      top: 4,
+      bottom: joystickSize + 56,
+      left: moveSide === 'left' ? joyPad : 12,
+      right: moveSide === 'left' ? 12 : joyPad,
+    };
+  }
+  if (hudVariant === 'compact') {
+    return {
+      top: 8,
+      bottom: joystickSize + 92,
+      left: moveSide === 'left' ? joyPad : 16,
+      right: moveSide === 'left' ? 16 : joyPad,
+    };
+  }
+  if (hudVariant === 'tablet-landscape') {
+    return { top: 8, bottom: 24, left: 16, right: 16 };
+  }
+  return { top: 16, bottom: 88, left: 24, right: 24 };
 }
 
 export type TouchActionSize = 'compact' | 'medium' | 'large';
@@ -90,7 +179,7 @@ export function getViewportSnapshot(w: number, h: number): ViewportSnapshot {
   return {
     profile,
     hudVariant,
-    compactHud: hudVariant === 'compact',
+    compactHud: hudVariant === 'compact' || hudVariant === 'phone-narrow',
     landscapeHud: hudVariant === 'landscape',
     showTouchControls: showTouchControls(profile),
     reducedEffects: useReducedEffects(profile),
@@ -113,6 +202,7 @@ export function getBuffChipsTopClass(profile: ViewportProfile, w?: number, h?: n
   const width = w ?? (typeof window !== 'undefined' ? window.innerWidth : 1024);
   const height = h ?? (typeof window !== 'undefined' ? window.innerHeight : 768);
   const variant = getHudVariant(profile, width, height);
+  if (variant === 'phone-narrow') return 'top-[6.5rem]';
   if (variant === 'landscape') return 'top-12';
   if (variant === 'compact') return 'top-[4.75rem]';
   if (variant === 'tablet-landscape') return 'top-[4.5rem]';

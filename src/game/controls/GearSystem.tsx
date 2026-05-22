@@ -88,7 +88,7 @@ export const GearSystem: React.FC<GearSystemProps> = ({
         paddingRight: 'max(1rem, env(safe-area-inset-right))',
       }}
     >
-      <SpaceBackground />
+      <SpaceBackground scanlines />
 
       <div className="relative z-10 flex flex-col flex-1 overflow-hidden p-4 sm:p-8">
       <div className="flex flex-row justify-between items-center gap-4 mb-4 sm:mb-6 shrink-0">

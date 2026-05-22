@@ -180,7 +180,7 @@ export const CampaignSelect: React.FC<CampaignSelectProps> = ({ onStartLevel, on
         paddingRight: 'max(1rem, env(safe-area-inset-right))',
       }}
     >
-      <SpaceBackground />
+      <SpaceBackground scanlines />
 
       <div className="relative z-10 flex flex-col items-center overflow-y-auto flex-1 px-4 md:px-8 pb-8">
         <div className="w-full max-w-lg">

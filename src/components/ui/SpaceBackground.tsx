@@ -11,8 +11,8 @@ function StarField() {
     if (!ctx) return;
 
     let animId: number;
-    const stars: { x: number; y: number; z: number; pz: number }[] = [];
-    const COUNT = 220;
+    const stars: { x: number; y: number; z: number; pz: number; twinkle: number }[] = [];
+    const COUNT = 280;
 
     const resize = () => {
       canvas.width = canvas.offsetWidth;
@@ -23,25 +23,26 @@ function StarField() {
 
     for (let i = 0; i < COUNT; i++) {
       stars.push({
-        x: Math.random() * canvas.width - canvas.width / 2,
-        y: Math.random() * canvas.height - canvas.height / 2,
-        z: Math.random() * canvas.width,
+        x: Math.random() * 2000 - 1000,
+        y: Math.random() * 2000 - 1000,
+        z: Math.random() * 800,
         pz: 0,
+        twinkle: Math.random(),
       });
     }
 
     const draw = () => {
       const W = canvas.width;
       const H = canvas.height;
-      ctx.fillStyle = 'rgba(2,6,23,0.25)';
+      ctx.fillStyle = 'rgba(1,2,8,0.28)';
       ctx.fillRect(0, 0, W, H);
-
       const cx = W / 2;
       const cy = H / 2;
+      const t = Date.now() * 0.001;
 
       for (const s of stars) {
         s.pz = s.z;
-        s.z -= 1.4;
+        s.z -= 1.3;
         if (s.z <= 0) {
           s.x = Math.random() * W - cx;
           s.y = Math.random() * H - cy;
@@ -52,13 +53,14 @@ function StarField() {
         const sy = (s.y / s.z) * H + cy;
         const px = (s.x / s.pz) * W + cx;
         const py = (s.y / s.pz) * H + cy;
-        const size = Math.max(0.3, (1 - s.z / W) * 2.2);
-        const bright = Math.min(1, (1 - s.z / W) * 1.4);
+        const size = Math.max(0.35, (1 - s.z / W) * 2.6);
+        const bright = Math.min(1, (1 - s.z / W) * 1.5);
+        const flicker = 0.6 + 0.4 * Math.sin(t * 3.5 + s.twinkle * 20);
 
         ctx.beginPath();
         ctx.moveTo(px, py);
         ctx.lineTo(sx, sy);
-        ctx.strokeStyle = `rgba(${148 + Math.floor(bright * 60)},${220 + Math.floor(bright * 35)},${255},${bright * 0.85})`;
+        ctx.strokeStyle = `rgba(${120 + Math.floor(bright * 80)},${200 + Math.floor(bright * 40)},${255},${bright * flicker * 0.88})`;
         ctx.lineWidth = size;
         ctx.stroke();
       }
@@ -72,46 +74,43 @@ function StarField() {
     };
   }, []);
 
-  return (
-    <canvas
-      ref={canvasRef}
-      className="absolute inset-0 w-full h-full"
-      style={{ background: 'transparent' }}
-    />
-  );
+  return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
 }
 
 export const HudCorner = ({ position }: { position: 'tl' | 'tr' | 'bl' | 'br' }) => {
-  const base = 'absolute w-5 h-5 border-cyan-400/50';
+  const base = 'absolute w-6 h-6 pointer-events-none';
   const corners = {
-    tl: 'top-0 left-0 border-t-2 border-l-2',
-    tr: 'top-0 right-0 border-t-2 border-r-2',
-    bl: 'bottom-0 left-0 border-b-2 border-l-2',
-    br: 'bottom-0 right-0 border-b-2 border-r-2',
+    tl: 'top-0 left-0 border-t-2 border-l-2 border-cyan-400/60',
+    tr: 'top-0 right-0 border-t-2 border-r-2 border-cyan-400/45',
+    bl: 'bottom-0 left-0 border-b-2 border-l-2 border-cyan-400/35',
+    br: 'bottom-0 right-0 border-b-2 border-r-2 border-cyan-400/55',
   };
-  return <span className={`${base} ${corners[position]}`} />;
+  return <span className={`${base} ${corners[position]}`} aria-hidden />;
 };
 
-export const SpaceBackground: React.FC = () => (
+interface SpaceBackgroundProps {
+  scanlines?: boolean;
+}
+
+export const SpaceBackground: React.FC<SpaceBackgroundProps> = ({ scanlines = false }) => (
   <>
     <div className="absolute inset-0">
       <StarField />
     </div>
     <div
-      className="absolute inset-0 pointer-events-none"
+      className="absolute inset-0 pointer-events-none opacity-[0.04]"
       style={{
-        backgroundImage: `
-          linear-gradient(rgba(6,182,212,0.04) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(6,182,212,0.04) 1px, transparent 1px)
-        `,
-        backgroundSize: '48px 48px',
-        maskImage: 'radial-gradient(ellipse 80% 70% at 50% 50%, black 30%, transparent 80%)',
+        backgroundImage:
+          'linear-gradient(rgba(0,229,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,1) 1px, transparent 1px)',
+        backgroundSize: '56px 56px',
+        maskImage: 'radial-gradient(ellipse 85% 75% at 50% 45%, black 25%, transparent 78%)',
       }}
     />
+    {scanlines && <div className="scanline-overlay" aria-hidden />}
     <motion.div
-      className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/30 to-transparent pointer-events-none"
+      className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent pointer-events-none"
       animate={{ top: ['0%', '100%'] }}
-      transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
+      transition={{ duration: 10, repeat: Infinity, ease: 'linear' }}
     />
   </>
 );

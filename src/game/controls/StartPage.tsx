@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Play, Map, MoveHorizontal, Wrench, Sparkles } from 'lucide-react';
+import { Play, Map, MoveHorizontal, Wrench, Sparkles, ChevronRight } from 'lucide-react';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
-import { GhostButton } from '../../components/ui/GhostButton';
+import { SecondaryButton } from '../../components/ui/SecondaryButton';
+import { TacticalFrame } from '../../components/ui/TacticalFrame';
 import { APP_VERSION } from '../design/uiTokens';
 import {
   getSurvivalHighScore,
@@ -37,7 +38,7 @@ function StarField() {
 
     let animId: number;
     const stars: { x: number; y: number; z: number; pz: number; twinkle: number }[] = [];
-    const COUNT = 220;
+    const COUNT = 300;
 
     const resize = () => {
       canvas.width = canvas.offsetWidth;
@@ -47,19 +48,13 @@ function StarField() {
     window.addEventListener('resize', resize);
 
     for (let i = 0; i < COUNT; i++) {
-      stars.push({
-        x: Math.random() * canvas.width - canvas.width / 2,
-        y: Math.random() * canvas.height - canvas.height / 2,
-        z: Math.random() * canvas.width,
-        pz: 0,
-        twinkle: Math.random(),
-      });
+      stars.push({ x: Math.random() * 2000 - 1000, y: Math.random() * 2000 - 1000, z: Math.random() * 800, pz: 0, twinkle: Math.random() });
     }
 
     const draw = () => {
       const W = canvas.width;
       const H = canvas.height;
-      ctx.fillStyle = 'rgba(2,6,23,0.25)';
+      ctx.fillStyle = 'rgba(1,2,8,0.2)';
       ctx.fillRect(0, 0, W, H);
       const cx = W / 2;
       const cy = H / 2;
@@ -78,14 +73,14 @@ function StarField() {
         const sy = (s.y / s.z) * H + cy;
         const px = (s.x / s.pz) * W + cx;
         const py = (s.y / s.pz) * H + cy;
-        const size = Math.max(0.3, (1 - s.z / W) * 2.2);
-        const bright = Math.min(1, (1 - s.z / W) * 1.4);
-        const flicker = 0.7 + 0.3 * Math.sin(t * 3 + s.twinkle * 20);
+        const size = Math.max(0.35, (1 - s.z / W) * 2.5);
+        const bright = Math.min(1, (1 - s.z / W) * 1.5);
+        const flicker = 0.65 + 0.35 * Math.sin(t * 3.2 + s.twinkle * 22);
 
         ctx.beginPath();
         ctx.moveTo(px, py);
         ctx.lineTo(sx, sy);
-        ctx.strokeStyle = `rgba(${148 + Math.floor(bright * 60)},${220 + Math.floor(bright * 35)},${255},${bright * flicker * 0.85})`;
+        ctx.strokeStyle = `rgba(${130 + Math.floor(bright * 70)},${210 + Math.floor(bright * 35)},${255},${bright * flicker * 0.92})`;
         ctx.lineWidth = size;
         ctx.stroke();
       }
@@ -100,6 +95,17 @@ function StarField() {
   }, []);
 
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
+}
+
+const CLIP_DIFF = 'polygon(4px 0%, 100% 0%, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0% 100%, 0% 4px)';
+
+function StatRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="mb-2 last:mb-0">
+      <p className="hud-micro-label">{label}</p>
+      <p className="font-display font-bold text-sm tabular-nums text-[#f0f8ff]">{value}</p>
+    </div>
+  );
 }
 
 export const StartPage: React.FC<StartPageProps> = ({
@@ -120,11 +126,12 @@ export const StartPage: React.FC<StartPageProps> = ({
     setSurvivalDifficulty(value);
   };
 
+  const hasStats = bestScore > 0 || longest > 0 || totalMiniBossKills > 0;
+
   return (
     <div
-      className="absolute inset-0 z-[500] overflow-hidden flex flex-col items-center justify-center"
+      className="absolute inset-0 z-[500] overflow-hidden flex flex-col items-center justify-center bg-[var(--bg-void)]"
       style={{
-        background: 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,212,255,0.06) 0%, transparent 70%), #020617',
         paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
         paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
         paddingLeft: 'max(1rem, env(safe-area-inset-left))',
@@ -134,163 +141,164 @@ export const StartPage: React.FC<StartPageProps> = ({
       <div className="absolute inset-0">
         <StarField />
       </div>
-      <div className="absolute inset-0 nebula-layer nebula-layer-animate pointer-events-none opacity-80" />
+      <div className="absolute inset-0 nebula-layer nebula-layer-animate pointer-events-none opacity-95" />
+      <div className="scanline-overlay opacity-25" aria-hidden />
 
-      <div className="absolute top-4 right-4 sm:top-6 sm:right-8 z-20 text-right font-mono text-sm text-[var(--hud-accent)]">
-        <p>
-          <span className="text-white/40 uppercase text-[10px] tracking-widest mr-2">Best</span>
-          {bestScore.toLocaleString()} pts
-        </p>
-        <p className="mt-1">
-          <span className="text-white/40 uppercase text-[10px] tracking-widest mr-2">Longest</span>
-          {formatSurvivalTime(longest)}
-        </p>
-        {totalMiniBossKills > 0 && (
-          <p className="mt-1">
-            <span className="text-white/40 uppercase text-[10px] tracking-widest mr-2">MB</span>
-            {totalMiniBossKills}
-          </p>
-        )}
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.035]"
+        style={{
+          backgroundImage:
+            'linear-gradient(rgba(0,229,255,1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,229,255,1) 1px, transparent 1px)',
+          backgroundSize: '64px 64px',
+        }}
+      />
+
+      {hasStats && (
+        <motion.div
+          initial={{ opacity: 0, x: 16 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.4, duration: 0.5 }}
+          className="absolute top-4 right-4 sm:top-6 sm:right-6 z-20"
+        >
+          <TacticalFrame size="sm" glow className="px-3.5 py-2.5 text-right min-w-[120px]">
+            {bestScore > 0 && <StatRow label="Best Score" value={bestScore.toLocaleString()} />}
+            {longest > 0 && <StatRow label="Longest Run" value={formatSurvivalTime(longest)} />}
+            {totalMiniBossKills > 0 && <StatRow label="Mini Bosses" value={String(totalMiniBossKills)} />}
+          </TacticalFrame>
+        </motion.div>
+      )}
+
+      <div className="absolute bottom-4 left-4 z-20 font-mono uppercase text-[8px] tracking-[0.28em] text-white/20">
+        SYS·v{APP_VERSION}
       </div>
 
-      <div className="absolute bottom-4 left-4 z-20 font-mono text-[8px] text-white/25 uppercase tracking-widest">
-        v{APP_VERSION}
-      </div>
-
-      <div className="relative z-10 flex flex-col items-center w-full max-w-md px-8">
-        <motion.h1
-          initial={{ opacity: 0, y: 12 }}
+      <div className="relative z-10 flex flex-col items-center w-full max-w-[260px] px-2">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="logo-pulse font-display font-bold uppercase tracking-[0.2em] text-white text-center"
-          style={{
-            fontSize: 'clamp(2.5rem, 10vw, 4.5rem)',
-            textShadow: '0 0 40px rgba(0,212,255,0.5), 0 0 80px rgba(0,212,255,0.2)',
-          }}
+          transition={{ duration: 0.55 }}
+          className="text-center mb-8 sm:mb-10"
         >
-          SPACEHERO
-        </motion.h1>
+          <div className="badge-tactical mb-5 mx-auto">
+            <span className="data-blink text-[#00e5ff]" aria-hidden>
+              ◆
+            </span>
+            Neural Combat System
+          </div>
 
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.15, duration: 0.5 }}
-          className="mt-4 text-center font-mono text-sm uppercase tracking-[0.35em] text-[var(--hud-accent)]/80"
-        >
-          Survival is the only victory
-        </motion.p>
+          <h1 className="title-hero logo-pulse text-glitch text-center" style={{ fontSize: 'clamp(2.6rem, 11vw, 5.2rem)' }}>
+            SPACE
+            <br />
+            <span style={{ color: 'var(--color-gold)' }}>HERO</span>
+          </h1>
 
-        <div className="mt-8 sm:mt-16 flex flex-col gap-4 w-full max-w-[200px] sm:max-w-[220px]">
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25, duration: 0.4 }}
-            className="w-full"
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.2, duration: 0.5 }}
+            className="mt-5 font-mono uppercase text-center text-[10px] tracking-[0.38em] text-cyan-400/60"
           >
-            <p className="mb-2 text-center font-mono text-[10px] uppercase tracking-widest text-white/45">
-              Svårighet
-            </p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {(['easy', 'normal', 'hard'] as SurvivalDifficulty[]).map((d) => (
+            Survival is the only victory
+          </motion.p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.22, duration: 0.4 }}
+          className="w-full mb-4"
+        >
+          <p className="mb-2 text-center hud-micro-label">Svårighet</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {(['easy', 'normal', 'hard'] as SurvivalDifficulty[]).map((d) => {
+              const active = difficulty === d;
+              return (
                 <button
                   key={d}
                   type="button"
                   onClick={() => selectDifficulty(d)}
-                  className={`min-h-touch rounded border px-1 py-2 font-mono text-[11px] uppercase tracking-wide transition-colors ${
-                    difficulty === d
-                      ? 'border-[var(--hud-accent)] bg-[var(--hud-accent)]/15 text-[var(--hud-accent)]'
-                      : 'border-white/15 bg-black/30 text-white/55 hover:border-white/30'
-                  }`}
+                  className="min-h-touch font-mono font-bold uppercase text-[10px] tracking-wider transition-all duration-200 active:scale-95 cursor-pointer"
+                  style={{
+                    clipPath: CLIP_DIFF,
+                    background: active ? 'rgba(0,229,255,0.14)' : 'rgba(255,255,255,0.03)',
+                    border: `1px solid ${active ? 'rgba(0,229,255,0.65)' : 'rgba(255,255,255,0.1)'}`,
+                    color: active ? '#00e5ff' : 'rgba(255,255,255,0.45)',
+                    boxShadow: active ? '0 0 20px rgba(0,229,255,0.25), inset 0 0 12px rgba(0,229,255,0.08)' : 'none',
+                  }}
                 >
                   {SURVIVAL_DIFFICULTY_LABELS[d]}
                 </button>
-              ))}
-            </div>
-            <p className="mt-2 text-center font-mono text-[9px] leading-snug text-white/35">
-              {difficulty === 'easy' && 'Färre minibossar, lägre HP'}
-              {difficulty === 'normal' && 'Design-standard'}
-              {difficulty === 'hard' && 'Miniboss nästan varje våg'}
-            </p>
-          </motion.div>
+              );
+            })}
+          </div>
+          <p className="mt-2 text-center font-mono text-[9px] leading-snug text-white/30">
+            {difficulty === 'easy' && 'Färre minibossar · lägre HP'}
+            {difficulty === 'normal' && 'Design-standard'}
+            {difficulty === 'hard' && 'Miniboss nästan varje våg'}
+          </p>
+        </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.4 }}
-          >
-            <PrimaryButton
-              onClick={onStartSurvival}
-              className="!w-full border-2 border-[var(--hud-accent)]/60 shadow-[0_0_32px_rgba(0,212,255,0.35)]"
-            >
-              <span className="flex items-center justify-center gap-2">
-                <Play size={16} fill="currentColor" />
-                Start Survival
-              </span>
-            </PrimaryButton>
-          </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+          className="w-full mb-2"
+        >
+          <PrimaryButton onClick={onStartSurvival} variant="accent">
+            <Play size={15} fill="currentColor" strokeWidth={0} />
+            Start Survival
+          </PrimaryButton>
+        </motion.div>
 
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.4 }}
-          >
-            <GhostButton onClick={onOpenHangar} className="!w-full min-h-touch border-white/20">
-              <span className="flex items-center justify-center gap-2">
-                <Wrench size={14} />
-                Hangar
-              </span>
-            </GhostButton>
-          </motion.div>
-
-          {onOpenUnlocks && (
-            <motion.div
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.45, duration: 0.4 }}
-            >
-              <GhostButton
-                onClick={onOpenUnlocks}
-                className="!w-full min-h-touch border-amber-500/25 text-amber-100/90 relative"
-              >
-                <span className="flex items-center justify-center gap-2">
-                  <Sparkles size={14} />
-                  Unlocks
-                </span>
-                {hasPendingUnlocks && (
-                  <span
-                    className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]"
-                    aria-label="New unlocks"
-                  />
-                )}
-              </GhostButton>
-            </motion.div>
-          )}
-
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.5, duration: 0.4 }}
-          >
-            <GhostButton onClick={onOnRails} className="!w-full min-h-touch border-amber-500/30 text-amber-200/90">
-              <span className="flex items-center justify-center gap-2">
-                <MoveHorizontal size={14} />
-                On Rails
-              </span>
-            </GhostButton>
-          </motion.div>
-
-          <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.55, duration: 0.4 }}
-          >
-            <GhostButton onClick={onCampaign} className="!w-full min-h-touch">
-              <span className="flex items-center justify-center gap-2">
-                <Map size={14} />
-                Campaign
-              </span>
-            </GhostButton>
-          </motion.div>
+        <div className="w-full flex flex-col gap-1.5 mt-1">
+          {[
+            { delay: 0.36, onClick: onOpenHangar, icon: <Wrench size={13} />, label: 'Hangar', accent: 'default' as const },
+            onOpenUnlocks
+              ? {
+                  delay: 0.4,
+                  onClick: onOpenUnlocks,
+                  icon: <Sparkles size={13} />,
+                  label: 'Unlocks',
+                  accent: 'gold' as const,
+                  badge: hasPendingUnlocks,
+                }
+              : null,
+            { delay: 0.44, onClick: onOnRails, icon: <MoveHorizontal size={13} />, label: 'On Rails', accent: 'amber' as const },
+            { delay: 0.48, onClick: onCampaign, icon: <Map size={13} />, label: 'Campaign', accent: 'default' as const },
+          ]
+            .filter(Boolean)
+            .map((item) => {
+              const it = item as {
+                delay: number;
+                onClick: () => void;
+                icon: React.ReactNode;
+                label: string;
+                accent: 'default' | 'amber' | 'gold';
+                badge?: boolean;
+              };
+              return (
+                <motion.div
+                  key={it.label}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: it.delay, duration: 0.35 }}
+                  className="relative"
+                >
+                  <SecondaryButton onClick={it.onClick} accent={it.accent}>
+                    {it.icon}
+                    {it.label}
+                    <ChevronRight size={12} className="ml-auto opacity-40" />
+                  </SecondaryButton>
+                  {it.badge && (
+                    <span
+                      className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full"
+                      style={{ background: '#e8b84a', boxShadow: '0 0 10px rgba(232,184,74,0.9)' }}
+                      aria-label="New unlocks"
+                    />
+                  )}
+                </motion.div>
+              );
+            })}
         </div>
       </div>
     </div>

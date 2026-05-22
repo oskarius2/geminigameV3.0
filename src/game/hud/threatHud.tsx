@@ -31,6 +31,8 @@ interface ThreatBarProps {
   size?: 'md' | 'lg';
   /** stacked = tier above bar (phone); inline = compact panel (desktop) */
   layout?: 'stacked' | 'inline';
+  /** When false, tier label only appears inside the bar row (saves vertical space). */
+  showTierAboveBar?: boolean;
 }
 
 export function ThreatBar({
@@ -38,6 +40,7 @@ export function ThreatBar({
   className = '',
   size = 'lg',
   layout = 'stacked',
+  showTierAboveBar = true,
 }: ThreatBarProps) {
   const hud = getThreatHudState(state);
   const prevTierRef = useRef<ThreatTier>(hud.tier);
@@ -62,7 +65,7 @@ export function ThreatBar({
           : 'CRITICAL';
 
   const barW = size === 'lg' ? 'min(100%, 320px)' : 'min(100%, 260px)';
-  const barH = layout === 'inline' ? 40 : size === 'lg' ? 52 : 44;
+  const barH = layout === 'inline' ? 40 : size === 'lg' ? 52 : showTierAboveBar ? 44 : 36;
   const inline = layout === 'inline';
 
   const panelStyle: React.CSSProperties = {
@@ -94,9 +97,11 @@ export function ThreatBar({
         }}
       />
       {!inline && (
-        <div className="relative z-10 flex h-full items-center justify-between px-3 md:px-4">
-          <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-white/70">Threat</span>
-          <span className="text-base font-bold font-mono tabular-nums" style={{ color: hud.hudColor }}>
+        <div className="relative z-10 flex h-full items-center justify-between px-2.5 md:px-4 gap-2">
+          <span className="text-[9px] font-mono uppercase tracking-[0.14em] text-white/70 shrink-0">
+            {showTierAboveBar ? 'Threat' : tierLabel}
+          </span>
+          <span className="text-sm font-bold font-mono tabular-nums shrink-0" style={{ color: hud.hudColor }}>
             {Math.round(hud.fillPercent)}%
           </span>
         </div>
@@ -138,7 +143,7 @@ export function ThreatBar({
           </div>
           {fillTrack}
         </div>
-      ) : (
+      ) : showTierAboveBar ? (
         <>
           <span
             className="text-xs font-black font-mono uppercase tracking-[0.18em]"
@@ -152,6 +157,8 @@ export function ThreatBar({
           </span>
           {fillTrack}
         </>
+      ) : (
+        fillTrack
       )}
     </div>
   );
