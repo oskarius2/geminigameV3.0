@@ -1,4 +1,4 @@
-import { GameState, Entity, EntityType, Particle, ItemType, EnemyType, Obstacle, Hazard, Trait, RandomEvent } from './types';
+import { GameState, Entity, EntityType, Particle, ItemType, EnemyType, Obstacle, Hazard, Trait, RandomEvent, ShipId } from './types';
 import { Vector2 } from './utils/vector';
 import { hasTimeSlowEffect } from './buffs/applyBuff';
 import {
@@ -10,14 +10,22 @@ import {
 import { getAugmentTier, getTierModifiers } from './balance/augmentTiers';
 import { getThreatMult } from './balance/threat';
 import { getStageQuota } from './balance/spawnCurve';
+import { applyShipStats, getShipDef } from './ships/shipDefs';
+import { applyEquippedArtifacts } from './artifacts/applyArtifactStats';
 import {
   pickEnemyTypeForThreat,
   getEnemyTypeForPick,
   isTypeAtCap,
 } from './balance/spawnComposition';
+import { getBossAttackPattern } from './bosses/bossSpecs';
+import { tickSurvivalBossPattern } from './bosses/bossSurvivalAI';
 import { BOSS_DEFINITIONS, pickBossForStage } from './content/bosses';
 import { getBossSpawnPosition } from './content/bossArenas';
+import { hasLiveBoss } from './bossLifecycle';
 import { getViewportProfile, useReducedEffects } from './controls/mobileLayout';
+
+/** Shared by updateEnemies separation grid and App projectile spatial hash. */
+export const ENEMY_SPATIAL_CELL_SIZE = 150;
 
 export { ARTIFACTS, artifactPowerScore } from './content/artifacts';
 export { PASSIVE_BUFFS } from './content/buffs';
@@ -25,95 +33,16 @@ export { pickBuffs } from './buffs/pickBuffs';
 export { getCardIntervalSeconds, getNextLevelExp } from './buffs/cardTiming';
 export { computeThreatLevel, getThreatMult, pickEnemyTypeForThreat } from './balance/threat';
 
-export function appendObstaclesForExpansion(
-  stage: number,
-  worldWidth: number,
-  worldHeight: number,
-  expandW: number,
-  expandH: number,
-  playerPos: Vector2
-): Obstacle[] {
-  const obs: Obstacle[] = [];
-  const count = 3 + Math.floor(stage * 0.5);
-  for (let i = 0; i < count; i++) {
-    const isCircle = Math.random() > 0.5;
-    const sizeBase = 50 + Math.random() * 120;
-    let pos = new Vector2(
-      playerPos.x + (Math.random() - 0.5) * (worldWidth + expandW),
-      playerPos.y + (Math.random() - 0.5) * (worldHeight + expandH)
-    );
-    pos.x = Math.max(80, Math.min(worldWidth + expandW - 80, pos.x));
-    pos.y = Math.max(80, Math.min(worldHeight + expandH - 80, pos.y));
-    if (pos.sub(playerPos).magnitude() < 200) continue;
-    obs.push({
-      id: Math.random().toString(),
-      type: isCircle ? 'CIRCLE' : 'RECT',
-      pos,
-      size: isCircle ? new Vector2(sizeBase, 0) : new Vector2(sizeBase, sizeBase * (0.5 + Math.random())),
-      rotation: isCircle ? Math.random() * Math.PI : 0,
-      color: `hsl(${(stage * 25 + i * 17) % 360}, 30%, 15%)`,
-    });
-  }
-  return obs;
-}
+// ============================================================================
+// CONSTANTS & CONFIGURATION
+// ============================================================================
 
-export function generateObstaclesForStage(stage: number, width: number, height: number): Obstacle[] {
-  const obs: Obstacle[] = [];
-  
-  // 1. Add Landmarks (handcrafted-ish interest points)
-  const landmarkCount = 3 + Math.floor(stage * 0.5);
-  for (let l = 0; l < landmarkCount; l++) {
-    const lPos = new Vector2(
-      200 + Math.random() * (width - 400),
-      200 + Math.random() * (height - 400)
-    );
-    // Landmark: A "Hub" of obstacles
-    const clusterSize = 3 + Math.floor(Math.random() * 4);
-    for (let c = 0; c < clusterSize; c++) {
-      const isCircle = Math.random() > 0.4;
-      const sizeBase = 40 + Math.random() * 100;
-      const offset = new Vector2((Math.random()-0.5)*200, (Math.random()-0.5)*200);
-      obs.push({
-        id: `lm_${l}_${c}`,
-        type: isCircle ? 'CIRCLE' : 'RECT',
-        pos: lPos.add(offset),
-        size: isCircle ? new Vector2(sizeBase, 0) : new Vector2(sizeBase, sizeBase * 0.8),
-        rotation: isCircle ? 0 : Math.random() * Math.PI,
-        color: l % 2 === 0 ? 'rgba(6, 182, 212, 0.05)' : 'rgba(217, 70, 239, 0.05)',
-        isLandmark: true
-      } as any);
-    }
-  }
+const SPAWN_OBSTACLE_PAD = 30;
+const SPAWN_POSITION_ATTEMPTS = 5;
 
-  // 2. Add random obstacles
-  const numObstacles = 8 + Math.floor(stage * 2);
-  for (let i = 0; i < numObstacles; i++) {
-    const isCircle = Math.random() > 0.5;
-    const sizeBase = 40 + Math.random() * 140;
-    const type = isCircle ? 'CIRCLE' : 'RECT';
-    
-    let pos = new Vector2(Math.random() * width, Math.random() * height);
-    while (pos.sub(new Vector2(width / 2, height / 2)).magnitude() < 400) {
-      pos = new Vector2(Math.random() * width, Math.random() * height);
-    }
-
-    obs.push({
-      id: Math.random().toString(),
-      type,
-      pos,
-      size: isCircle ? new Vector2(sizeBase, 0) : new Vector2(sizeBase, sizeBase * (0.6 + Math.random())),
-      rotation: isCircle ? 0 : Math.random() * Math.PI,
-      color: `rgba(15, 23, 42, 0.8)`, // Dark slate
-    });
-  }
-  return obs;
-}
-
-export function getInitialWorldSize(viewWidth: number, viewHeight: number): { width: number; height: number } {
-  const base = Math.min(viewWidth, viewHeight);
-  const mult = 30; // Increased map size
-  return { width: base * mult, height: base * mult };
-}
+// ============================================================================
+// STATE & INITIALIZATION
+// ============================================================================
 
 export const TRAITS: Record<string, Trait> = {
   'agile': { id: 'agile', name: 'Agile Frame', description: '+20% Move Speed', type: 'POSITIVE', isPositive: true },
@@ -173,7 +102,101 @@ export function pickRandomTraits(): string[] {
   return [...pickedPos, ...pickedNeg];
 }
 
-export const INITIAL_STATE = (width: number, height: number): GameState => {
+export function getInitialWorldSize(viewWidth: number, viewHeight: number): { width: number; height: number } {
+  const base = Math.min(viewWidth, viewHeight);
+  const mult = 30;
+  return { width: base * mult, height: base * mult };
+}
+
+export function generateObstaclesForStage(stage: number, width: number, height: number): Obstacle[] {
+  const obs: Obstacle[] = [];
+  
+  // 1. Add Landmarks (handcrafted-ish interest points)
+  const landmarkCount = 3 + Math.floor(stage * 0.5);
+  for (let l = 0; l < landmarkCount; l++) {
+    const lPos = new Vector2(
+      200 + Math.random() * (width - 400),
+      200 + Math.random() * (height - 400)
+    );
+    // Landmark: A "Hub" of obstacles
+    const clusterSize = 3 + Math.floor(Math.random() * 4);
+    for (let c = 0; c < clusterSize; c++) {
+      const isCircle = Math.random() > 0.4;
+      const sizeBase = 40 + Math.random() * 100;
+      const offset = new Vector2((Math.random()-0.5)*200, (Math.random()-0.5)*200);
+      obs.push({
+        id: `lm_${l}_${c}`,
+        type: isCircle ? 'CIRCLE' : 'RECT',
+        pos: lPos.add(offset),
+        size: isCircle ? new Vector2(sizeBase, 0) : new Vector2(sizeBase, sizeBase * 0.8),
+        rotation: isCircle ? 0 : Math.random() * Math.PI,
+        color: l % 2 === 0 ? 'rgba(6, 182, 212, 0.05)' : 'rgba(217, 70, 239, 0.05)',
+        isLandmark: true
+      } as any);
+    }
+  }
+
+  // 2. Add random obstacles
+  const numObstacles = 8 + Math.floor(stage * 2);
+  for (let i = 0; i < numObstacles; i++) {
+    const isCircle = Math.random() > 0.5;
+    const sizeBase = 40 + Math.random() * 140;
+    const type = isCircle ? 'CIRCLE' : 'RECT';
+    
+    let pos = new Vector2(Math.random() * width, Math.random() * height);
+    while (pos.sub(new Vector2(width / 2, height / 2)).magnitude() < 400) {
+      pos = new Vector2(Math.random() * width, Math.random() * height);
+    }
+
+    obs.push({
+      id: Math.random().toString(),
+      type,
+      pos,
+      size: isCircle ? new Vector2(sizeBase, 0) : new Vector2(sizeBase, sizeBase * (0.6 + Math.random())),
+      rotation: isCircle ? 0 : Math.random() * Math.PI,
+      color: `rgba(15, 23, 42, 0.8)`,
+    });
+  }
+  return obs;
+}
+
+export function appendObstaclesForExpansion(
+  stage: number,
+  worldWidth: number,
+  worldHeight: number,
+  expandW: number,
+  expandH: number,
+  playerPos: Vector2
+): Obstacle[] {
+  const obs: Obstacle[] = [];
+  const count = 3 + Math.floor(stage * 0.5);
+  for (let i = 0; i < count; i++) {
+    const isCircle = Math.random() > 0.5;
+    const sizeBase = 50 + Math.random() * 120;
+    let pos = new Vector2(
+      playerPos.x + (Math.random() - 0.5) * (worldWidth + expandW),
+      playerPos.y + (Math.random() - 0.5) * (worldHeight + expandH)
+    );
+    pos.x = Math.max(80, Math.min(worldWidth + expandW - 80, pos.x));
+    pos.y = Math.max(80, Math.min(worldHeight + expandH - 80, pos.y));
+    if (pos.sub(playerPos).magnitude() < 200) continue;
+    obs.push({
+      id: Math.random().toString(),
+      type: isCircle ? 'CIRCLE' : 'RECT',
+      pos,
+      size: isCircle ? new Vector2(sizeBase, 0) : new Vector2(sizeBase, sizeBase * (0.5 + Math.random())),
+      rotation: isCircle ? Math.random() * Math.PI : 0,
+      color: `hsl(${(stage * 25 + i * 17) % 360}, 30%, 15%)`,
+    });
+  }
+  return obs;
+}
+
+export const INITIAL_STATE = (
+  width: number,
+  height: number,
+  selectedShip: ShipId = 'interceptor',
+): GameState => {
   const { width: worldWidth, height: worldHeight } = getInitialWorldSize(width, height);
   const traits = pickRandomTraits();
   
@@ -211,6 +234,8 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
     inBossArena: false,
     mainWorldSnapshot: null,
     lastBossId: null,
+    lastBossDefeatedId: null,
+    bossVictoryBannerTimer: 0,
     pendingArenaRestore: false,
     stageTransition: 0,
     spawnRampTimer: 0,
@@ -245,12 +270,16 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
     rapidFireTimer: 0,
     shieldTimer: 0,
     screenFlash: 0,
+    screenFlashColor: null,
     playerIFrameTimer: 0,
     hitStop: 0,
     damageTexts: [],
     combo: 0,
     comboTimer: 0,
     gameMode: 'NORMAL',
+    selectedShip,
+    fireRateMultiplier: 1,
+    rails: null,
     campaignLevelId: null,
     campaignDialogQueue: [],
     campaignCameraPos: null,
@@ -264,7 +293,7 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
       MOBILITY: null
     },
     activeWeaponSlot: 'CANNON_A',
-    cardTimer: 0, // Trigger immediately on first frame
+    cardTimer: 0,
     permanentOverdrive: false,
     permanentTimeSlow: false,
     permanentRapidFire: false,
@@ -313,10 +342,31 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
 
     activeTraits: traits,
     pendingEvent: null,
-    eventTimer: 1200 + Math.random() * 600, // First event after ~20-30s
+    eventTimer: 1200 + Math.random() * 600,
     runScrapEarned: 0,
     postBossBuffPick: false,
+    stageEnteredAt: 0,
+    waveSpawnQueue: [],
+    waveMiniBossQueue: [],
+    waveSpawnCooldown: 0,
+    activeWaveIndex: -1,
+    activeCompanionId: null,
+    companionLevel: 1,
+    companionXp: 0,
+    companionRuntime: null,
+    companionsUnlocked: [],
+    companionGrantedThisRun: false,
+    collectedShipLoot: [],
+    miniBossKillsThisRun: 0,
+    shopPurchasedIds: [],
+    shopRunFlags: {},
+    shopScrapSpent: 0,
   };
+
+  const shipDef = getShipDef(selectedShip);
+  if (shipDef) {
+    applyShipStats(state, shipDef);
+  }
 
   // Apply Trait impacts on initialization
   traits.forEach(tId => {
@@ -339,6 +389,8 @@ export const INITIAL_STATE = (width: number, height: number): GameState => {
         break;
     }
   });
+
+  applyEquippedArtifacts(state);
 
   return state;
 };
@@ -412,6 +464,10 @@ export function handleEventChoice(state: GameState, choiceId: string) {
   state.isPaused = false;
 }
 
+// ============================================================================
+// PARTICLES & EFFECTS
+// ============================================================================
+
 export function createExplosion(pos: Vector2, color: string, count: number = 4, speedMult: number = 1): Particle[] {
   const particles: Particle[] = [];
   const pCount = Math.floor(count * 2);
@@ -431,7 +487,6 @@ export function createExplosion(pos: Vector2, color: string, count: number = 4, 
     });
   }
 
-  // Add flash center
   particles.push({
     id: Math.random().toString(),
     pos: pos.clone(),
@@ -443,7 +498,6 @@ export function createExplosion(pos: Vector2, color: string, count: number = 4, 
     particleType: 'flash'
   });
 
-  // Add impact ring
   particles.push({
     id: Math.random().toString(),
     pos: pos.clone(),
@@ -477,22 +531,6 @@ export function createImplosion(pos: Vector2, color: string, count: number = 6):
   return particles;
 }
 
-export function spawnXpOrb(pos: Vector2, amount = 25): Entity {
-  return {
-    id: Math.random().toString(36).slice(2, 9),
-    type: EntityType.ITEM,
-    pos: pos.clone(),
-    radius: 10,
-    health: 1,
-    maxHealth: 1,
-    speed: 0,
-    velocity: new Vector2(0, 0),
-    color: '#22d3ee',
-    itemType: ItemType.XP,
-    damage: amount,
-  };
-}
-
 export function createImpact(pos: Vector2, color: string, count: number = 1): Particle[] {
   const particles: Particle[] = [];
   const pCount = count;
@@ -511,7 +549,6 @@ export function createImpact(pos: Vector2, color: string, count: number = 1): Pa
     });
   }
 
-  // Small cross impact
   if (count > 2) {
     particles.push({
       id: Math.random().toString(),
@@ -574,6 +611,10 @@ export function updateParticles(particles: Particle[], dt: number = 1, playerPos
   });
 }
 
+// ============================================================================
+// SPAWN HELPERS & COLLISION
+// ============================================================================
+
 function getSurvivalLevelProgress(state: GameState): number {
   const quota = getStageQuota(state.stage);
   if (quota <= 0) return 1;
@@ -587,7 +628,7 @@ function resolveSpawnTypePick(
   levelProgress: number
 ): number | null {
   if (typeOverride !== undefined) {
-    if (state.gameMode === 'NORMAL') {
+    if (state.gameMode === 'CAMPAIGN') {
       const type = getEnemyTypeForPick(typeOverride);
       if (type && isTypeAtCap(type, state.enemies, levelProgress)) {
         for (let i = 0; i < 3; i++) {
@@ -610,37 +651,82 @@ function resolveSpawnTypePick(
   return fallback;
 }
 
-export function spawnEnemy(
+export function isPosInsideObstacle(
+  pos: Vector2,
+  obstacles: Obstacle[],
+  pad = SPAWN_OBSTACLE_PAD
+): boolean {
+  for (const obs of obstacles) {
+    if (!obs?.pos || !obs?.size) continue;
+    if (obs.type === 'CIRCLE') {
+      if (pos.distanceTo(obs.pos) < obs.size.x + pad) return true;
+    } else {
+      const hw = obs.size.x / 2;
+      const hh = obs.size.y / 2;
+      if (
+        Math.abs(pos.x - obs.pos.x) < hw + pad &&
+        Math.abs(pos.y - obs.pos.y) < hh + pad
+      ) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function pickSpawnPosition(
   state: GameState,
-  typeOverride?: number,
   posOverride?: { x: number; y: number }
-): Entity | null {
+): Vector2 {
   const worldWidth = state.world.width;
   const worldHeight = state.world.height;
   const playerPos = state.player.pos;
+
+  for (let attempt = 0; attempt < SPAWN_POSITION_ATTEMPTS; attempt++) {
+    let pos: Vector2;
+    if (posOverride) {
+      pos = new Vector2(
+        Math.max(0, Math.min(worldWidth, posOverride.x + (Math.random() - 0.5) * 200)),
+        Math.max(0, Math.min(worldHeight, posOverride.y + (Math.random() - 0.5) * 200))
+      );
+    } else {
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 1000 + Math.random() * 300;
+      pos = new Vector2(
+        playerPos.x + Math.cos(angle) * distance,
+        playerPos.y + Math.sin(angle) * distance
+      );
+      pos.x = Math.max(0, Math.min(worldWidth, pos.x + (Math.random() - 0.5) * 200));
+      pos.y = Math.max(0, Math.min(worldHeight, pos.y + (Math.random() - 0.5) * 200));
+    }
+    if (!isPosInsideObstacle(pos, state.obstacles)) return pos;
+  }
+
+  return new Vector2(worldWidth / 2, worldHeight / 2);
+}
+
+// ============================================================================
+// ENEMY SPAWNING
+// ============================================================================
+
+/**
+ * REFACTORED spawnEnemy() for wave composition system
+ * 
+ * KEY CHANGE: Accept EnemyType directly instead of typeOverride: number
+ * This eliminates the giant 21-case switch and makes spawn deterministic.
+ */
+
+export function spawnEnemyFromWave(
+  state: GameState,
+  enemyType: EnemyType,
+  posOverride?: { x: number; y: number }
+): Entity | null {
   const tier = getAugmentTier(state.passives.length);
   const tierMods = getTierModifiers(tier);
   const stage = state.stage;
   const threatMult = getThreatMult(state);
 
-  let pos: Vector2;
-  if (posOverride) {
-    pos = new Vector2(
-      Math.max(0, Math.min(worldWidth, posOverride.x + (Math.random() - 0.5) * 200)),
-      Math.max(0, Math.min(worldHeight, posOverride.y + (Math.random() - 0.5) * 200))
-    );
-  } else {
-    const angle = Math.random() * Math.PI * 2;
-    const distance = 1000 + Math.random() * 300;
-    pos = new Vector2(
-      playerPos.x + Math.cos(angle) * distance,
-      playerPos.y + Math.sin(angle) * distance
-    );
-    pos.x = Math.max(0, Math.min(worldWidth, pos.x));
-    pos.y = Math.max(0, Math.min(worldHeight, pos.y));
-    pos.x = Math.max(0, Math.min(worldWidth, pos.x + (Math.random() - 0.5) * 200));
-    pos.y = Math.max(0, Math.min(worldHeight, pos.y + (Math.random() - 0.5) * 200));
-  }
+  let pos = pickSpawnPosition(state, posOverride);
 
   const skillFactor = Math.sqrt(state.score / 3500 + 1);
   const powerFactor = state.threatLevel / 100;
@@ -658,20 +744,26 @@ export function spawnEnemy(
     Math.min(2.5, skillFactor * dynamicSpeedFactor) *
     Math.min(1.5, 1 + state.survivalTime / 1200);
 
-  const isBoss = state.bossActive && state.enemies.filter((e) => e.enemyType === EnemyType.BOSS).length === 0;
+  const isBoss =
+    state.bossActive &&
+    state.inBossArena &&
+    !hasLiveBoss(state);
 
   let radius = 12;
   let health = 20 * healthScale;
   let speed = (1.5 + Math.random() * 0.5) * speedScale;
   let color = '#f87171';
-  let enemyType = EnemyType.CHASER;
+  let finalEnemyType = enemyType;
   let damageResist = 0;
   let damageMult = 1;
 
   if (isBoss) {
+    // Boss spawn (unchanged from original)
     const boss =
       BOSS_DEFINITIONS.find((b) => b.id === state.activeBossId) ?? pickBossForStage(stage);
     if (state.inBossArena && state.activeBossId) {
+      const worldWidth = state.world.width;
+      const worldHeight = state.world.height;
       const spawn = getBossSpawnPosition(state.activeBossId, worldWidth, worldHeight);
       pos = new Vector2(
         spawn.x + (Math.random() - 0.5) * 80,
@@ -682,149 +774,131 @@ export function spawnEnemy(
     health = (6000 * Math.pow(1.52, stage - 1)) * dynamicHealthFactor * boss.hpMult;
     speed = (0.8 + stage * 0.1) * speedScale * boss.speedMult;
     color = '#991b1b';
-    enemyType = EnemyType.BOSS;
+    finalEnemyType = EnemyType.BOSS;
   } else {
-    const levelProgress =
-      state.gameMode === 'NORMAL' ? getSurvivalLevelProgress(state) : 0;
-    const typePick = resolveSpawnTypePick(state, typeOverride, levelProgress);
-    if (typePick === null) return null;
-    switch (typePick) {
-      case 0:
-        color = '#ef4444'; 
-        radius = 25; // Massive reduction from 70
-        health *= 10; // Significant health but not 50x
+    // Enemy type configuration — SIMPLIFIED via EnemyType directly
+    switch (enemyType) {
+      case EnemyType.CHASER:
+        color = '#ef4444';
+        radius = 25;
+        health *= 10;
         speed *= 0.8;
-        enemyType = EnemyType.CHASER;
         break;
-      case 1:
+
+      case EnemyType.PHALANX:
         color = '#0ea5e9';
         radius = 40;
         health *= 30;
         speed *= 0.3;
-        enemyType = EnemyType.PHALANX;
         break;
-      case 2:
+
+      case EnemyType.WRAITH:
         color = '#fde68a';
         radius = 18;
         health *= 5;
         speed *= 1.4;
-        enemyType = EnemyType.WRAITH;
         break;
-      case 3:
+
+      case EnemyType.ELITE:
         color = '#fbbf24';
         radius = 35;
         health *= 15;
         speed *= 1.1;
-        enemyType = EnemyType.ELITE;
         break;
-      case 4:
+
+      case EnemyType.SPLINTER:
         color = '#f87171';
         radius = 25;
         health *= 8;
         speed *= 0.8;
-        enemyType = EnemyType.SPLINTER;
         break;
-      case 5:
+
+      case EnemyType.NOVA:
         color = '#f97316';
         radius = 22;
         health *= 6;
         speed *= 1.1;
-        enemyType = EnemyType.NOVA;
         break;
-      case 6:
+
+      case EnemyType.RANGED:
         color = '#c084fc';
         radius = 20;
         health *= 2.5;
         speed *= 0.85;
-        enemyType = EnemyType.RANGED;
         break;
-      case 7:
-        color = '#10b981';
-        radius = 16;
-        health *= 3;
-        speed *= 1.1;
-        enemyType = EnemyType.CHASER;
-        break;
-      case 8:
-        color = '#22d3ee';
-        radius = 14;
-        health *= 4;
-        speed *= 1.2;
-        enemyType = EnemyType.CHASER;
-        damageResist = 0.15;
-        break;
-      case 9:
+
+      case EnemyType.FAST:
         color = '#fde047';
         radius = 11;
         health *= 0.4;
         speed *= 2.3;
-        enemyType = EnemyType.FAST;
         break;
-      case 10:
+
+      case EnemyType.SWARMER:
         color = '#fb923c';
         radius = 9;
         health *= 0.15;
         speed *= 2.6;
-        enemyType = EnemyType.SWARMER;
         break;
-      case 11:
+
+      case EnemyType.SNIPER:
         color = '#ef4444';
         radius = 20;
         health *= 8;
         speed *= 0.6;
-        enemyType = EnemyType.SNIPER;
         break;
-      case 12:
+
+      case EnemyType.DASHER:
         color = '#ff6b35';
         radius = 10;
         health *= 0.5;
         speed *= 2.8;
-        enemyType = EnemyType.DASHER;
         break;
-      case 13:
+
+      case EnemyType.PHANTOM:
         color = '#00d4ff';
         radius = 16;
         health *= 4;
         speed *= 1.5;
-        enemyType = EnemyType.PHANTOM;
         break;
-      case 14:
+
+      case EnemyType.ZAPPER:
         color = '#38bdf8';
         radius = 13;
         health *= 1.8;
         speed *= 1.1;
-        enemyType = EnemyType.ZAPPER;
         break;
-      case 15:
+
+      case EnemyType.STRIKER:
         color = '#cc2200';
         radius = 18;
         health *= 5;
         speed *= 1.9;
-        damageMult = 1.9; // high contact damage is STRIKER's identity
-        enemyType = EnemyType.STRIKER;
+        damageMult = 1.9;
         break;
-      case 16:
+
+      case EnemyType.SWARM_V2:
         color = '#ff8c00';
         radius = 10;
         health *= 0.3;
         speed *= 2.9;
-        enemyType = EnemyType.SWARM_V2;
         break;
-      case 17:
+
+      case EnemyType.TRACKER:
         color = '#c026d3';
         radius = 17;
         health *= 7;
-        speed *= 1.15; // relentless pursuit — faster than average
-        enemyType = EnemyType.TRACKER;
+        speed *= 1.15;
         break;
-      case 18:
+
+      case EnemyType.TANK:
         color = '#475569';
         radius = 44;
         health *= 60;
         speed *= 0.2;
-        enemyType = EnemyType.FORTIFIED;
         break;
-      case 19:
+
+      case EnemyType.SHIELDED:
         color = '#06b6d4';
         radius = 22;
         health *= 8;
@@ -832,24 +906,32 @@ export function spawnEnemy(
         enemyType = EnemyType.SHIELDED;
         damageResist = 0.85;
         break;
-      case 20:
+
+      case EnemyType.REGENERATING:
         color = '#22c55e';
         radius = 20;
         health *= 12;
         speed *= 0.8;
-        enemyType = EnemyType.REGENERATING;
         break;
+
+      case EnemyType.FORTIFIED:
+        color = '#475569';
+        radius = 44;
+        health *= 60;
+        speed *= 0.2;
+        break;
+
       default:
         color = '#ef4444';
         radius = 14;
-        health *= 1.2; // Reduced from 1.5
+        health *= 1.2;
         speed *= 1;
-        enemyType = EnemyType.CHASER;
+        finalEnemyType = EnemyType.CHASER;
         break;
     }
   }
 
-  return {
+  const entity: Entity = {
     id: Math.random().toString(36).substr(2, 9),
     type: EntityType.ENEMY,
     pos,
@@ -860,7 +942,7 @@ export function spawnEnemy(
     velocity: new Vector2(0, 0),
     color,
     damage: Math.floor((15 + tier * 2) * threatMult * timeRamp * (isBoss ? 2 : 1) * damageMult),
-    enemyType,
+    enemyType: finalEnemyType,
     lastShot: Date.now(),
     aiTimer: 0,
     behaviorSeed: Math.random(),
@@ -868,114 +950,90 @@ export function spawnEnemy(
     damageResist,
     shieldHealth: enemyType === EnemyType.SHIELDED ? 10 : undefined,
   };
-}
 
-export function updateProjectiles(projectiles: Entity[], worldWidth: number, worldHeight: number, dt: number = 1, bounceCount: number = 0) {
-  const updated = projectiles.filter(p => {
-    if (!p?.pos || !p?.velocity) return false;
-    p.pos = p.pos.add(p.velocity.mul(dt));
-    
-    if (p.life !== undefined) {
-      p.life -= 0.016 * dt;
-      if (p.life <= 0) return false;
-    }
-    
-    // Wall bounce
-    if (bounceCount > 0) {
-      if (p.pos.x < 0 || p.pos.x > worldWidth) {
-        p.velocity.x *= -1;
-        p.pos.x = Math.max(0, Math.min(worldWidth, p.pos.x));
-      }
-      if (p.pos.y < 0 || p.pos.y > worldHeight) {
-        p.velocity.y *= -1;
-        p.pos.y = Math.max(0, Math.min(worldHeight, p.pos.y));
-      }
-    }
-
-    return (
-      p.pos.x > -100 && p.pos.x < worldWidth + 100 &&
-      p.pos.y > -100 && p.pos.y < worldHeight + 100
-    );
-  });
-  return updated;
-}
-
-export function updateHazards(state: GameState, dt: number) {
-  state.hazards.forEach(h => {
-    h.timer += dt * 0.05;
-    if (h.timer > Math.PI * 2) h.timer = 0;
-    
-    // Check collision with player
-    const dist = state.player.pos.sub(h.pos).magnitude();
-    const radius = h.type === 'ZONE' ? Math.max(h.size.x, h.size.y) / 2 : 50; 
-    
-    if (dist < radius + state.player.radius) {
-      if (h.active) {
-        state.player.health -= h.damage * dt * 0.1;
-        state.screenFlash = Math.max(state.screenFlash, 0.2);
-      }
-    }
-    
-    // Toggle active state for laser
-    if (h.type === 'LASER') {
-        const pulse = Math.sin(h.timer);
-        h.active = pulse > 0.5;
-    } else {
-        h.active = true;
-    }
-  });
-}
-
-export function updateEnemies(state: GameState, dt: number = 1) {
-  const { enemies, player } = state;
-  const playerPos = player.pos;
-  const enemyDt = hasTimeSlowEffect(state) ? dt * 0.3 : dt;
-
-  const gridSize = 120;
-  const grid: Record<string, number[]> = {};
-
-  for (let i = 0; i < enemies.length; i++) {
-    const e = enemies[i];
-    const gx = Math.floor(e.pos.x / gridSize);
-    const gy = Math.floor(e.pos.y / gridSize);
-    const key = `${gx},${gy}`;
-    if (!grid[key]) grid[key] = [];
-    grid[key].push(i);
+  if (isBoss && state.activeBossId) {
+    entity.bossPatternId = getBossAttackPattern(state.activeBossId);
+    entity.bossPatternTimer = 30;
   }
 
-  for (let i = 0; i < enemies.length; i++) {
-    const enemy = enemies[i];
-    const dx = playerPos.x - enemy.pos.x;
-    const dy = playerPos.y - enemy.pos.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-
-    if (dist <= 0.1) continue;
-
-    let { vx, vy } = computeEnemyVelocity(enemy, state, enemyDt, dist, dx, dy);
-    const sep = getSeparationForce(enemy, enemies, grid, gridSize, i, enemy.enemyType, state);
-    vx += sep.vx;
-    vy += sep.vy;
-
-    runEnemyAttacks(enemy, state, dist, dx, dy, vx, vy);
-
-    // REGENERATING: heals 5 HP/sec
-    if (enemy.enemyType === EnemyType.REGENERATING && enemy.health < enemy.maxHealth) {
-      enemy.health = Math.min(enemy.maxHealth, enemy.health + (5 / 60) * enemyDt);
-    }
-
-    // SHIELDED: shield restores after recharge timer expires (aiTimer decremented in computeEnemyVelocity)
-    if (enemy.enemyType === EnemyType.SHIELDED && enemy.aiState === 'recharge' && (enemy.aiTimer ?? 1) <= 0) {
-      enemy.damageResist = 0.85;
-      enemy.shieldHealth = 10;
-      enemy.aiState = 'chase';
-    }
-
-    finalizeEnemyMovement(enemy, state, vx, vy, enemyDt, i);
-    resolveObstacleCollision(enemy, state.obstacles);
-  }
+  return entity;
 }
 
-// Simple circle collision
+/**
+ * LEGACY WRAPPER — keeps old spawnEnemy() working for backwards compatibility
+ * (e.g., boss minions, specific spawns)
+ * 
+ * Gradually deprecate this and use spawnEnemyFromWave() for all normal spawns.
+ */
+export function spawnEnemy(
+  state: GameState,
+  typeOverride?: number | EnemyType,
+  posOverride?: { x: number; y: number }
+): Entity | null {
+  // If typeOverride is already EnemyType enum, use new function
+  if (typeof typeOverride !== 'number' || typeOverride >= 0) {
+    return spawnEnemyFromWave(state, typeOverride as EnemyType, posOverride);
+  }
+
+  // Otherwise, if it's an old numeric ID, map it (this is the OLD path)
+  // For now, default to CHASER to avoid crashes
+  return spawnEnemyFromWave(state, EnemyType.CHASER, posOverride);
+}
+export function spawnXpOrb(pos: Vector2, amount = 25): Entity {
+  return {
+    id: Math.random().toString(36).slice(2, 9),
+    type: EntityType.ITEM,
+    pos: pos.clone(),
+    radius: 10,
+    health: 1,
+    maxHealth: 1,
+    speed: 0,
+    velocity: new Vector2(0, 0),
+    color: '#22d3ee',
+    itemType: ItemType.XP,
+    damage: amount,
+  };
+}
+
+export function spawnItem(pos: Vector2): Entity | null {
+  // 25% chance to drop a health item
+  if (Math.random() > 0.25) return null; 
+  
+  return {
+    id: Math.random().toString(36).substr(2, 9),
+    type: EntityType.ITEM,
+    pos: pos.clone(),
+    radius: 12,
+    health: 1,
+    maxHealth: 1,
+    speed: 0,
+    velocity: new Vector2(0, 0),
+    color: '#4ade80',
+    itemType: ItemType.HEALTH,
+  };
+}
+
+export function spawnHazard(state: GameState): Hazard {
+  const isLaser = Math.random() > 0.5;
+  const worldWidth = state.world.width;
+  const worldHeight = state.world.height;
+  return {
+    id: Math.random().toString(),
+    type: isLaser ? 'LASER' : 'ZONE',
+    pos: new Vector2(Math.random() * worldWidth, Math.random() * worldHeight),
+    size: isLaser ? new Vector2(400, 10) : new Vector2(200, 200),
+    rotation: Math.random() * Math.PI,
+    active: false,
+    timer: 0,
+    damage: 10,
+    color: isLaser ? '#ff0000' : '#ffff00'
+  };
+}
+
+// ============================================================================
+// COLLISION & PHYSICS
+// ============================================================================
+
 export function checkCollision(e1: Entity, e2: Entity): boolean {
   const dx = e1.pos.x - e2.pos.x;
   const dy = e1.pos.y - e2.pos.y;
@@ -985,13 +1043,12 @@ export function checkCollision(e1: Entity, e2: Entity): boolean {
 }
 
 export function resolveObstacleCollision(entity: Entity, obstacles: Obstacle[]) {
-  // Simple push-out resolution
   for (const obs of obstacles) {
     if (!obs?.pos || !obs?.size) continue;
     if (obs.type === 'CIRCLE') {
       const dx = entity.pos.x - obs.pos.x;
       const dy = entity.pos.y - obs.pos.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
       const minRadius = entity.radius + obs.size.x;
       if (dist < minRadius) {
         const overlap = minRadius - dist;
@@ -1001,10 +1058,8 @@ export function resolveObstacleCollision(entity: Entity, obstacles: Obstacle[]) 
         entity.pos.y += pushY;
       }
     } else if (obs.type === 'RECT') {
-      // Very basic unrotated AABB collision for RECT
       const hw = obs.size.x / 2;
       const hh = obs.size.y / 2;
-      // We will ignore rotation for physics simplicity right now, treating as AABB
       
       const testX = Math.max(obs.pos.x - hw, Math.min(entity.pos.x, obs.pos.x + hw));
       const testY = Math.max(obs.pos.y - hh, Math.min(entity.pos.y, obs.pos.y + hh));
@@ -1041,39 +1096,112 @@ export function checkProjectileObstacleCollision(p: Entity, obs: Obstacle): bool
   return false;
 }
 
-export function spawnItem(pos: Vector2): Entity | null {
-  // 25% chance to drop a health item
-  if (Math.random() > 0.25) return null; 
-  
-  return {
-    id: Math.random().toString(36).substr(2, 9),
-    type: EntityType.ITEM,
-    pos: pos.clone(),
-    radius: 12,
-    health: 1,
-    maxHealth: 1,
-    speed: 0,
-    velocity: new Vector2(0, 0),
-    color: '#4ade80',
-    itemType: ItemType.HEALTH,
-  };
+// ============================================================================
+// GAME STATE UPDATES
+// ============================================================================
+
+export function updateProjectiles(projectiles: Entity[], worldWidth: number, worldHeight: number, dt: number = 1, bounceCount: number = 0) {
+  const updated = projectiles.filter(p => {
+    if (!p?.pos || !p?.velocity) return false;
+    p.pos = p.pos.add(p.velocity.mul(dt));
+    
+    if (p.life !== undefined) {
+      p.life -= 0.016 * dt;
+      if (p.life <= 0) return false;
+    }
+    
+    // Wall bounce
+    if (bounceCount > 0) {
+      if (p.pos.x < 0 || p.pos.x > worldWidth) {
+        p.velocity.x *= -1;
+        p.pos.x = Math.max(0, Math.min(worldWidth, p.pos.x));
+      }
+      if (p.pos.y < 0 || p.pos.y > worldHeight) {
+        p.velocity.y *= -1;
+        p.pos.y = Math.max(0, Math.min(worldHeight, p.pos.y));
+      }
+    }
+
+    return (
+      p.pos.x > -100 && p.pos.x < worldWidth + 100 &&
+      p.pos.y > -100 && p.pos.y < worldHeight + 100
+    );
+  });
+  return updated;
 }
 
-export function spawnHazard(state: GameState): Hazard {
-    const isLaser = Math.random() > 0.5;
-    const worldWidth = state.world.width;
-    const worldHeight = state.world.height;
-    return {
-        id: Math.random().toString(),
-        type: isLaser ? 'LASER' : 'ZONE',
-        pos: new Vector2(Math.random() * worldWidth, Math.random() * worldHeight),
-        size: isLaser ? new Vector2(400, 10) : new Vector2(200, 200),
-        rotation: Math.random() * Math.PI,
-        active: false,
-        timer: 0,
-        damage: 10,
-        color: isLaser ? '#ff0000' : '#ffff00'
-    };
+export function updateHazards(state: GameState, dt: number) {
+  state.hazards.forEach(h => {
+    h.timer += dt * 0.05;
+    if (h.timer > Math.PI * 2) h.timer = 0;
+    
+    const dist = state.player.pos.sub(h.pos).magnitude();
+    const radius = h.type === 'ZONE' ? Math.max(h.size.x, h.size.y) / 2 : 50; 
+    
+    if (dist < radius + state.player.radius) {
+      if (h.active) {
+        state.player.health -= h.damage * dt * 0.1;
+        state.screenFlash = Math.max(state.screenFlash, 0.2);
+      }
+    }
+    
+    if (h.type === 'LASER') {
+      const pulse = Math.sin(h.timer);
+      h.active = pulse > 0.5;
+    } else {
+      h.active = true;
+    }
+  });
+}
+
+export function updateEnemies(state: GameState, dt: number = 1) {
+  const { enemies, player } = state;
+  const playerPos = player.pos;
+  const enemyDt = hasTimeSlowEffect(state) ? dt * 0.3 : dt;
+
+  const gridSize = ENEMY_SPATIAL_CELL_SIZE;
+  const grid: Record<string, number[]> = {};
+
+  for (let i = 0; i < enemies.length; i++) {
+    const e = enemies[i];
+    const gx = Math.floor(e.pos.x / gridSize);
+    const gy = Math.floor(e.pos.y / gridSize);
+    const key = `${gx},${gy}`;
+    if (!grid[key]) grid[key] = [];
+    grid[key].push(i);
+  }
+
+  for (let i = 0; i < enemies.length; i++) {
+    const enemy = enemies[i];
+    const dx = playerPos.x - enemy.pos.x;
+    const dy = playerPos.y - enemy.pos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist <= 0.1) continue;
+
+    let { vx, vy } = computeEnemyVelocity(enemy, state, enemyDt, dist, dx, dy);
+    const sep = getSeparationForce(enemy, enemies, grid, gridSize, i, enemy.enemyType, state);
+    vx += sep.vx;
+    vy += sep.vy;
+
+    runEnemyAttacks(enemy, state, dist, dx, dy, vx, vy);
+    tickSurvivalBossPattern(state, enemy, dist, dx, dy, enemyDt);
+
+    // REGENERATING: heals 5 HP/sec
+    if (enemy.enemyType === EnemyType.REGENERATING && enemy.health < enemy.maxHealth) {
+      enemy.health = Math.min(enemy.maxHealth, enemy.health + (5 / 60) * enemyDt);
+    }
+
+    // SHIELDED: shield restores after recharge timer expires
+    if (enemy.enemyType === EnemyType.SHIELDED && enemy.aiState === 'recharge' && (enemy.aiTimer ?? 1) <= 0) {
+      enemy.damageResist = 0.85;
+      enemy.shieldHealth = 10;
+      enemy.aiState = 'chase';
+    }
+
+    finalizeEnemyMovement(enemy, state, vx, vy, enemyDt, i);
+    resolveObstacleCollision(enemy, state.obstacles);
+  }
 }
 
 export function activateUltimate(state: GameState): void {
@@ -1082,7 +1210,6 @@ export function activateUltimate(state: GameState): void {
   // Kill non-boss enemies
   state.enemies = state.enemies.filter(e => {
     if (e.enemyType === EnemyType.BOSS) return true;
-    // Massive damage
     e.health = -1;
     return false;
   });

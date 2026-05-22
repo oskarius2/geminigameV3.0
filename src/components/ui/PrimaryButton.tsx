@@ -14,9 +14,9 @@ export const PrimaryButton: React.FC<PrimaryButtonProps> = ({
   <button
     type="button"
     className={clsx(
-      'min-h-touch w-full rounded-xl font-display font-bold uppercase tracking-[0.2em] text-sm transition-all active:scale-[0.98] disabled:opacity-40',
+      'min-h-touch w-full rounded-lg font-display font-bold uppercase tracking-[0.2em] text-sm transition-all active:scale-95 disabled:opacity-40',
       variant === 'primary' &&
-        'bg-cyan-600 hover:bg-cyan-500 text-white shadow-[0_0_24px_rgba(6,182,212,0.35)] border border-cyan-400/30',
+        'bg-cyan-950/80 hover:bg-cyan-900/90 text-white shadow-[0_0_24px_rgba(0,212,255,0.35)] border-2 border-[var(--hud-accent)]/50 hover:shadow-[0_0_32px_rgba(0,212,255,0.5)]',
       variant === 'ghost' &&
         'bg-white/5 hover:bg-white/10 text-white border border-white/15',
       variant === 'danger' &&

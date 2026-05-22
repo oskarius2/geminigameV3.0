@@ -1,4 +1,5 @@
 import { GameState, Entity, EntityType, ItemType, EnemyType } from './types';
+import { drawCompanionOnCanvas } from './companions/companionCanvasDraw';
 import {
   getCampaignLevel,
   catmullRom,
@@ -14,6 +15,17 @@ import {
   shouldDrawEnemyTrails,
   shouldDrawPlexusLinks,
 } from './balance/combatDensity';
+import {
+  getRailsPlayBounds,
+  renderRailsVoidBackground,
+  renderRailsEntities,
+  renderRailsTunnelInterior,
+  renderRailsScreenUi,
+} from './onRails/renderCorridor';
+import { railsPlayerScale } from './onRails/update';
+import { getProjectileRenderData, getImpactEffectData } from './weaponEffects';
+import { MINI_BOSS_DEFINITIONS } from './bosses/miniBossDefs';
+import { isVoidWalkerActive } from './bosses/miniBossPassives';
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWidth: number, screenHeight: number, options: { isMobile?: boolean; debug?: boolean } = {}) {
   // Ensure screen dimensions are finite to avoid canvas errors
@@ -70,11 +82,11 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
     const bossThemes: Record<string, number> = {
       salvage_hauler: 0,
       hive_regent: 3,
-      void_cardinal: 1,
-      crimson_tyrant: 2,
-      colossus: 2,
       hive_queen: 3,
+      void_cardinal: 1,
       wraith_lord: 1,
+      crimson_tyrant: 0,
+      colossus: 0,
     };
     const override = bossThemes[state.activeBossId];
     if (override !== undefined) stageThemeIndex = override;
@@ -87,30 +99,48 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
     { center: '#1c1c11', edge: '#050500', sunRaw: '255, 255, 150', sunGlow: '255, 255, 0' }, // 5+: Cosmic Gold
   ];
   const theme = themes[stageThemeIndex];
+  const isOnRails = state.gameMode === 'ON_RAILS' && !!state.rails;
 
-  // Clear && Deep Space Background (drawn BEFORE any transforms to save fill-rate)
-  const bgGrad = createSafeRadialGradient(
-    safeScreenWidth / 2, 
-    safeScreenHeight / 2, 
-    0, 
-    safeScreenWidth / 2, 
-    safeScreenHeight / 2, 
-    Math.max(safeScreenWidth, safeScreenHeight)
-  );
-
-  if (bgGrad) {
-    bgGrad.addColorStop(0, theme.center); 
-    bgGrad.addColorStop(1, theme.edge); 
-    ctx.fillStyle = bgGrad;
-  } else {
-    ctx.fillStyle = theme.center;
+  if (import.meta.env.DEV && state.gameMode === 'ON_RAILS' && !state.rails) {
+    console.warn('[ON_RAILS] gameMode is ON_RAILS but state.rails is null');
   }
-  ctx.fillRect(0, 0, safeScreenWidth, safeScreenHeight);
+
+  if (isOnRails) {
+    renderRailsVoidBackground(ctx, safeScreenWidth, safeScreenHeight);
+  } else {
+    const bgGrad = createSafeRadialGradient(
+      safeScreenWidth / 2,
+      safeScreenHeight / 2,
+      0,
+      safeScreenWidth / 2,
+      safeScreenHeight / 2,
+      Math.max(safeScreenWidth, safeScreenHeight)
+    );
+
+    if (bgGrad) {
+      bgGrad.addColorStop(0, theme.center);
+      bgGrad.addColorStop(1, theme.edge);
+      ctx.fillStyle = bgGrad;
+    } else {
+      ctx.fillStyle = theme.center;
+    }
+    ctx.fillRect(0, 0, safeScreenWidth, safeScreenHeight);
+  }
 
   ctx.save();
   ctx.translate(offsetX, offsetY);
 
-  const zoom = state.campaignZoom ?? 0.5;
+  if (isOnRails) {
+    const play = getRailsPlayBounds(safeScreenWidth, safeScreenHeight);
+    ctx.beginPath();
+    ctx.rect(play.left, play.top, play.width, play.height);
+    ctx.clip();
+  }
+
+  const zoom =
+    state.gameMode === 'ON_RAILS' && state.rails
+      ? state.rails.viewZoom
+      : state.campaignZoom ?? 0.5;
   const width = safeScreenWidth / zoom;
   const height = safeScreenHeight / zoom;
 
@@ -151,6 +181,10 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
   }
 
   // --- MAP / BACKGROUND RENDERING ---
+  if (isOnRails) {
+    const tunnelTime = Date.now() / 1000;
+    renderRailsTunnelInterior(ctx, camera, width, height, tunnelTime);
+  } else {
   
   // 1. Distant Orientation Marker (Large Sun/Planet)
   ctx.save();
@@ -318,6 +352,8 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   ctx.stroke();
   
   ctx.restore();
+
+  } // end !isOnRails background
 
   // Draw Vignette / Scanlines
 
@@ -802,7 +838,7 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   });
   ctx.restore();
 
-  // Render Projectiles (with culling)
+  // Render Projectiles (with ship-specific weapon effects)
   state.projectiles.forEach(p => {
     const drawX = p.pos.x - camera.x;
     const drawY = p.pos.y - camera.y;
@@ -811,7 +847,6 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
 
     const velLen = Math.max(p.velocity.magnitude(), 0.001);
     const isRocket = p.itemType === ItemType.BOMB;
-    const trailLen = isRocket ? 35 : p.radius > 8 ? 25 : 18;
     const time = Date.now() / 100;
 
     // Enemy projectile danger zone (Higher visibility)
@@ -828,46 +863,171 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
       ctx.restore();
     }
 
-    ctx.save();
-    // Energetic trail
-    const grad = createSafeLinearGradient(drawX, drawY, drawX - (p.velocity.x / velLen) * trailLen, drawY - (p.velocity.y / velLen) * trailLen);
-    if (grad) {
-      grad.addColorStop(0, p.color || '#fef08a');
-      grad.addColorStop(1, 'transparent');
-      
-      ctx.strokeStyle = grad;
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.lineWidth = isRocket ? p.radius * 2.5 : p.radius * 1.8;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(drawX, drawY);
-      ctx.lineTo(
-        drawX - (p.velocity.x / velLen) * trailLen,
+    // Ship-specific weapon rendering for player projectiles
+    if (p.ownerId === 'player') {
+      const threatLevel = Math.min(1, state.threatLevel / 1000); // Normalize threat level
+      const renderData = getProjectileRenderData(
+        state.selectedShip,
+        threatLevel,
+        {
+          overdrive: state.buffs.overdrive,
+          piercing: state.hasInfinityPierce || p.bounceCount > 0,
+          explosive: state.passives.includes('explosive_rounds')
+        },
+        (p.damage || 0) > state.baseDamage * 2 // Consider it a crit if damage is 2x base
+      );
+
+      const trailLen = isRocket ? 35 : renderData.trailLength;
+
+      ctx.save();
+      // Ship-specific energetic trail
+      const grad = createSafeLinearGradient(
+        drawX, drawY, 
+        drawX - (p.velocity.x / velLen) * trailLen, 
         drawY - (p.velocity.y / velLen) * trailLen
       );
-      ctx.stroke();
-    }
-    ctx.restore();
+      if (grad) {
+        grad.addColorStop(0, renderData.color);
+        grad.addColorStop(0.3, renderData.glowColor);
+        grad.addColorStop(1, 'transparent');
+        
+        ctx.strokeStyle = grad;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineWidth = (p.radius * renderData.size * 1.8) * renderData.intensity;
+        ctx.lineCap = 'round';
+        
+        // Piercing effects - additional trail layers
+        if (renderData.isPiercing) {
+          ctx.beginPath();
+          ctx.moveTo(drawX, drawY);
+          ctx.lineTo(
+            drawX - (p.velocity.x / velLen) * trailLen * 1.6,
+            drawY - (p.velocity.y / velLen) * trailLen * 1.6
+          );
+          ctx.stroke();
+        }
+        
+        ctx.beginPath();
+        ctx.moveTo(drawX, drawY);
+        ctx.lineTo(
+          drawX - (p.velocity.x / velLen) * trailLen,
+          drawY - (p.velocity.y / velLen) * trailLen
+        );
+        ctx.stroke();
+      }
+      ctx.restore();
 
-    ctx.globalAlpha = 1.0;
+      ctx.globalAlpha = 1.0;
 
-    // Bullet core
-    ctx.save();
-    ctx.fillStyle = p.color || '#ffffff';
-    if (!isMobile) {
-      ctx.shadowBlur = isRocket ? 30 : 20;
-      ctx.shadowColor = p.color || '#fef08a';
+      // Ship-specific bullet core
+      ctx.save();
+      ctx.fillStyle = renderData.color;
+      if (!isMobile) {
+        ctx.shadowBlur = isRocket ? 30 : (20 * renderData.intensity);
+        ctx.shadowColor = renderData.glowColor;
+      }
+
+      // Shape-specific rendering
+      const adjustedRadius = p.radius * renderData.size;
+      const pulseRadius = adjustedRadius * (1 + Math.sin(time) * 0.1);
+      
+      ctx.beginPath();
+      switch (renderData.shape) {
+        case 'line':
+          // Swift Falcon - thin energy bolts
+          ctx.lineWidth = adjustedRadius;
+          ctx.lineCap = 'round';
+          ctx.strokeStyle = renderData.color;
+          const lineLen = adjustedRadius * 3;
+          ctx.moveTo(drawX - (p.velocity.x / velLen) * lineLen, drawY - (p.velocity.y / velLen) * lineLen);
+          ctx.lineTo(drawX + (p.velocity.x / velLen) * lineLen, drawY + (p.velocity.y / velLen) * lineLen);
+          ctx.stroke();
+          break;
+        case 'hex':
+          // Heavy Sentinel - chunky hexagonal shells
+          const sides = 6;
+          const hexRadius = pulseRadius;
+          ctx.moveTo(drawX + hexRadius, drawY);
+          for (let i = 1; i <= sides; i++) {
+            const angle = (i * 2 * Math.PI) / sides;
+            ctx.lineTo(drawX + Math.cos(angle) * hexRadius, drawY + Math.sin(angle) * hexRadius);
+          }
+          ctx.closePath();
+          ctx.fill();
+          break;
+        case 'star':
+          // Swarm Vessel - star-shaped with shimmer
+          const spikes = 5;
+          const outerRadius = pulseRadius;
+          const innerRadius = outerRadius * 0.5;
+          for (let i = 0; i < spikes * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (i * Math.PI) / spikes;
+            const x = drawX + Math.cos(angle) * radius;
+            const y = drawY + Math.sin(angle) * radius;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+          ctx.fill();
+          break;
+        default:
+          // Default circle
+          ctx.arc(drawX, drawY, pulseRadius, 0, Math.PI * 2);
+          ctx.fill();
+      }
+      
+      // Pulsing inner core with ship color tint
+      const coreColor = renderData.isCrit ? '#ffffff' : 
+        state.selectedShip === 'interceptor' ? '#e0f7ff' : 
+        state.selectedShip === 'gunship' ? '#fff4f0' : '#f8f9fa';
+      ctx.fillStyle = coreColor;
+      ctx.beginPath();
+      ctx.arc(drawX, drawY, adjustedRadius * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      // Enemy projectile rendering (keep existing)
+      const trailLen = isRocket ? 35 : p.radius > 8 ? 25 : 18;
+      
+      ctx.save();
+      const grad = createSafeLinearGradient(drawX, drawY, drawX - (p.velocity.x / velLen) * trailLen, drawY - (p.velocity.y / velLen) * trailLen);
+      if (grad) {
+        grad.addColorStop(0, p.color || '#fef08a');
+        grad.addColorStop(1, 'transparent');
+        
+        ctx.strokeStyle = grad;
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineWidth = isRocket ? p.radius * 2.5 : p.radius * 1.8;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(drawX, drawY);
+        ctx.lineTo(
+          drawX - (p.velocity.x / velLen) * trailLen,
+          drawY - (p.velocity.y / velLen) * trailLen
+        );
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.globalAlpha = 1.0;
+
+      ctx.save();
+      ctx.fillStyle = p.color || '#ffffff';
+      if (!isMobile) {
+        ctx.shadowBlur = isRocket ? 30 : 20;
+        ctx.shadowColor = p.color || '#fef08a';
+      }
+      ctx.beginPath();
+      ctx.arc(drawX, drawY, p.radius * (1 + Math.sin(time) * 0.1), 0, Math.PI * 2);
+      ctx.fill();
+      
+      ctx.fillStyle = '#fff1f1';
+      ctx.beginPath();
+      ctx.arc(drawX, drawY, p.radius * 0.45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
-    ctx.beginPath();
-    ctx.arc(drawX, drawY, p.radius * (1 + Math.sin(time) * 0.1), 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Pulsing inner core
-    ctx.fillStyle = p.ownerId !== 'player' ? '#fff1f1' : '#f0ffff';
-    ctx.beginPath();
-    ctx.arc(drawX, drawY, p.radius * 0.45, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.restore();
   });
 
   // --- Nano Plexus Links between enemies (Optimized and Throttled) ---
@@ -927,7 +1087,9 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   }
 
   // Render Enemies
-  state.enemies.forEach(e => {
+  if (isOnRails) {
+    renderRailsEntities(ctx, state, camera, Date.now() / 1000);
+  } else state.enemies.forEach(e => {
     const drawX = e.pos.x - camera.x;
     const drawY = e.pos.y - camera.y;
 
@@ -947,17 +1109,37 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     }
     
     // Danger Zones for large enemies
-    if (e.enemyType === EnemyType.BOSS || e.enemyType === EnemyType.ELITE || e.enemyType === EnemyType.TANK || e.enemyType === EnemyType.NOVA || e.enemyType === EnemyType.FORTIFIED) {
+    if (
+      e.miniBossId ||
+      e.enemyType === EnemyType.BOSS ||
+      e.enemyType === EnemyType.ELITE ||
+      e.enemyType === EnemyType.TANK ||
+      e.enemyType === EnemyType.NOVA ||
+      e.enemyType === EnemyType.FORTIFIED
+    ) {
       ctx.save();
       ctx.translate(drawX, drawY);
       const pulse = 1 + Math.sin(Date.now() / 200 + e.id.length) * 0.1;
       const ringRadius = e.radius * 2.5 * pulse;
-      const hue = e.enemyType === EnemyType.BOSS ? 0 : 20;
+      const isChronos = e.miniBossId === 'chronos_guardian';
+      const ringScale = isChronos ? 1.35 : 1;
+      const hue =
+        e.miniBossId === 'chronos_guardian'
+          ? 265
+          : e.miniBossId === 'plasma_splitter'
+            ? 25
+            : e.miniBossId === 'swarm_overlord'
+              ? 45
+              : e.miniBossId
+                ? 270
+                : e.enemyType === EnemyType.BOSS
+                  ? 0
+                  : 20;
       ctx.beginPath();
-      ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(${hue}, 100%, 50%, 0.1)`;
+      ctx.arc(0, 0, ringRadius * ringScale, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${e.miniBossId ? 0.18 : 0.1})`;
       ctx.fill();
-      ctx.strokeStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
+      ctx.strokeStyle = `hsla(${hue}, 100%, 60%, ${e.miniBossId ? 0.55 : 0.3})`;
       ctx.lineWidth = 1.5;
       ctx.stroke();
       if (e.enemyType === EnemyType.BOSS) {
@@ -999,6 +1181,9 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
 
     // Body
     ctx.save();
+    if (e.miniBossId && e.aiState === 'invisible') {
+      ctx.globalAlpha = 0.22;
+    }
     ctx.translate(drawX + jitterX, drawY + jitterY);
     
     // Squash and stretch / Wobble on hit (Subtle)
@@ -1541,14 +1726,28 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
       ctx.fill();
     }
 
-    // Health Bar
+    // Health Bar (always for mini-boss; others use same bar)
     const healthBarW = e.radius * 2;
-    const healthBarH = 4;
+    const healthBarH = e.miniBossId ? 6 : 4;
+    const barOffset = e.miniBossId ? 22 : 12;
     const hpPercent = e.health / e.maxHealth;
+    if (e.miniBossId) {
+      const mbDef = MINI_BOSS_DEFINITIONS[e.miniBossId as keyof typeof MINI_BOSS_DEFINITIONS];
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = mbDef?.auraColor ?? '#e9d5ff';
+      ctx.fillText((mbDef?.displayName ?? 'Miniboss').toUpperCase(), drawX, drawY - e.radius - barOffset - 6);
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.5)';
-    ctx.fillRect(drawX - e.radius, drawY - e.radius - 12, healthBarW, healthBarH);
-    ctx.fillStyle = hpPercent > 0.5 ? '#4ade80' : hpPercent > 0.2 ? '#facc15' : '#ef4444';
-    ctx.fillRect(drawX - e.radius, drawY - e.radius - 12, healthBarW * hpPercent, healthBarH);
+    ctx.fillRect(drawX - e.radius, drawY - e.radius - barOffset, healthBarW, healthBarH);
+    ctx.fillStyle = e.miniBossId
+      ? '#a855f7'
+      : hpPercent > 0.5
+        ? '#4ade80'
+        : hpPercent > 0.2
+          ? '#facc15'
+          : '#ef4444';
+    ctx.fillRect(drawX - e.radius, drawY - e.radius - barOffset, healthBarW * hpPercent, healthBarH);
   });
 
   // Render Player
@@ -1598,6 +1797,22 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
       ctx.arc(pDrawX, pDrawY, orbitRadius, angle - 0.5, angle);
       ctx.stroke();
     }
+  }
+
+  if (state.companionRuntime && state.activeCompanionId) {
+    const c = state.companionRuntime;
+    const cDrawX = c.pos.x - camera.x;
+    const cDrawY = c.pos.y - camera.y;
+    ctx.save();
+    ctx.translate(cDrawX, cDrawY);
+    drawCompanionOnCanvas(ctx, {
+      companionId: state.activeCompanionId,
+      level: state.companionLevel,
+      runtime: c,
+      timeMs: Date.now(),
+      isMobile,
+    });
+    ctx.restore();
   }
 
   // Threat Aura
@@ -1690,7 +1905,14 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   }
 
   ctx.save();
+  if (isVoidWalkerActive(state)) {
+    ctx.globalAlpha = 0.42;
+  }
   ctx.translate(pDrawX, pDrawY);
+  if (isOnRails) {
+    const shipScale = railsPlayerScale(state);
+    ctx.scale(shipScale, shipScale);
+  }
   ctx.rotate(angle);
 
   // Engine Fire
@@ -1884,9 +2106,15 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   if (ctxScreenFlash > 0) {
     ctx.save();
     
-    // Intense Hit Glitch (Chromatic Aberration)
-    if (state.player.hitTimer && state.player.hitTimer > 0) {
-       const intensity = ctxScreenFlash / 10;
+    const hitFactor =
+      state.player.hitTimer && state.player.hitTimer > 0
+        ? Math.min(1, state.player.hitTimer / 12)
+        : 0;
+    const flashFactor = Math.min(1, ctxScreenFlash / 10);
+    const intensity = Math.max(hitFactor, flashFactor);
+
+    // Intense Hit Glitch (Chromatic Aberration + scanline tear)
+    if (intensity > 0.12) {
        const shiftStr = intensity * 15;
        
        // Red Shift
@@ -1908,10 +2136,28 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
          }
        }
     } else {
-       // Standard generic flash (white/translucent) for leveling up/transitions
-       const alpha = Math.min(0.6, ctxScreenFlash / 12);
-       ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
-       ctx.fillRect(0, 0, width, height);
+       // Standard flash — optional rarity tint (artifact acquire, etc.)
+       const alpha = Math.min(0.65, ctxScreenFlash / 12);
+       const flashHex = state.screenFlashColor;
+       if (flashHex && flashHex.startsWith('#')) {
+         const r = parseInt(flashHex.slice(1, 3), 16);
+         const g = parseInt(flashHex.slice(3, 5), 16);
+         const b = parseInt(flashHex.slice(5, 7), 16);
+         if (!Number.isNaN(r) && !Number.isNaN(g) && !Number.isNaN(b)) {
+           ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+         } else {
+           ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+         }
+       } else {
+         ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+       }
+       if (isOnRails) {
+         const play = getRailsPlayBounds(safeScreenWidth, safeScreenHeight);
+         ctx.setTransform(1, 0, 0, 1, 0, 0);
+         ctx.fillRect(play.left, play.top, play.width, play.height);
+       } else {
+         ctx.fillRect(0, 0, width, height);
+       }
     }
     
     ctx.restore();
@@ -1940,7 +2186,19 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
 
   ctx.restore();
 
+  if (isOnRails) {
+    renderRailsScreenUi(
+      ctx,
+      state,
+      camera,
+      safeScreenWidth,
+      safeScreenHeight,
+      Date.now() / 1000
+    );
+  }
+
   // --- Mini-Map ---
+  if (!isOnRails) {
   const mapSize = 120;
   const mapPadding = 20;
   const mapX = width - mapSize - mapPadding;
@@ -2005,4 +2263,5 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   ctx.beginPath();
   ctx.arc(mapX + state.player.pos.x * scaleX, mapY + state.player.pos.y * scaleY, 3, 0, Math.PI * 2);
   ctx.fill();
+  }
 }

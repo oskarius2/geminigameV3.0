@@ -4,21 +4,81 @@ import { Flame, Play, RotateCcw, Shield, Swords, Zap, Trophy, Target } from 'luc
 import { StartPage } from './game/controls/StartPage';
 import { Joystick } from './game/controls/Joystick';
 import { GameHUD } from './game/controls/GameHUD';
-import { GearSystem } from './game/controls/GearSystem';
 import { BuffCardPicker } from './game/controls/BuffCardPicker';
 import { ArtifactUnlockPicker } from './game/controls/ArtifactUnlockPicker';
-import { ArtifactInventory } from './game/controls/ArtifactInventory';
 import {
   getViewportSnapshot,
   subscribeViewport,
   getJoystickSize,
   getTouchActionSize,
-  getBuffChipsTopClass,
   getSynergyBarLayout,
   type ViewportProfile,
 } from './game/controls/mobileLayout';
 import { getAugmentTier, getTierModifiers } from './game/balance/augmentTiers';
-import { computeThreatLevel } from './game/balance/threat';
+import {
+  resetWaveSpawnState,
+  tickSurvivalWaveSpawns,
+} from './game/balance/waveSpawnController';
+import { spawnMiniBoss } from './game/bosses/miniBossSpawn';
+import type { MiniBossId } from './game/bosses/miniBossDefs';
+import { getMiniBossDef } from './game/bosses/miniBossDefs';
+import {
+  applyMiniBossDefeatRewards,
+  applyMiniBossDefeatJuice,
+} from './game/bosses/miniBossLoot';
+import {
+  getMiniBossIncomingDamageMult,
+  getMiniBossOutgoingDamageMult,
+  tryTemporalAnchor,
+  tickMiniBossPassiveRuntime,
+} from './game/bosses/miniBossPassives';
+import { applyMiniBossSpawnJuice } from './game/bosses/miniBossJuice';
+import { playMiniBossDefeatSfx, playMiniBossSpawnSfx } from './game/bosses/miniBossSfx';
+import {
+  applyPlasmaExplosion,
+  fireMiniBossShockwave,
+  tickMiniBossWorldEffects,
+} from './game/bosses/miniBossAI';
+import {
+  computeThreatLevel,
+  getThreatTier,
+  getThreatVisualConfig,
+} from './game/balance/threat';
+import {
+  getSurvivalDifficultyLabelSv,
+  getSurvivalSpawnModifiers,
+} from './game/balance/miniBossDifficulty';
+import { getEffectiveCardIntervalSeconds } from './game/buffs/cardTiming';
+import { applyThreatVisualEffects, resetThreatEffectTracking } from './game/hud/threatEffects';
+import {
+  ensureCompanionRuntime,
+  getCompanionHudSnapshot,
+  updateCompanionAI,
+} from './game/companions/companionAI';
+import {
+  applyCompanionLoadout,
+  grantCompanionKillXp,
+  persistCompanionRunProgress,
+  reconcileAllCompanionProgress,
+  unlockCompanionMeta,
+} from './game/companions/companionLeveling';
+import { CompanionSelectScreen } from './components/CompanionSelectScreen';
+import { PreRunShop } from './components/PreRunShop';
+import {
+  applyCompanionHpShopBoost,
+  applyShopEffects,
+  applyShopThreat,
+  getExperienceGainMultiplier,
+  onShopStageAdvanced,
+  tickShopRunFlags,
+} from './game/shop/shopEffects';
+import type { ShopItemId } from './game/shop/shopTypes';
+import type { CompanionId } from './game/types';
+import { notifyCompanionPlayerHit } from './game/companions/companionBehavior';
+import {
+  applyCompanionDamageReflect,
+  mitigateCompanionIncomingDamage,
+} from './game/companions/companionPassives';
 import {
   getKillQuotaForSpawn,
   getLevelProgress,
@@ -41,7 +101,76 @@ import {
   computeStageClearScrap,
   scrapFromKill,
 } from './game/balance/scrapRewards';
-import { BOSS_DEFINITIONS } from './game/content/bosses';
+import { BOSS_DEFINITIONS, BossDefinition } from './game/content/bosses';
+import { DevCheatsHud } from './game/controls/DevCheatsHud';
+import {
+  devClearKillQuota,
+  devSkipWarpAnimation,
+  isDevCheatsEnabled,
+  readBossIdFromUrl,
+  resolveDevBoss,
+  triggerDevBossWarp,
+  triggerDevMiniBossSpawn,
+  tryDevCheatKeydown,
+} from './game/dev/cheats';
+import { getRailsShootDirection } from './game/onRails/aim';
+import { startRailsRun } from './game/onRails/initRun';
+import { updateOnRails } from './game/onRails/update';
+import { applyRailsPlayerHit } from './game/onRails/railsDamage';
+import { isBossEntranceActive } from './game/onRails/bossEntranceAnimations';
+import { isRailsBossDeathActive } from './game/onRails/bossDeathAnimations';
+import { beginRailsEnemyDeath } from './game/onRails/enemyDeathAnimations';
+import { triggerWeakPointHitFx } from './game/onRails/bossWeakPointGlow';
+import {
+  railsFireIntervalMult,
+  railsScoreMult,
+  isRailsInvincible,
+  consumeRailsShield,
+  consumeRailsMegaBlast,
+  trySpawnPowerupOnKill,
+} from './game/onRails/powerups';
+import { railsBossDamageMult, railsBossTouchDamage } from './game/onRails/bosses';
+import { railsEnemyBodyDamage, railsEnemyKillScore } from './game/onRails/enemies';
+import {
+  getNextRailsLevelId,
+  getRailsLevel,
+  RAILS_LEVELS,
+} from './game/onRails/railsLevels';
+import {
+  getRailsHighScores,
+  getRailsMedal,
+  saveRailsHighScore,
+} from './game/onRails/railsStorage';
+import { HangarScreen, type HangarEntry } from './game/controls/HangarScreen';
+import { recordSurvivalRun, getSurvivalHighScore, getLongestSurvivalSeconds } from './game/meta/survivalStats';
+import {
+  getMetaProgress,
+  getUnlockedArtifactIds,
+  migrateFromLegacyStorage,
+  startRunTracking,
+  unlockArtifact,
+  unlockCompanion,
+  recordStatDelta,
+  clearNewUnlockBadges,
+  getPendingNewCount,
+  getRunUnlocks,
+} from './game/meta/metaProgress';
+import { grantStageMilestoneUnlocks, metaUnlockArtifactFromRun } from './game/meta/unlockSystem';
+import {
+  UnlockToastStack,
+  buildArtifactUnlockToast,
+  buildCompanionUnlockToast,
+  buildPersonalBestToast,
+  type UnlockToast,
+} from './game/meta/unlockNotifications';
+import { rollLootOnKill, applyLootDrop, rollBossLoot } from './game/loot/lootDropController';
+import { BossVictoryBanner } from './game/controls/BossVictoryBanner';
+import { getRecommendedCompanion } from './game/companions/companionDefs';
+import { applyShipStats, getShipDef } from './game/ships/shipDefs';
+import { getProjectileRenderData, getImpactEffectData, shouldTriggerScreenFlash, WEAPON_SIGNATURES } from './game/weaponEffects';
+import { RailsVictoryScreen } from './components/RailsVictoryScreen';
+import { RailsLevelSelect } from './components/RailsLevelSelect';
+import { RailsHUD } from './game/controls/RailsHUD';
 import {
   applyBossArenaWarp,
   beginBossWarp,
@@ -50,21 +179,49 @@ import {
   restoreMainWorldAfterBoss,
 } from './game/content/bossArenas';
 import { countPassiveStacks } from './game/buffs/pickBuffs';
+import {
+  pickSurvivalCardChoices,
+  isArtifactChoiceId,
+  type SurvivalCardChoice,
+} from './game/buffs/pickSurvivalCards';
+import { equipRunArtifact } from './game/artifacts/applyArtifactStats';
+import {
+  applyArtifactAcquireJuice,
+  buildArtifactAcquiredEvent,
+  ARTIFACT_POPUP_DURATION_MS,
+  type ArtifactAcquiredEvent,
+} from './game/hud/artifactPopup';
+import { ArtifactAcquireOverlay } from './game/hud/ArtifactAcquireOverlay';
 import { addMetaScrap, getMetaScrap, spendMetaScrap } from './lib/metaStore';
-import { playSfx, loadSfxMuted, setSfxMuted, setSfxVolume, getSfxVolume, resumeAudio } from './game/audio/sfx';
+import {
+  playSfx,
+  playArtifactAcquireSfx,
+  loadSfxMuted,
+  setSfxMuted,
+  setSfxVolume,
+  getSfxVolume,
+  resumeAudio,
+} from './game/audio/sfx';
 import { startMusic, stopMusic, duckMusic, loadMusicSettings, setMusicMuted, setMusicVolume } from './game/audio/music';
 import { spawnDamageNumber } from './game/juice/damageNumbers';
-import { triggerHitFeedback, shootSfxForSlot, isBossHit, GAMEPLAY_HITSTOP_THRESHOLD } from './game/juice/hitFeedback';
+import {
+  applyPlayerDamageGlitch,
+  triggerHitFeedback,
+  shootSfxForSlot,
+  isBossHit,
+  GAMEPLAY_HITSTOP_THRESHOLD,
+} from './game/juice/hitFeedback';
 import { getActiveSynergies, countTag } from './game/buffs/synergies';
 import { SynergyBar } from './game/controls/SynergyBar';
 import { RunSummary } from './game/controls/RunSummary';
 import { BossWarpOverlay } from './game/controls/BossWarpOverlay';
+import { StageIntroOverlay } from './game/controls/StageIntroOverlay';
 import { PASSIVE_BUFFS } from './game/content/buffs';
 import { getCampaignLevel, pickCampaignEnemyType, getSpawnPosAlongPath, samplePath, samplePathTangent, PORTAL_TRIGGER_RADIUS } from './game/content/campaignLevels';
 import { CampaignSelect, markLevelComplete } from './game/controls/CampaignSelect';
 import { BuffRarity } from './game/types';
 import { Vector2 } from './game/utils/vector';
-import { Artifact, ArtifactSlot, PassiveBuff, EntityType, GameState, ItemType, EnemyType, Entity, Hazard, RandomEvent } from './game/types';
+import { Artifact, ArtifactSlot, PassiveBuff, EntityType, GameState, ItemType, EnemyType, Entity, Hazard, RandomEvent, ShipId } from './game/types';
 import {
   INITIAL_STATE,
   spawnEnemy,
@@ -85,15 +242,27 @@ import {
   generateObstaclesForStage,
   pickBuffs,
   ARTIFACTS,
-  getCardIntervalSeconds,
 } from './game/Logic';
 import { applyBuff, hasPermanentOverdrive, hasPermanentPiercing, hasPermanentRapidFire } from './game/buffs/applyBuff';
 import { applyHangarLoadout } from './game/runSetup';
+import { applyEquippedArtifacts, applySingleArtifactStats } from './game/artifacts/applyArtifactStats';
 import { pickArtifactUnlockChoices } from './game/meta/artifactUnlock';
 import { render } from './game/Renderer';
 
 import { RandomEventDialog } from './game/controls/RandomEventDialog';
-import { TRAITS, handleEventChoice, pickRandomTraits, RANDOM_EVENTS } from './game/Logic';
+import {
+  TRAITS,
+  handleEventChoice,
+  pickRandomTraits,
+  RANDOM_EVENTS,
+  ENEMY_SPATIAL_CELL_SIZE,
+} from './game/Logic';
+import {
+  applyBossDefeatState,
+  hasLiveBoss,
+  isBossTransitioning,
+  logBossLifecycle,
+} from './game/bossLifecycle';
 import { missionController } from './game/missionController';
 
 function findNearestEnemyInGrid(
@@ -170,27 +339,52 @@ export default function App() {
     bossArenaTransition: number;
     activeBossId: string | null;
     bossActive: boolean;
+    lastBossDefeatedId: string | null;
+    bossVictoryBannerTimer: number;
     pendingEvent: RandomEvent | null;
     extraLifeCharges: number;
+    selectedShip: ShipId;
+    companionId: CompanionId | null;
+    companionLevel: number;
+    companionHealth: number;
+    companionMaxHealth: number;
+    companionAbilityCooldown: number;
+    companionAbilityCooldownMax: number;
+    companionAbilityName: string;
+    companionEnergy?: number;
   } | null>(null);
 
   const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
-  const [screen, setScreen] = useState<'MENU' | 'CAMPAIGN_SELECT' | 'GAME'>('MENU');
-  const [isGearOpen, setIsGearOpen] = useState(false);
+  const [screen, setScreen] = useState<
+    'MENU' | 'HANGAR' | 'COMPANION_SELECT' | 'PRE_RUN_SHOP' | 'CAMPAIGN_SELECT' | 'RAILS_SELECT' | 'GAME'
+  >('MENU');
+  const [pendingLaunchShipId, setPendingLaunchShipId] = useState<ShipId | null>(null);
+  const [pendingLaunchCompanionId, setPendingLaunchCompanionId] = useState<CompanionId | null>(null);
+  const [hangarEntry, setHangarEntry] = useState<HangarEntry>('survival');
+  const [hangarInitialTab, setHangarInitialTab] = useState<
+    'ship' | 'vault' | 'loadout' | 'progress'
+  >('ship');
+  const [lastRunPersonalBest, setLastRunPersonalBest] = useState({
+    score: false,
+    time: false,
+  });
+  const [survivalMetaKey, setSurvivalMetaKey] = useState(0);
+  const [railsHighScores, setRailsHighScores] = useState<Record<string, number>>(
+    () => getRailsHighScores()
+  );
+  const [devCheatToast, setDevCheatToast] = useState<string | null>(null);
+  const devCheatsActive = isDevCheatsEnabled();
+  const devCheatToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [notification, setNotification] = useState<{ message: string; type: 'info' | 'success' | 'warning' } | null>(null);
+  const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isPauseMenuOpen, setIsPauseMenuOpen] = useState(false);
+  const [stageIntroStage, setStageIntroStage] = useState<number | null>(null);
+  const [stageIntroKey, setStageIntroKey] = useState(0);
+  const clearStageIntro = useCallback(() => setStageIntroStage(null), []);
   
-  // Artifact Persistence
   const [unlockedArtifactIds, setUnlockedArtifactIds] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('unlockedArtifacts');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch {
-      // corrupted save
-    }
-    return ['iron_sights', 'backup_cannon', 'basic_hull', 'basic_thrusters'];
+    migrateFromLegacyStorage();
+    return getUnlockedArtifactIds();
   });
   
   const [equippedArtifactIds, setEquippedArtifactIds] = useState<Record<ArtifactSlot, string | null>>(() => {
@@ -219,8 +413,51 @@ export default function App() {
   const viewportProfileRef = useRef<ViewportProfile>('desktop');
   const reducedEffectsRef = useRef(false);
   const isMobile = viewportProfile !== 'desktop';
-  const [isInventoryOpen, setIsInventoryOpen] = useState(false);
-  const [newUnlockIds, setNewUnlockIds] = useState<string[]>([]);
+  const [newUnlockIds, setNewUnlockIds] = useState<string[]>(
+    () => getMetaProgress().pendingNewArtifacts,
+  );
+  const [unlockToasts, setUnlockToasts] = useState<UnlockToast[]>([]);
+  const playtimeAccumRef = useRef(0);
+  const prevHighScoreRef = useRef(getSurvivalHighScore());
+  const prevLongestRef = useRef(getLongestSurvivalSeconds());
+
+  const syncMetaUnlockState = useCallback(() => {
+    const p = getMetaProgress();
+    const ids = getUnlockedArtifactIds(p);
+    setUnlockedArtifactIds(ids);
+    setNewUnlockIds([...p.pendingNewArtifacts]);
+  }, []);
+
+  const persistArtifactUnlock = useCallback(
+    (artifactId: string, showFeedback = true) => {
+      const result = metaUnlockArtifactFromRun(artifactId);
+      if (result.newlyUnlocked) {
+        if (showFeedback) {
+          const art = ARTIFACTS[artifactId];
+          if (art) {
+            playArtifactAcquireSfx(art.rarity);
+            setUnlockToasts((prev) => [...prev, buildArtifactUnlockToast(artifactId)]);
+          }
+        }
+      }
+      syncMetaUnlockState();
+      return result.newlyUnlocked;
+    },
+    [syncMetaUnlockState],
+  );
+
+  const persistCompanionUnlock = useCallback(
+    (companionId: CompanionId) => {
+      const result = unlockCompanion(companionId);
+      if (result.newlyUnlocked) {
+        setUnlockToasts((prev) => [...prev, buildCompanionUnlockToast(companionId)]);
+        playSfx('artifact');
+      }
+      syncMetaUnlockState();
+      return result.newlyUnlocked;
+    },
+    [syncMetaUnlockState],
+  );
   
   // Audio state
   const [sfxMuted, setSfxMutedState] = useState(false);
@@ -242,9 +479,6 @@ export default function App() {
     return saved ? saved === 'true' : true;
   });
 
-  useEffect(() => {
-    localStorage.setItem('unlockedArtifacts', JSON.stringify(unlockedArtifactIds));
-  }, [unlockedArtifactIds]);
 
   useEffect(() => {
     localStorage.setItem('mobileLayout', mobileLayout);
@@ -279,8 +513,14 @@ export default function App() {
   const [metaScrap, setMetaScrap] = useState(() => getMetaScrap());
   const [lastRunScrapEarned, setLastRunScrapEarned] = useState(0);
   const [currentBuffs, setCurrentBuffs] = useState<PassiveBuff[]>([]);
+  const [currentCardChoices, setCurrentCardChoices] = useState<SurvivalCardChoice[]>([]);
+  const [artifactAcquirePopup, setArtifactAcquirePopup] = useState<ArtifactAcquiredEvent | null>(
+    null,
+  );
+  const artifactPopupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    reconcileAllCompanionProgress();
     loadSfxMuted();
     loadMusicSettings();
     setSfxMutedState(localStorage.getItem('sfxMuted') === '1');
@@ -342,9 +582,28 @@ export default function App() {
     }
   }, []);
 
+  const showArtifactAcquireFeedback = useCallback((artifact: Artifact) => {
+    const live = gameStateRef.current;
+    if (live) {
+      applyArtifactAcquireJuice(live, artifact);
+    }
+    playArtifactAcquireSfx(artifact.rarity);
+
+    if (artifact.rarity === BuffRarity.LEGENDARY) {
+      const event = buildArtifactAcquiredEvent(artifact);
+      setArtifactAcquirePopup(event);
+      if (artifactPopupTimerRef.current) clearTimeout(artifactPopupTimerRef.current);
+      artifactPopupTimerRef.current = setTimeout(() => {
+        setArtifactAcquirePopup(null);
+      }, ARTIFACT_POPUP_DURATION_MS);
+    }
+  }, []);
+
   const openBuffPicker = (state: GameState) => {
     state.isPaused = true;
-    setCurrentBuffs(pickBuffs(state, 3));
+    const choices = pickSurvivalCardChoices(state, unlockedArtifactIdsRef.current, 3);
+    setCurrentCardChoices(choices);
+    setCurrentBuffs(choices.filter((c) => c.kind === 'buff').map((c) => c.buff));
     setShowLevelUp(true);
     playSfx('cardFlip');
     duckMusic(0.3);
@@ -360,8 +619,17 @@ export default function App() {
     duckMusic(0.3);
   };
 
-  const startGame = () => {
-    const initialState = INITIAL_STATE(dimensions.width, dimensions.height);
+  const startGame = (
+    shipId: ShipId = 'interceptor',
+    companionId?: CompanionId,
+    shopIds: ShopItemId[] = [],
+    shopSpent = 0,
+  ) => {
+    const initialState = INITIAL_STATE(dimensions.width, dimensions.height, shipId);
+    const ship = getShipDef(shipId);
+    if (ship) {
+      applyShipStats(initialState, ship);
+    }
     
     // Overwrite with the traits the player saw on menu
     initialState.activeTraits = nextRunTraits;
@@ -388,34 +656,181 @@ export default function App() {
     });
 
     applyHangarLoadout(initialState, equippedArtifactIds);
-    initialState.threatLevel = computeThreatLevel(initialState);
+    if (companionId) {
+      applyCompanionLoadout(initialState, companionId);
+    }
+    if (shopIds.length > 0) {
+      applyShopEffects(initialState, shopIds);
+      initialState.shopScrapSpent = shopSpent;
+    }
+    if (initialState.activeCompanionId) {
+      ensureCompanionRuntime(initialState);
+      applyCompanionHpShopBoost(initialState);
+    }
+    applyEquippedArtifacts(initialState);
+    if (ship?.startingArtifact && ARTIFACTS[ship.startingArtifact]) {
+      const art = ARTIFACTS[ship.startingArtifact];
+      if (!initialState.equippedArtifacts[art.slot]) {
+        initialState.equippedArtifacts[art.slot] = ship.startingArtifact;
+        applySingleArtifactStats(initialState, art);
+      }
+    }
+    initialState.player.health = initialState.player.maxHealth;
+    
+    // Visual feedback for equipped artifacts
+    const equippedCount = Object.values(equippedArtifactIds).filter(a => a !== null).length;
+    if (equippedCount > 0) {
+      showNotification(`${equippedCount} artefakt(er) utrustad`, 'info');
+      playSfx('artifact');
+    }
+    if (shopSpent > 0) {
+      showNotification(`Loadout shop: −${shopSpent} scrap`, 'info');
+    }
+    
+    initialState.gameMode = 'NORMAL';
+    initialState.rails = null;
+    initialState.campaignLevelId = null;
+    initialState.campaignZoom = null;
+    initialState.campaignCameraAngle = null;
+    initialState.campaignCameraPos = null;
+    initialState.isGameOver = false;
+    applyShopThreat(initialState);
     initialState.threatPeak = initialState.threatLevel;
     initialState.runStartTime = Date.now();
     initialState.runArtifactsUnlockedThisRun = [];
-    initialState.cardTimer = 15;
-    initialState.spawnRampTimer = 5;
+    startRunTracking();
+    playtimeAccumRef.current = 0;
+    prevHighScoreRef.current = getSurvivalHighScore();
+    prevLongestRef.current = getLongestSurvivalSeconds();
+    initialState.cardTimer = getEffectiveCardIntervalSeconds(
+      initialState.stage,
+      initialState.survivalTime,
+      initialState.passives,
+      initialState.threatLevel,
+    );
+    initialState.spawnRampTimer = 3.5;
+    resetThreatEffectTracking();
     initialState.activeBossId = null;
     initialState.bossArenaTransition = 0;
     initialState.bossArenaSwapped = false;
     initialState.inBossArena = false;
     initialState.mainWorldSnapshot = null;
     initialState.lastBossId = null;
+    initialState.lastBossDefeatedId = null;
+    initialState.bossVictoryBannerTimer = 0;
     initialState.pendingArenaRestore = false;
     initialState.runScrapEarned = 0;
     initialState.postBossBuffPick = false;
+    initialState.miniBossKillsThisRun = 0;
+    resetWaveSpawnState(initialState);
     gameStateRef.current = initialState;
     setLastRunScrapEarned(0);
+    setLastRunPersonalBest({ score: false, time: false });
     setNewUnlockIds([]);
     setShowArtifactUnlock(false);
     setArtifactUnlockChoices([]);
     syncUi();
     setScreen('GAME');
     setIsPauseMenuOpen(false);
+    setStageIntroKey((k) => k + 1);
+    setStageIntroStage(1);
     resumeAudio();
     if (!musicMuted) startMusic();
 
+    if (devCheatsActive) {
+      const bossId = readBossIdFromUrl();
+      if (bossId) {
+        const boss = resolveDevBoss(bossId);
+        if (boss) {
+          window.setTimeout(() => {
+            const live = gameStateRef.current;
+            if (!live) return;
+            if (triggerDevBossWarp(live, boss, dimensions.width, dimensions.height)) {
+              showDevCheatToast(`URL ?boss=${boss.id}`);
+              syncUi();
+            }
+          }, 700);
+        } else {
+          showDevCheatToast(`Okänd boss: ${bossId}`);
+        }
+      }
+    }
+
     // Prepare traits for the run AFTER this one
     setNextRunTraits(pickRandomTraits());
+  };
+
+  const startRailsGame = (levelId: string) => {
+    const initialState = INITIAL_STATE(dimensions.width, dimensions.height);
+    initialState.activeTraits = nextRunTraits;
+    nextRunTraits.forEach((tId) => {
+      switch (tId) {
+        case 'agile':
+          initialState.player.speed *= 1.2;
+          break;
+        case 'hard_hitter':
+          initialState.baseDamage *= 1.25;
+          break;
+        case 'hull_plating':
+          initialState.player.maxHealth += 150;
+          initialState.player.health += 150;
+          break;
+        case 'frail':
+          initialState.player.maxHealth = Math.max(50, initialState.player.maxHealth - 100);
+          initialState.player.health = Math.min(initialState.player.health, initialState.player.maxHealth);
+          break;
+        case 'clunky':
+          initialState.player.speed *= 0.85;
+          break;
+        case 'glass_cannon':
+          initialState.player.maxHealth *= 0.7;
+          initialState.player.health *= 0.7;
+          initialState.baseDamage *= 1.15;
+          break;
+      }
+    });
+    applyHangarLoadout(initialState, equippedArtifactIds);
+    applyEquippedArtifacts(initialState);
+    initialState.player.health = initialState.player.maxHealth;
+    if (!startRailsRun(initialState, levelId, dimensions.width, dimensions.height)) {
+      return;
+    }
+    initialState.threatLevel = computeThreatLevel(initialState);
+    initialState.threatPeak = initialState.threatLevel;
+    initialState.runStartTime = Date.now();
+    gameStateRef.current = initialState;
+    controls.current.move = { x: 0, y: 0 };
+    controls.current.aim = { x: 0, y: 0 };
+    controls.current.mousePos = {
+      x: dimensions.width / 2,
+      y: dimensions.height * 0.78,
+    };
+    setLastRunScrapEarned(0);
+    setShowLevelUp(false);
+    setShowArtifactUnlock(false);
+    syncUi();
+    setScreen('GAME');
+    setIsPauseMenuOpen(false);
+    resumeAudio();
+    if (!musicMuted) startMusic();
+    setNextRunTraits(pickRandomTraits());
+  };
+
+  /** New Run from summary — restart the same mode the player just finished. */
+  const restartAfterRun = () => {
+    const prev = gameStateRef.current;
+    const mode = prev?.gameMode;
+    const campaignLevelId = prev?.campaignLevelId;
+    gameStateRef.current = null;
+
+    if (mode === 'ON_RAILS') {
+      const levelId = prev?.rails?.levelId ?? 'tunnel_01';
+      startRailsGame(levelId);
+    } else if (mode === 'CAMPAIGN' && campaignLevelId) {
+      startCampaignLevel(campaignLevelId);
+    } else {
+      startGame(prev?.selectedShip ?? 'interceptor');
+    }
   };
 
   const startCampaignLevel = (levelId: string) => {
@@ -423,7 +838,10 @@ export default function App() {
     if (!level) return;
     const initialState = INITIAL_STATE(dimensions.width, dimensions.height);
     applyHangarLoadout(initialState, equippedArtifactIds);
+    applyEquippedArtifacts(initialState);
+    initialState.player.health = initialState.player.maxHealth;
     initialState.gameMode = 'CAMPAIGN';
+    initialState.rails = null;
     initialState.campaignLevelId = levelId;
     initialState.enemiesToKill = level.enemiesToKill;
     initialState.obstacles = level.obstacles.map((spec, i) => ({
@@ -484,36 +902,103 @@ export default function App() {
       bossArenaTransition: state.bossArenaTransition,
       activeBossId: state.activeBossId,
       bossActive: state.bossActive,
+      lastBossDefeatedId: state.lastBossDefeatedId,
+      bossVictoryBannerTimer: state.bossVictoryBannerTimer,
       pendingEvent: state.pendingEvent,
       extraLifeCharges: state.extraLifeCharges,
       passives: [...state.passives],
+      selectedShip: state.selectedShip,
+      ...(() => {
+        const snap = getCompanionHudSnapshot(state);
+        if (!snap) {
+          return {
+            companionId: null as CompanionId | null,
+            companionLevel: 1,
+            companionHealth: 0,
+            companionMaxHealth: 0,
+            companionAbilityCooldown: 0,
+            companionAbilityCooldownMax: 0,
+            companionAbilityName: '',
+            companionEnergy: undefined,
+          };
+        }
+        return {
+          companionId: snap.companionId,
+          companionLevel: snap.level,
+          companionHealth: snap.health,
+          companionMaxHealth: snap.maxHealth,
+          companionAbilityCooldown: snap.abilityCooldownRemaining,
+          companionAbilityCooldownMax: snap.abilityCooldownMax,
+          companionAbilityName: snap.abilityName,
+          companionEnergy: snap.energy,
+        };
+      })(),
     });
   };
 
   const handleFatalDamage = (next: GameState, player: Entity): boolean => {
     if (player.health > 0) return false;
     if (next.isGameOver) return false;
+    if (tryTemporalAnchor(next, player)) return true;
     if (tryTriggerExtraLife(next, player)) return true;
     next.isGameOver = true;
+    if (next.gameMode === 'NORMAL') {
+      persistCompanionRunProgress(next);
+      recordStatDelta({ playtimeSeconds: playtimeAccumRef.current });
+      const mbKills = next.miniBossKillsThisRun ?? 0;
+      if (mbKills > 0) recordStatDelta({ miniBossKills: mbKills });
+      playtimeAccumRef.current = 0;
+      const pb = recordSurvivalRun(next.score, next.survivalTime);
+      setLastRunPersonalBest({ score: pb.newHighScore, time: pb.newLongestRun });
+      if (pb.newHighScore) {
+        setUnlockToasts((prev) => [
+          ...prev,
+          buildPersonalBestToast('score', prevHighScoreRef.current, next.score),
+        ]);
+        prevHighScoreRef.current = next.score;
+      }
+      if (pb.newLongestRun) {
+        setUnlockToasts((prev) => [
+          ...prev,
+          buildPersonalBestToast('time', prevLongestRef.current, next.survivalTime),
+        ]);
+        prevLongestRef.current = next.survivalTime;
+      }
+      setSurvivalMetaKey((k) => k + 1);
+    }
     const banked = next.runScrapEarned + computeRunEndScrap(next);
     if (banked > 0) {
       addMetaScrap(banked);
+      recordStatDelta({ scrap: banked });
       setMetaScrap(getMetaScrap());
     }
     setLastRunScrapEarned(banked);
     playSfx('gameOver');
     stopMusic();
-    next.screenshake = 10;
+    applyPlayerDamageGlitch(next, player, 'fatal');
     return true;
   };
 
   const handleLevelUpChoice = (choiceId: string) => {
     const next = gameStateRef.current;
     if (!next) return;
-    applyBuff(next, choiceId);
-    const def = PASSIVE_BUFFS[choiceId];
-    if (def?.exclusive || def?.rarity === BuffRarity.EXCLUSIVE) playSfx('exclusive');
-    else playSfx('augment');
+
+    if (isArtifactChoiceId(choiceId)) {
+      const artifact = ARTIFACTS[choiceId];
+      if (artifact && equipRunArtifact(next, choiceId)) {
+        persistArtifactUnlock(choiceId, false);
+        if (!next.runArtifactsUnlockedThisRun.includes(choiceId)) {
+          next.runArtifactsUnlockedThisRun.push(choiceId);
+        }
+        showArtifactAcquireFeedback(artifact);
+      }
+    } else {
+      applyBuff(next, choiceId);
+      const def = PASSIVE_BUFFS[choiceId];
+      if (def?.exclusive || def?.rarity === BuffRarity.EXCLUSIVE) playSfx('exclusive');
+      else playSfx('augment');
+    }
+
     setShowLevelUp(false);
     next.isPaused = false;
     controls.current.isFiring = false;
@@ -522,23 +1007,76 @@ export default function App() {
   };
 
   const handleArtifactUnlockChoice = (artifactId: string) => {
-    if (!unlockedArtifactIds.includes(artifactId)) {
-      setUnlockedArtifactIds((prev) => [...prev, artifactId]);
-      setNewUnlockIds((prev) => [...prev, artifactId]);
-    }
+    persistArtifactUnlock(artifactId, true);
     const next = gameStateRef.current;
     if (next) {
       next.runArtifactUnlocks += 1;
       if (!next.runArtifactsUnlockedThisRun.includes(artifactId)) {
         next.runArtifactsUnlockedThisRun.push(artifactId);
       }
+      if (equipRunArtifact(next, artifactId)) {
+        const artifact = ARTIFACTS[artifactId];
+        if (artifact) showArtifactAcquireFeedback(artifact);
+      }
       next.isPaused = false;
-      playSfx('artifact');
     }
     setShowArtifactUnlock(false);
     setArtifactUnlockChoices([]);
     syncUi();
   };
+
+  const showDevCheatToast = useCallback((message: string) => {
+    setDevCheatToast(message);
+    if (devCheatToastTimerRef.current) clearTimeout(devCheatToastTimerRef.current);
+    devCheatToastTimerRef.current = setTimeout(() => setDevCheatToast(null), 2600);
+  }, []);
+
+  const showNotification = useCallback((message: string, type: 'info' | 'success' | 'warning' = 'info') => {
+    setNotification({ message, type });
+    if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
+    notificationTimerRef.current = setTimeout(() => setNotification(null), 3000);
+  }, []);
+
+  const devCheatHandlersRef = useRef({
+    onBossWarp: (_boss: BossDefinition) => {},
+    onMiniBossSpawn: (_id: MiniBossId) => {},
+    onClearQuota: () => {},
+    onSkipWarp: () => {},
+  });
+
+  useEffect(() => {
+    devCheatHandlersRef.current = {
+      onBossWarp: (boss) => {
+        const next = gameStateRef.current;
+        if (!next) return;
+        if (!triggerDevBossWarp(next, boss, dimensions.width, dimensions.height)) {
+          showDevCheatToast('Boss-cheat: endast Survival (Start Survival)');
+        }
+      },
+      onMiniBossSpawn: (id) => {
+        const next = gameStateRef.current;
+        if (!next) return;
+        const entity = triggerDevMiniBossSpawn(next, id);
+        if (!entity) {
+          showDevCheatToast('Miniboss-cheat: endast Survival');
+          return;
+        }
+        applyMiniBossSpawnJuice(next, id);
+        playMiniBossSpawnSfx(id);
+        next.enemies.push(entity);
+      },
+      onClearQuota: () => {
+        const next = gameStateRef.current;
+        if (!next) return;
+        devClearKillQuota(next);
+      },
+      onSkipWarp: () => {
+        const next = gameStateRef.current;
+        if (!next) return;
+        devSkipWarpAnimation(next);
+      },
+    };
+  }, [dimensions.width, dimensions.height, showDevCheatToast]);
 
   const togglePause = () => {
     const next = gameStateRef.current;
@@ -557,22 +1095,38 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (screen === 'GAME' && devCheatsActive) {
+        const cheat = tryDevCheatKeydown(e, devCheatHandlersRef.current);
+        if (cheat?.handled) {
+          if (cheat.toast) showDevCheatToast(cheat.toast);
+          syncUi();
+          return;
+        }
+      }
       controls.current.keys.add(e.key.toLowerCase());
-      if (e.key === ' ') controls.current.wantDash = true;
+      if (e.key === ' ') {
+        if (gameStateRef.current?.gameMode === 'ON_RAILS') {
+          controls.current.isFiring = true;
+        } else {
+          controls.current.wantDash = true;
+        }
+      }
       if (e.key.toLowerCase() === 'e') controls.current.wantUltimate = true;
       if (e.key === 'p' || e.key === 'Escape') togglePause();
     };
 
     const handleKeyUp = (e: KeyboardEvent) => {
       controls.current.keys.delete(e.key.toLowerCase());
+      if (e.key === ' ' && gameStateRef.current?.gameMode === 'ON_RAILS') {
+        controls.current.isFiring = false;
+      }
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
+    const handlePointerMove = (e: PointerEvent) => {
       controls.current.mousePos = { x: e.clientX, y: e.clientY };
     };
 
     const handleMouseDown = (e: MouseEvent) => {
-      // Prevent firing when clicking on buttons or interactive UI
       if (e.button === 0) {
         const target = e.target as HTMLElement;
         if (target.closest('button') || target.closest('a')) return;
@@ -581,23 +1135,32 @@ export default function App() {
     };
 
     const handleMouseUp = (e: MouseEvent) => {
-      if (e.button === 0) controls.current.isFiring = false;
+      if (e.button === 0 && gameStateRef.current?.gameMode !== 'ON_RAILS') {
+        controls.current.isFiring = false;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerdown', handlePointerMove);
     window.addEventListener('mousedown', handleMouseDown);
     window.addEventListener('mouseup', handleMouseUp);
     
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerdown', handlePointerMove);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
+      
+      // Cleanup notification timers
+      if (devCheatToastTimerRef.current) clearTimeout(devCheatToastTimerRef.current);
+      if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
+      if (artifactPopupTimerRef.current) clearTimeout(artifactPopupTimerRef.current);
     };
-  }, [screen]);
+  }, [screen, devCheatsActive, showDevCheatToast, syncUi]);
 
   useEffect(() => {
     if (screen !== 'GAME' || !gameStateRef.current) return;
@@ -639,7 +1202,106 @@ export default function App() {
         }
       }
 
+      // Arena restore must run even while paused (artifact pick after boss kill).
+      if (next?.pendingArenaRestore) {
+        restoreMainWorldAfterBoss(next, dimensions.width, dimensions.height);
+        next.pendingArenaRestore = false;
+        next.bossActive = false;
+        next.activeBossId = null;
+        next.inBossArena = false;
+        next.enemies = [];
+        next.projectiles = [];
+        next.items = [];
+        next.spawnRampTimer = 5.0;
+        next.screenFlash = Math.max(next.screenFlash, 15);
+        logBossLifecycle(next, 'arena-restored');
+        playSfx('augment');
+      }
+
+      // Boss warp + stage intermission must tick even while paused (buff/artifact UI).
+      if (next?.bossArenaTransition > 0) {
+        next.enemies = [];
+        next.projectiles = [];
+        next.hazards = [];
+        next.bossArenaTransition -= dt * (16.67 / 1000);
+        next.player.velocity = new Vector2(0, 0);
+        if (
+          next.bossArenaTransition <= BOSS_WARP_SWAP_AT &&
+          !next.bossArenaSwapped &&
+          next.activeBossId
+        ) {
+          applyBossArenaWarp(next, dimensions.width, dimensions.height);
+          if (next.passives.includes('crimson_overdrive')) {
+            next.buffs.overdrive = Math.max(next.buffs.overdrive, 480);
+          }
+          playSfx('augment');
+        }
+        if (next.bossArenaTransition <= 0) {
+          next.bossArenaTransition = 0;
+          next.bossActive = true;
+        }
+      }
+
+      if (next?.gameMode === 'NORMAL' && next.stageTransition > 0) {
+        next.stageTransition -= dt;
+        if (next.stageTransition <= 0) {
+          const clearedStage = next.stage;
+          next.stage++;
+          onShopStageAdvanced(next);
+          const milestoneArts = grantStageMilestoneUnlocks(clearedStage);
+          for (const artId of milestoneArts) {
+            const art = ARTIFACTS[artId];
+            if (art) {
+              playArtifactAcquireSfx(art.rarity);
+              setUnlockToasts((prev) => [...prev, buildArtifactUnlockToast(artId)]);
+            }
+          }
+          if (clearedStage === 1) {
+            const firstId = getRecommendedCompanion(next.selectedShip);
+            persistCompanionUnlock(firstId);
+            unlockCompanionMeta(firstId);
+          }
+          syncMetaUnlockState();
+          next.cardTimer = getEffectiveCardIntervalSeconds(
+            next.stage,
+            next.survivalTime,
+            next.passives,
+            next.threatLevel,
+          );
+          next.enemiesToKill = getStageQuota(next.stage);
+          next.bossActive = false;
+          next.activeBossId = null;
+          next.bossArenaTransition = 0;
+          next.bossArenaSwapped = false;
+          next.inBossArena = false;
+          next.pendingArenaRestore = false;
+          next.mainWorldSnapshot = null;
+          logBossLifecycle(next, 'stage-advanced');
+          next.obstacles = generateObstaclesForStage(
+            next.stage,
+            next.world.width,
+            next.world.height
+          );
+          next.runScrapEarned += computeStageClearScrap(next.stage - 1);
+          next.enemies = [];
+          next.projectiles = [];
+          next.items = [];
+          next.spawnRampTimer = 6.0;
+          resetWaveSpawnState(next);
+          next.player.health = Math.min(
+            next.player.maxHealth,
+            next.player.health + next.player.maxHealth * 0.3
+          );
+          next.screenFlash = 20;
+          openBuffPicker(next);
+          playSfx('augment');
+        }
+      }
+
       if (!next || next.isPaused || showLevelUpRef.current || showArtifactUnlockRef.current) {
+        if (next?.bossArenaTransition > 0 || next?.stageTransition > 0) {
+          syncUi();
+        }
         if (next) render(ctx, next, dimensions.width, dimensions.height, { isMobile: reducedEffectsRef.current });
         animId = requestAnimationFrame(loop);
         return;
@@ -667,22 +1329,7 @@ export default function App() {
       }
 
       const { player } = next;
-
-      // Unify Spatial Partitioning (Grid) - Build once per frame
-      const grid = new Map<string, Entity[]>();
-      const cellSize = 150;
-      for (let i = 0; i < next.enemies.length; i++) {
-        const e = next.enemies[i];
-        const gx = Math.floor(e.pos.x / cellSize);
-        const gy = Math.floor(e.pos.y / cellSize);
-        const key = `${gx},${gy}`;
-        let cell = grid.get(key);
-        if (!cell) {
-          cell = [];
-          grid.set(key, cell);
-        }
-        cell.push(e);
-      }
+      const dtSec = dt * (16.67 / 1000);
 
       // Update Hit Timers
       if (player.hitTimer && player.hitTimer > 0) player.hitTimer -= dt;
@@ -704,9 +1351,30 @@ export default function App() {
 
 
       if (next.gameMode === 'NORMAL' && !next.isPaused) {
-        next.survivalTime += dt * (16.67 / 1000);
+        next.survivalTime += dtSec;
+        if (next.gameMode === 'NORMAL' && !next.isPaused) {
+          playtimeAccumRef.current += dtSec;
+        }
         next.threatLevel = computeThreatLevel(next);
+        applyShopThreat(next);
         next.threatPeak = Math.max(next.threatPeak, next.threatLevel);
+        applyThreatVisualEffects(next, dtSec);
+        tickShopRunFlags(next, dtSec);
+        updateCompanionAI(next, dtSec);
+        tickMiniBossPassiveRuntime(next, dtSec);
+        tickMiniBossWorldEffects(next, dtSec);
+        if ((next.miniBossPopupTimer ?? 0) > 0) {
+          next.miniBossPopupTimer = Math.max(0, (next.miniBossPopupTimer ?? 0) - dtSec);
+        }
+        if ((next.miniBossSpawnPopupTimer ?? 0) > 0) {
+          next.miniBossSpawnPopupTimer = Math.max(0, (next.miniBossSpawnPopupTimer ?? 0) - dtSec);
+        }
+        if ((next.miniBossIncomingTimer ?? 0) > 0) {
+          next.miniBossIncomingTimer = Math.max(0, (next.miniBossIncomingTimer ?? 0) - dtSec);
+        }
+        if ((next.bossVictoryBannerTimer ?? 0) > 0) {
+          next.bossVictoryBannerTimer = Math.max(0, (next.bossVictoryBannerTimer ?? 0) - dt);
+        }
       }
 
       if (next.pickJuiceTimer > 0) next.pickJuiceTimer -= dt;
@@ -728,18 +1396,32 @@ export default function App() {
         }
       }
 
-      // Card Timer Logic
-      next.cardTimer -= dt * (16.67 / 1000); // Decr in seconds
-      if (next.cardTimer <= 0) {
-        next.cardTimer = getCardIntervalSeconds(next.stage, next.survivalTime, next.passives.length);
-        if (Math.random() < 0.2) {
-          openMysteryCard(next);
-        } else {
-          openBuffPicker(next);
+      // Card Timer Logic (disabled in ON_RAILS — uses its own powerup drops)
+      if (
+        next.gameMode !== 'ON_RAILS' &&
+        next.bossArenaTransition <= 0 &&
+        next.stageTransition <= 0
+      ) {
+        const cardInterval = getEffectiveCardIntervalSeconds(
+          next.stage,
+          next.survivalTime,
+          next.passives,
+          next.threatLevel,
+        );
+        if (next.stage !== 1 && Number.isFinite(cardInterval)) {
+          next.cardTimer -= dt * (16.67 / 1000);
+          if (next.cardTimer <= 0) {
+            next.cardTimer = cardInterval;
+            if (Math.random() < 0.2) {
+              openMysteryCard(next);
+            } else {
+              openBuffPicker(next);
+            }
+            playSfx('levelUp');
+            next.screenshake = 5;
+            syncUi();
+          }
         }
-        playSfx('levelUp');
-        next.screenshake = 5;
-        syncUi();
       }
 
       if (next.playerIFrameTimer > 0) next.playerIFrameTimer -= dt;
@@ -766,21 +1448,26 @@ export default function App() {
         if (next.comboTimer <= 0) next.combo = 0;
       }
 
-      if (next.screenFlash > 0) next.screenFlash -= dt;
+      if (next.screenFlash > 0) {
+        next.screenFlash -= dt;
+        if (next.screenFlash <= 0) next.screenFlashColor = null;
+      }
       
       const effectiveMagnetRange = next.buffs.magnet > 0 ? 800 : next.magnetRange;
       const xpMagnetRange = 120;
 
-      // Passive Regen
-      if (next.regen > 0 && player.health < player.maxHealth) {
-        player.health = Math.min(player.maxHealth, player.health + (next.regen / 60) * dt);
+      const onRailsActive = next.gameMode === 'ON_RAILS' && next.rails?.outcome === 'active';
+
+      // Passive Regen (not in ON_RAILS — fixed 3 HP)
+      if (!onRailsActive) {
+        if (next.regen > 0 && player.health < player.maxHealth) {
+          player.health = Math.min(player.maxHealth, player.health + (next.regen / 60) * dt);
+        }
+        if (player.health < player.maxHealth) {
+          player.health = Math.min(player.maxHealth, player.health + 0.01 * dt);
+        }
       }
 
-      // Passive Health Regen (very slow - base)
-      if (player.health < player.maxHealth) {
-        player.health = Math.min(player.maxHealth, player.health + 0.01 * dt);
-      }
-      
       const prevFrameHealth = player.health;
 
       // Process Input: Keyboard takes priority over Joystick
@@ -788,10 +1475,44 @@ export default function App() {
       let ky = 0;
       const warpLocked = next.bossArenaTransition > 0;
 
-      if (controls.current.keys.has('w')) ky -= 1;
-      if (controls.current.keys.has('s')) ky += 1;
-      if (controls.current.keys.has('a')) kx -= 1;
-      if (controls.current.keys.has('d')) kx += 1;
+      if (!onRailsActive) {
+        if (controls.current.keys.has('w')) ky -= 1;
+        if (controls.current.keys.has('s')) ky += 1;
+        if (controls.current.keys.has('a')) kx -= 1;
+        if (controls.current.keys.has('d')) kx += 1;
+      }
+
+      if (onRailsActive) {
+        const keys = controls.current.keys;
+        const railsEnded = updateOnRails(
+          next,
+          dtSec,
+          {
+            pointerScreenX: controls.current.mousePos.x,
+            moveForward:
+              keys.has('w') ||
+              keys.has('arrowup') ||
+              keys.has(' '),
+            moveBack: keys.has('s') || keys.has('arrowdown'),
+            moveLeft: keys.has('a') || keys.has('arrowleft'),
+            moveRight: keys.has('d') || keys.has('arrowright'),
+          },
+          dimensions.width,
+          dimensions.height
+        );
+        if (railsEnded) {
+          if (player.health <= 0) handleFatalDamage(next, player);
+          if (next.rails?.outcome === 'cleared') {
+            saveRailsHighScore(next.rails.levelId, next.score);
+            setRailsHighScores(getRailsHighScores());
+          }
+          if (next.rails?.outcome === 'failed') {
+            playSfx('gameOver');
+            stopMusic();
+          }
+          syncUi();
+        }
+      }
 
       // Weapon Switch
       const triggerWeaponSwitch = (slot: 'CANNON_A' | 'CANNON_B') => {
@@ -824,19 +1545,23 @@ export default function App() {
       
       // Calculate Aim: Joystick takes priority for aiming if actively moved
       let aimDir: Vector2;
-      const aimMag = Math.hypot(controls.current.aim.x, controls.current.aim.y);
-      if (aimMag > joystickDeadZoneRef.current) {
-        aimDir = new Vector2(controls.current.aim.x, controls.current.aim.y).normalize();
+      if (onRailsActive) {
+        aimDir = getRailsShootDirection(next);
       } else {
-        const zoom = next.campaignZoom ?? 0.5;
-        const playerScreenX = (player.pos.x - next.camera.x) * zoom;
-        const playerScreenY = (player.pos.y - next.camera.y) * zoom;
-        aimDir = new Vector2(
-          controls.current.mousePos.x - playerScreenX,
-          controls.current.mousePos.y - playerScreenY
-        );
-        if (aimDir.magnitude() < 5) aimDir = new Vector2(1, 0); // Default if mouse is on player
-        else aimDir = aimDir.normalize();
+        const aimMag = Math.hypot(controls.current.aim.x, controls.current.aim.y);
+        if (aimMag > joystickDeadZoneRef.current) {
+          aimDir = new Vector2(controls.current.aim.x, controls.current.aim.y).normalize();
+        } else {
+          const zoom = next.campaignZoom ?? 0.5;
+          const playerScreenX = (player.pos.x - next.camera.x) * zoom;
+          const playerScreenY = (player.pos.y - next.camera.y) * zoom;
+          aimDir = new Vector2(
+            controls.current.mousePos.x - playerScreenX,
+            controls.current.mousePos.y - playerScreenY
+          );
+          if (aimDir.magnitude() < 5) aimDir = new Vector2(1, 0);
+          else aimDir = aimDir.normalize();
+        }
       }
       
       // Dash Initiation
@@ -844,6 +1569,7 @@ export default function App() {
       if (
         !warpLocked &&
         next.gameMode !== 'CAMPAIGN' &&
+        !onRailsActive &&
         controls.current.wantDash &&
         next.energy >= dashCost &&
         !next.isDashing
@@ -911,7 +1637,7 @@ export default function App() {
             size: 5
           });
         }
-      } else if (warpLocked) {
+      } else if (warpLocked || onRailsActive) {
         player.velocity = new Vector2(0, 0);
       } else {
         if (moveDir.magnitude() > 0.05) {
@@ -935,7 +1661,9 @@ export default function App() {
         }
       }
 
-      player.pos = player.pos.add(player.velocity);
+      if (!onRailsActive) {
+        player.pos = player.pos.add(player.velocity);
+      }
       player.aimDir = aimDir;
       const preObsPos = player.pos.clone();
       resolveObstacleCollision(player, next.obstacles);
@@ -987,10 +1715,23 @@ export default function App() {
       if (next.activeWeaponSlot === 'CANNON_B') fireInterval *= 3.0; // Rockets are slower, bigger
       
       if (hasPermanentRapidFire(next) || next.buffs.rapidFire > 0) fireInterval *= 0.4;
+      if (onRailsActive && next.rails) {
+        fireInterval *= railsFireIntervalMult(next.rails, next.survivalTime);
+      }
+      if (next.fireRateMultiplier > 0) fireInterval /= next.fireRateMultiplier;
       if (next.multiShotFireRatePenalty < 1) fireInterval /= next.multiShotFireRatePenalty;
       if (next.bulletStormMult > 1) fireInterval /= next.bulletStormMult;
       
-      if (controls.current.isFiring && currentTime - lastFireTime.current > fireInterval) {
+      const railsCinematicLock =
+        onRailsActive &&
+        next.rails &&
+        (isBossEntranceActive(next.rails) || isRailsBossDeathActive(next.rails));
+
+      if (
+        !railsCinematicLock &&
+        controls.current.isFiring &&
+        currentTime - lastFireTime.current > fireInterval
+      ) {
         lastFireTime.current = currentTime;
 
         if (countTag(next, 'damage') >= 2 && countTag(next, 'fire') >= 1) {
@@ -998,7 +1739,8 @@ export default function App() {
         }
 
         let numProjectiles = next.multiShot || 1;
-        const spread = Math.min(Math.PI / 4, 0.1 * numProjectiles); // Dynamic spread
+        let spread = Math.min(Math.PI / 4, 0.1 * numProjectiles);
+        if (onRailsActive) spread = Math.min(spread, 0.08);
         
           const totalCritChance = (next.critChance || 0.15) + next.pendingCritBonus;
 
@@ -1018,14 +1760,17 @@ export default function App() {
         // Special Tuning per Slot
         let projectileSpeed = 10;
         let pRadius = 5;
-        let pColor = '#22d3ee'; // Sharp Cyan
+        
+        // Ship-specific weapon signature colors
+        const weaponSignature = WEAPON_SIGNATURES[next.selectedShip];
+        let pColor = weaponSignature.projectileColor;
         let pPiercing = next.bounceCount;
         if (hasPermanentPiercing(next) || next.hasInfinityPierce) pPiercing += 1000;
 
         if (next.activeWeaponSlot === 'CANNON_B') {
           projectileSpeed = 7.5;
           pRadius = 12; // Bigger rockets
-          pColor = '#10b981'; // Emerald Green for contrast
+          pColor = '#10b981'; // Emerald Green for contrast (rockets keep distinct color)
           // Rockets are inherently more powerful per shot
           weaponDmgMod *= 4.5; 
         }
@@ -1065,7 +1810,10 @@ export default function App() {
           if (weaponDmgMod > 5) baseDmg += weaponDmgMod;
           else baseDmg *= weaponDmgMod;
 
-          const finalDamage = Math.floor(baseDmg * damageMult);
+          let finalDamage = Math.floor(baseDmg * damageMult * getMiniBossOutgoingDamageMult(next));
+          if (onRailsActive && next.rails && consumeRailsMegaBlast(next.rails)) {
+            finalDamage = 50;
+          }
 
           // Weapon damage is applied in the projectile
           next.projectiles.push({
@@ -1195,78 +1943,13 @@ export default function App() {
 
       next.projectiles = updateProjectiles(next.projectiles, next.world.width, next.world.height, dt, next.bounceCount);
       updateHazards(next, dt);
-      updateEnemies(next, dt);
+      if (next.gameMode !== 'ON_RAILS') {
+        updateEnemies(next, dt);
+      }
       next.particles = updateParticles(next.particles, dt, next.player.pos);
       const PARTICLE_CAP = next.qualityLevel === 'low' ? 20 : 30;
       if (next.particles.length > PARTICLE_CAP) {
         next.particles.splice(0, next.particles.length - PARTICLE_CAP);
-      }
-
-      if (next.pendingArenaRestore) {
-        restoreMainWorldAfterBoss(next, dimensions.width, dimensions.height);
-        next.pendingArenaRestore = false;
-        next.enemies = [];
-        next.projectiles = [];
-        next.items = [];
-        next.spawnRampTimer = 0;
-        next.screenFlash = Math.max(next.screenFlash, 15);
-        playSfx('augment');
-      }
-
-      if (next.bossArenaTransition > 0) {
-        next.bossArenaTransition -= dt;
-        next.player.velocity = new Vector2(0, 0);
-        if (
-          next.bossArenaTransition <= BOSS_WARP_SWAP_AT &&
-          !next.bossArenaSwapped &&
-          next.activeBossId
-        ) {
-          applyBossArenaWarp(next, dimensions.width, dimensions.height);
-          if (next.passives.includes('crimson_overdrive')) {
-            next.buffs.overdrive = Math.max(next.buffs.overdrive, 480);
-          }
-          playSfx('augment');
-        }
-        if (next.bossArenaTransition <= 0) {
-          next.bossArenaTransition = 0;
-          next.bossActive = true;
-        }
-      }
-
-      // Stage Transition Logic
-      if (next.gameMode === 'NORMAL') {
-        if (next.stageTransition > 0) {
-          next.stageTransition -= dt;
-          if (next.stageTransition <= 0) {
-            // Advance Stage
-          next.stage++;
-          next.cardTimer = getCardIntervalSeconds(next.stage, next.survivalTime, next.passives.length);
-          next.enemiesToKill = getStageQuota(next.stage);
-          next.bossActive = false;
-          next.activeBossId = null;
-          next.bossArenaTransition = 0;
-          next.bossArenaSwapped = false;
-          next.inBossArena = false;
-          next.mainWorldSnapshot = null;
-          next.obstacles = generateObstaclesForStage(
-            next.stage,
-            next.world.width,
-            next.world.height
-          );
-          next.runScrapEarned += computeStageClearScrap(next.stage - 1);
-          next.enemies = [];
-          next.projectiles = [];
-          next.items = [];
-          next.spawnRampTimer = 3.0;
-          next.player.health = Math.min(
-            next.player.maxHealth,
-            player.health + next.player.maxHealth * 0.3
-          );
-          next.screenFlash = 20;
-          openBuffPicker(next);
-          playSfx('augment');
-        }
-      }
       }
 
       // Campaign portal-trigger detection
@@ -1302,13 +1985,17 @@ export default function App() {
             color: '#facc15',
           });
         }
-      } else if (next.stageTransition <= 0 && next.bossArenaTransition <= 0) {
+      } else if (
+        next.gameMode !== 'ON_RAILS' &&
+        next.stageTransition <= 0 &&
+        next.bossArenaTransition <= 0
+      ) {
         // Hazard spawning
         if (Math.random() < 0.002) {
           next.hazards.push(spawnHazard(next));
         }
 
-        if (next.spawnRampTimer > 0) next.spawnRampTimer -= dt;
+        if (next.spawnRampTimer > 0) next.spawnRampTimer -= dt * (16.67 / 1000);
 
         const mobile = reducedEffectsRef.current;
         const tierMods = getTierModifiers(getAugmentTier(next.passives.length));
@@ -1324,18 +2011,30 @@ export default function App() {
           campaignLevel?.enemiesToKill ?? null
         );
         let levelProgress = getLevelProgress(next.enemiesToKill, totalToKill);
-        if (next.bossActive || next.gameMode === 'SURVIVAL') {
+        if (
+          next.gameMode === 'NORMAL' &&
+          !next.bossActive &&
+          !isBossTransitioning(next)
+        ) {
           levelProgress = Math.min(1, levelProgress + next.survivalTime / 600);
         }
 
         const isRamping = next.spawnRampTimer > 0;
+        const bossTransitioning = isBossTransitioning(next);
+        const liveBoss = hasLiveBoss(next);
 
-        const maxEnemies = getMaxAliveEnemies({
-          levelProgress,
-          threatFactor,
-          isRamping,
-          mobile,
-        });
+        const survivalMods =
+          next.gameMode === 'NORMAL' ? getSurvivalSpawnModifiers() : null;
+
+        const maxEnemies = Math.floor(
+          getMaxAliveEnemies({
+            levelProgress,
+            threatFactor,
+            isRamping,
+            mobile,
+            stage: next.gameMode === 'NORMAL' ? next.stage : undefined,
+          }) * (survivalMods?.maxEnemiesMult ?? 1)
+        );
 
         const spawnChance =
           getSpawnChance({
@@ -1343,7 +2042,9 @@ export default function App() {
             threatFactor,
             survivalTime: next.survivalTime,
             mobile,
-          }) * tierMods.spawnChanceMult;
+          }) *
+          tierMods.spawnChanceMult *
+          (survivalMods?.spawnChanceMult ?? 1);
 
         const spawnOne = (): Entity | null => {
           if (campaignLevel) {
@@ -1358,8 +2059,12 @@ export default function App() {
 
         const pushSpawn = (entity: Entity | null) => {
           if (!entity) return;
+          if (entity.miniBossId) {
+            const mbId = entity.miniBossId as MiniBossId;
+            applyMiniBossSpawnJuice(next, mbId);
+            playMiniBossSpawnSfx(mbId);
+          }
           next.enemies.push(entity);
-          // SWARM_V2: spawn 2-4 packmates nearby
           if (entity.enemyType === EnemyType.SWARM_V2 && next.enemies.length < maxEnemies - 3) {
             const packSize = 2 + Math.floor(Math.random() * 3);
             for (let pk = 0; pk < packSize && next.enemies.length < maxEnemies; pk++) {
@@ -1375,49 +2080,67 @@ export default function App() {
           }
         };
 
-        if (!next.bossActive && next.enemiesToKill > 0 && next.enemies.length < maxEnemies) {
-          if (Math.random() < spawnChance) {
-            pushSpawn(spawnOne());
-          }
-
-          if (!isRamping) {
-            if (spawnChance > 0.15 && Math.random() < spawnChance * 0.5 && next.enemies.length < maxEnemies) {
-              pushSpawn(spawnOne());
-            }
-            if (spawnChance > 0.3 && Math.random() < spawnChance * 0.4 && next.enemies.length < maxEnemies) {
-              pushSpawn(spawnOne());
-              pushSpawn(spawnOne());
-            }
-            if (!campaignLevel && levelProgress > 0.6 && Math.random() < 0.03 && next.enemies.length < maxEnemies) {
-              const burstCount = Math.min(2, 1 + Math.floor(threatFactor));
-              for (let h = 0; h < burstCount; h++) {
-                if (next.enemies.length >= maxEnemies) break;
+        // No spawns during boss death, arena restore, warp, or stage intermission.
+        if (!bossTransitioning) {
+          if (!next.bossActive && next.enemiesToKill > 0 && next.enemies.length < maxEnemies) {
+            if (next.gameMode === 'NORMAL') {
+              const entity = tickSurvivalWaveSpawns(
+                next,
+                dtSec,
+                maxEnemies,
+                (pick) => spawnEnemy(next, pick),
+                (id) => spawnMiniBoss(next, id),
+              );
+              if (entity) pushSpawn(entity);
+            } else {
+              if (Math.random() < spawnChance) {
                 pushSpawn(spawnOne());
               }
+
+              if (!isRamping) {
+                if (spawnChance > 0.1 && Math.random() < spawnChance * 0.7 && next.enemies.length < maxEnemies) {
+                  pushSpawn(spawnOne());
+                }
+                if (spawnChance > 0.25 && Math.random() < spawnChance * 0.6 && next.enemies.length < maxEnemies) {
+                  pushSpawn(spawnOne());
+                  pushSpawn(spawnOne());
+                }
+                if (!campaignLevel && levelProgress > 0.5 && Math.random() < 0.05 && next.enemies.length < maxEnemies) {
+                  const burstCount = Math.min(3, 1 + Math.floor(threatFactor));
+                  for (let h = 0; h < burstCount; h++) {
+                    if (next.enemies.length >= maxEnemies) break;
+                    pushSpawn(spawnOne());
+                  }
+                }
+              }
             }
-          }
-        } else if (next.bossActive && next.enemies.filter(e => e.enemyType === EnemyType.BOSS).length === 0) {
-          pushSpawn(spawnEnemy(next));
-          // Hive Queen: 3 elite minions spawn alongside the boss on arena entry
-          if (next.activeBossId === 'hive_queen') {
-            for (let m = 0; m < 3; m++) {
-              const minion = spawnEnemy(next, 3); // pick 3 = ELITE
-              if (minion) {
-                const mAngle = (m / 3) * Math.PI * 2;
-                minion.pos = new Vector2(
-                  Math.max(80, Math.min(next.world.width - 80, next.player.pos.x + Math.cos(mAngle) * 320)),
-                  Math.max(80, Math.min(next.world.height - 80, next.player.pos.y + Math.sin(mAngle) * 320))
-                );
-                next.enemies.push(minion);
+          } else if (
+            next.bossActive &&
+            next.inBossArena &&
+            !liveBoss &&
+            next.bossArenaTransition <= 0
+          ) {
+            // One boss spawn when arena is live and boss entity is missing.
+            pushSpawn(spawnEnemy(next));
+            if (next.activeBossId === 'hive_queen') {
+              for (let m = 0; m < 3; m++) {
+                const minion = spawnEnemy(next, 3);
+                if (minion) {
+                  const mAngle = (m / 3) * Math.PI * 2;
+                  minion.pos = new Vector2(
+                    Math.max(80, Math.min(next.world.width - 80, next.player.pos.x + Math.cos(mAngle) * 320)),
+                    Math.max(80, Math.min(next.world.height - 80, next.player.pos.y + Math.sin(mAngle) * 320))
+                  );
+                  next.enemies.push(minion);
+                }
               }
             }
           }
-        } else if (next.bossActive && next.enemies.length < maxEnemies && Math.random() < Math.min(0.4, spawnChance * 0.5)) {
-          pushSpawn(spawnEnemy(next));
+          // Boss arenas should be 1v1 - no additional enemy spawns during boss fights
         }
 
         // Hard trim: remove oldest non-boss enemies if over absolute limit
-        const HARD_CAP = mobile ? 60 : 90;
+        const HARD_CAP = mobile ? 25 : 40;
         if (next.enemies.length > HARD_CAP) {
           let toRemove = next.enemies.length - HARD_CAP;
           next.enemies = next.enemies.filter(e => {
@@ -1443,6 +2166,23 @@ export default function App() {
       next.camera.x = Math.max(0, Math.min(next.world.width - viewW, next.camera.x));
       next.camera.y = Math.max(0, Math.min(next.world.height - viewH, next.camera.y));
 
+      // Spatial grid for projectile hits (after updateEnemies + spawn)
+      const grid = new Map<string, Entity[]>();
+      const cellSize = ENEMY_SPATIAL_CELL_SIZE;
+      for (let i = 0; i < next.enemies.length; i++) {
+        const e = next.enemies[i];
+        if (e.health <= 0) continue;
+        const gx = Math.floor(e.pos.x / cellSize);
+        const gy = Math.floor(e.pos.y / cellSize);
+        const key = `${gx},${gy}`;
+        let cell = grid.get(key);
+        if (!cell) {
+          cell = [];
+          grid.set(key, cell);
+        }
+        cell.push(e);
+      }
+
       // Collision
       for (let i = next.projectiles.length - 1; i >= 0; i--) {
         const p = next.projectiles[i];
@@ -1459,25 +2199,45 @@ export default function App() {
           }
         }
         if (hitObs) {
+          if (p.explosiveRadius && p.ownerId !== 'player') {
+            applyPlasmaExplosion(next, p.pos, p.damage ?? 20, p.explosiveRadius);
+          }
           p.health = 0;
           continue;
         }
 
         // Enemy projectiles vs Player
-        if (p.ownerId !== 'player') {
+        if (p.ownerId !== 'player' && next.bossArenaTransition <= 0) {
           if (checkCollision(p, player)) {
+            if (next.gameMode === 'ON_RAILS' && next.rails) {
+              p.health = 0;
+              if (applyRailsPlayerHit(next, next.survivalTime)) {
+                playSfx('gameOver');
+                stopMusic();
+                next.particles.push(...createImpact(player.pos, '#ef4444', 6));
+                if (next.isGameOver) syncUi();
+              }
+              continue;
+            }
             if (next.dashIFrameTimer > 0 || next.playerIFrameTimer > 0) {
               if (next.qualityLevel === 'high') next.particles.push(...createImpact(player.pos, '#ffffff', 2));
               p.health = 0;
               continue;
             }
-            const takenDmg = (p.damage || 10) * 1.5;
+            let takenDmg = (p.damage || 10) * 1.5 * getMiniBossIncomingDamageMult(next);
+            if (next.gameMode === 'NORMAL' && next.activeCompanionId) {
+              takenDmg = mitigateCompanionIncomingDamage(next, takenDmg);
+              applyCompanionDamageReflect(next, takenDmg);
+            }
             player.health -= takenDmg;
-            player.hitTimer = 3;
+            if (next.companionRuntime && takenDmg > 0) {
+              notifyCompanionPlayerHit(next.companionRuntime);
+            }
             next.playerIFrameTimer = 45;
-            next.screenFlash = 4;
-            next.screenshake = Math.min(next.screenshake + 1, 4);
             next.particles.push(...createImpact(player.pos, '#ffffff', 5));
+            if (p.explosiveRadius) {
+              applyPlasmaExplosion(next, p.pos, p.damage ?? 20, p.explosiveRadius);
+            }
 
             if (handleFatalDamage(next, player)) {
               if (next.isGameOver) syncUi();
@@ -1489,8 +2249,8 @@ export default function App() {
 
         // Player projectiles vs Enemies
         if (p.ownerId === 'player') {
-          const gx = Math.floor(p.pos.x / 150);
-          const gy = Math.floor(p.pos.y / 150);
+          const gx = Math.floor(p.pos.x / cellSize);
+          const gy = Math.floor(p.pos.y / cellSize);
           
           let collided = false;
           // Check bullet cell and 8 neighbors
@@ -1522,11 +2282,35 @@ export default function App() {
                   if (e.health < e.maxHealth * 0.5 && next.hunterMarkBonus > 0) {
                     damage *= 1 + next.hunterMarkBonus;
                   }
+                  if (next.gameMode === 'ON_RAILS') {
+                    damage *= railsBossDamageMult(e);
+                  }
                   if (next.frostSlowStrength > 0) {
                     e.frostTimer = Math.max(e.frostTimer || 0, 45 * next.frostSlowStrength);
                   }
-                  
+
+                  const mbRt = next.miniBossPassiveRuntime;
+                  if (mbRt?.phantomStrikePending) {
+                    damage *= 2;
+                    mbRt.phantomStrikePending = false;
+                  }
+                  if (e.miniBossId && e.aiState === 'invisible') {
+                    damage *= 0.08;
+                  }
+                  if (mbRt?.nextShotShockwave) {
+                    mbRt.nextShotShockwave = false;
+                    fireMiniBossShockwave(next, e);
+                  }
+
                   e.health -= damage;
+                  if (
+                    e.miniBossId === 'void_harbinger' &&
+                    next.passives.includes('mb_void_drain') &&
+                    damage > 0
+                  ) {
+                    const heal = damage * 0.15;
+                    player.health = Math.min(player.maxHealth, player.health + heal);
+                  }
                   const densityTier = getCombatDensityTier(next.enemies.length);
                   const isKillHit = e.health <= 0;
                   if (shouldApplyHitTimer(densityTier, isCrit, isKillHit)) {
@@ -1647,15 +2431,111 @@ export default function App() {
                   );
 
                   if (!isHeavy && next.qualityLevel === 'high' && Math.random() > (1 - 0.2/chaosFactor)) {
-                    next.particles.push(...createImpact(p.pos, p.color || '#ffffff', 1));
+                    // Ship-specific impact effects
+                    const threatLevel = Math.min(1, next.threatLevel / 1000);
+                    const isCritHit = damage > next.baseDamage * 2;
+                    const impactData = getImpactEffectData(next.selectedShip, damage, isCritHit, threatLevel);
+                    
+                    // Base impact with ship-specific color and size
+                    next.particles.push(...createImpact(p.pos, impactData.color, Math.floor(impactData.size)));
+                    
+                    // Ship-specific special effects
+                    if (impactData.shockwave && Math.random() < 0.3) {
+                      // Heavy Sentinel gets shockwave rings
+                      next.particles.push(...createExplosion(p.pos, impactData.color, 6, 0.8));
+                    }
+                    if (impactData.sparkBurst && Math.random() < 0.4) {
+                      // Swift Falcon gets zippy spark bursts
+                      next.particles.push(...createImpact(p.pos, '#00d4ff', 3));
+                    }
+                    if (impactData.cascade && Math.random() < 0.35) {
+                      // Swarm Vessel gets cascading sparkles
+                      for (let i = 0; i < 3; i++) {
+                        const offset = new Vector2((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30);
+                        next.particles.push(...createImpact(p.pos.add(offset), '#f5f5f5', 1));
+                      }
+                    }
+                    
+                    // Screen flash for major hits
+                    const screenFlashData = shouldTriggerScreenFlash(next.selectedShip, damage, isCritHit, threatLevel);
+                    if (screenFlashData.flash) {
+                      next.screenFlash = Math.max(next.screenFlash, Math.floor(screenFlashData.intensity * 10));
+                    }
                   }
 
                   if (e.health <= 0) {
+                    if (e.miniBossId && next.gameMode === 'NORMAL') {
+                      const mbId = e.miniBossId as MiniBossId;
+                      next.miniBossKillsThisRun =
+                        (next.miniBossKillsThisRun ?? 0) + 1;
+                      const rewards = applyMiniBossDefeatRewards(
+                        next,
+                        mbId,
+                        unlockedArtifactIdsRef.current,
+                      );
+                      if (rewards) {
+                        equipRunArtifact(next, rewards.artifact.id);
+                        persistArtifactUnlock(rewards.artifact.id, false);
+                        showArtifactAcquireFeedback(rewards.artifact);
+                        applyMiniBossDefeatJuice(next, mbId, rewards);
+                        playMiniBossDefeatSfx(mbId);
+                        const mbDef = getMiniBossDef(mbId);
+                        next.particles.push(
+                          ...createExplosion(e.pos, mbDef.auraColor, 12, 1.8),
+                        );
+                      }
+                      next.enemies.forEach((oe) => {
+                        if (oe.miniBossParentId === e.id) oe.health = 0;
+                      });
+                    }
+
+                    const onRailsKill =
+                      next.gameMode === 'ON_RAILS' && next.rails;
+                    if (onRailsKill && e.enemyType !== EnemyType.BOSS) {
+                      if (!e.railsDying) beginRailsEnemyDeath(next, e);
+                    }
+                    if (
+                      onRailsKill &&
+                      e.enemyType === EnemyType.BOSS &&
+                      e.railsWeakPointOpen &&
+                      isKillHit
+                    ) {
+                      triggerWeakPointHitFx(next, e);
+                    }
                     next.combo++;
                     next.comboTimer = 2.5;
-                    const scoreGain = 100 * (next.buffs.scoreX > 0 ? 2 : 1) * Math.min(10, next.combo) * next.comboDamageMult;
-                    next.score += scoreGain;
+                    if (!onRailsKill || e.enemyType === EnemyType.BOSS) {
+                      let scoreGain =
+                        (onRailsKill ? railsEnemyKillScore(e.enemyType) : 100) *
+                        (next.buffs.scoreX > 0 ? 2 : 1) *
+                        Math.min(10, next.combo) *
+                        next.comboDamageMult;
+                      if (onRailsKill && next.rails) {
+                        scoreGain *= railsScoreMult(next.rails, next.survivalTime);
+                      }
+                      next.score += scoreGain;
+                    }
                     next.killCountSinceHeal += 1;
+                    if (next.gameMode === 'NORMAL') {
+                      recordStatDelta({ kills: 1 });
+                      const lootDrop = rollLootOnKill(next);
+                      if (lootDrop) {
+                        if (lootDrop.kind === 'vault_artifact') {
+                          persistArtifactUnlock(lootDrop.lootId, true);
+                          equipRunArtifact(next, lootDrop.lootId);
+                        } else if (lootDrop.kind === 'companion') {
+                          const cid = lootDrop.lootId as CompanionId;
+                          persistCompanionUnlock(cid);
+                          unlockCompanionMeta(cid);
+                          applyLootDrop(next, lootDrop);
+                        } else {
+                          applyLootDrop(next, lootDrop);
+                        }
+                      }
+                      if (next.activeCompanionId) {
+                        grantCompanionKillXp(next);
+                      }
+                    }
                     const ultGain =
                       next.bossActive && countPassiveStacks(next.passives, 'tyrant_fury') > 0 ? 0.8 : 0.5;
                     next.ultimateCharge = Math.min(100, next.ultimateCharge + ultGain);
@@ -1675,8 +2555,8 @@ export default function App() {
                       player.health = Math.min(player.maxHealth, player.health + player.maxHealth * 0.25 * next.vampiricBurstStacks);
                     }
                     if (next.volatileDeath) {
-                      const vgx = Math.floor(e.pos.x / 150);
-                      const vgy = Math.floor(e.pos.y / 150);
+                      const vgx = Math.floor(e.pos.x / cellSize);
+                      const vgy = Math.floor(e.pos.y / cellSize);
                       for (let ox = -1; ox <= 1; ox++) {
                         for (let oy = -1; oy <= 1; oy++) {
                           const cell = grid.get(`${vgx + ox},${vgy + oy}`);
@@ -1696,14 +2576,13 @@ export default function App() {
                       // Boss death: keep full explosion, it's a moment
                       next.particles.push(...createImplosion(e.pos, rarityColor, 4));
                       next.particles.push(...createExplosion(e.pos, e.color, 8, 1.5));
-                    } else if (!isHeavy) {
-                      // Light enemies: small pop, capped by chaosFactor
+                    } else if (!isHeavy && !onRailsKill) {
                       if (Math.random() < 1 / chaosFactor) {
                         next.particles.push(...createExplosion(e.pos, e.color, Math.max(1, Math.floor(3 / chaosFactor)), 1.5));
                       }
                     }
                     // TANK/ELITE: no particles, just screenshake
-                    next.experience += 25;
+                    next.experience += Math.floor(25 * getExperienceGainMultiplier(next));
 
                     // Reduced screenshake in high chaos
                     const shakeMult = 1 / Math.sqrt(chaosFactor);
@@ -1778,9 +2657,28 @@ export default function App() {
                     
                     if (e.type === EntityType.ENEMY) {
                       if (e.enemyType === EnemyType.BOSS) {
-                        next.bossActive = false;
-                        next.pendingArenaRestore = true;
+                        const defeatedBossId = next.activeBossId;
+                        applyBossDefeatState(next);
+                        next.lastBossDefeatedId = defeatedBossId;
+                        next.bossVictoryBannerTimer = 150;
+                        logBossLifecycle(next, 'boss-killed');
                         next.postBossBuffPick = true;
+                        if (next.gameMode === 'NORMAL' && defeatedBossId) {
+                          const bossLoot = rollBossLoot(next, defeatedBossId);
+                          if (bossLoot) {
+                            if (bossLoot.kind === 'vault_artifact') {
+                              persistArtifactUnlock(bossLoot.lootId, true);
+                              equipRunArtifact(next, bossLoot.lootId);
+                            } else if (bossLoot.kind === 'companion') {
+                              const cid = bossLoot.lootId as CompanionId;
+                              persistCompanionUnlock(cid);
+                              unlockCompanionMeta(cid);
+                              applyLootDrop(next, bossLoot);
+                            } else {
+                              applyLootDrop(next, bossLoot);
+                            }
+                          }
+                        }
                         let bossScrap = computeBossScrapBonus(next.stage);
                         if (countPassiveStacks(next.passives, 'salvage_radar') > 0) {
                           bossScrap += 25 * countPassiveStacks(next.passives, 'salvage_radar');
@@ -1794,7 +2692,6 @@ export default function App() {
                           );
                           next.runScrapEarned += 15;
                         }
-                        next.stageTransition = 90;
                         next.hitStop = 15;
                         next.screenshake = 10;
                         next.screenFlash = 5;
@@ -1831,6 +2728,7 @@ export default function App() {
                           const upcoming = pickRandomBoss(next.stage, next.lastBossId);
                           next.lastBossId = upcoming.id;
                           beginBossWarp(next, upcoming);
+                          syncUi();
                         }
                       }
                     }
@@ -1874,7 +2772,7 @@ export default function App() {
         if (checkCollision(player, item)) {
           missionController.notifyEvent('item_collected');
           if (item.itemType === ItemType.XP) {
-            next.experience += item.damage ?? 25;
+            next.experience += Math.floor((item.damage ?? 25) * getExperienceGainMultiplier(next));
             playSfx('pickup');
           } else if (item.itemType === ItemType.HEALTH) {
             player.health = Math.min(player.maxHealth, player.health + 100);
@@ -1910,31 +2808,63 @@ export default function App() {
         return true;
       });
 
+      if (next.bossArenaTransition <= 0) {
       for (const e of next.enemies) {
         if (checkCollision(player, e)) {
+          if (next.gameMode === 'ON_RAILS' && next.rails) {
+            if (
+              isBossEntranceActive(next.rails) ||
+              isRailsBossDeathActive(next.rails)
+            ) {
+              continue;
+            }
+            const bodyDmg =
+              e.enemyType === EnemyType.BOSS
+                ? railsBossTouchDamage(e)
+                : railsEnemyBodyDamage(e);
+            if (bodyDmg > 0) {
+              const hits = e.enemyType === EnemyType.BOSS ? Math.min(3, bodyDmg >= 100 ? 3 : 1) : 1;
+              for (let h = 0; h < hits; h++) {
+                if (applyRailsPlayerHit(next, next.survivalTime)) {
+                  playSfx('gameOver');
+                  stopMusic();
+                  if (next.isGameOver) syncUi();
+                  break;
+                }
+              }
+            }
+            continue;
+          }
           if (next.thornsDamage > 0) {
             e.health -= next.thornsDamage * 0.15 * dt;
           }
           if (next.dashIFrameTimer > 0 || next.playerIFrameTimer > 0) continue;
 
           player.health -= (2.0 + next.stage * 0.5) * dt;
-          player.hitTimer = 3;
-          next.screenFlash = Math.max(next.screenFlash, 2);
-          next.screenshake = Math.min(next.screenshake + 0.4 * dt, 7);
 
           if (handleFatalDamage(next, player)) {
             if (next.isGameOver) {
               next.particles.push(...createExplosion(player.pos, player.color, 50));
               next.particles.push(...createExplosion(player.pos, '#ffffff', 20));
-              next.screenshake = 20;
               syncUi();
             }
           }
         }
       }
+      }
 
       if (prevFrameHealth > player.health) {
-        // Player took damage this frame
+        if (next.gameMode !== 'ON_RAILS') {
+          const dmg = prevFrameHealth - player.health;
+          if (player.health <= 0) {
+            applyPlayerDamageGlitch(next, player, 'fatal');
+          } else if (dmg >= player.maxHealth * 0.04) {
+            applyPlayerDamageGlitch(next, player, 'hit');
+          } else {
+            applyPlayerDamageGlitch(next, player, 'light');
+          }
+        }
+
         if (next.passives.includes('neon_blood')) {
           const stacks = countPassiveStacks(next.passives, 'neon_blood');
           const numMissiles = 8 + Math.max(0, stacks - 1) * 4;
@@ -1983,8 +2913,10 @@ export default function App() {
       }
       missionController.update(dt * (16.67 / 1000));
 
-      // Sync UI less frequently for performance
-      if (currentTime - lastUiSync > 250) {
+      // Sync UI each frame during boss warp (overlay animation); otherwise throttle
+      if (next.bossArenaTransition > 0) {
+        syncUi();
+      } else if (currentTime - lastUiSync > 250) {
         syncUi();
         lastUiSync = currentTime;
       }
@@ -2011,19 +2943,93 @@ export default function App() {
       <AnimatePresence>
         {screen === 'MENU' && (
           <StartPage
-            onStart={startGame}
+            key={survivalMetaKey}
+            onStartSurvival={() => {
+              setHangarEntry('survival');
+              setHangarInitialTab('ship');
+              setScreen('HANGAR');
+            }}
+            onOpenHangar={() => {
+              setHangarEntry('meta');
+              setHangarInitialTab('ship');
+              setScreen('HANGAR');
+            }}
+            onOpenUnlocks={() => {
+              setHangarEntry('meta');
+              setHangarInitialTab('progress');
+              setScreen('HANGAR');
+            }}
+            hasPendingUnlocks={getPendingNewCount() > 0}
+            onOnRails={() => setScreen('RAILS_SELECT')}
             onCampaign={() => setScreen('CAMPAIGN_SELECT')}
-            onOpenGear={() => setIsGearOpen(true)}
-            onOpenInventory={() => setIsInventoryOpen(true)}
-            relicCount={unlockedArtifactIds.length}
+          />
+        )}
+        {screen === 'HANGAR' && (
+          <HangarScreen
+            key={`${hangarEntry}-${hangarInitialTab}`}
+            entry={hangarEntry}
+            initialTab={hangarInitialTab}
+            equippedIds={equippedArtifactIds}
+            unlockedArtifactIds={unlockedArtifactIds}
             metaScrap={metaScrap}
-            equippedArtifactIds={equippedArtifactIds}
-            activeTraits={nextRunTraits.map(id => TRAITS[id])}
+            newUnlockIds={newUnlockIds}
+            onEquip={(slot, id) => {
+              setEquippedArtifactIds((prev) => ({ ...prev, [slot]: id }));
+            }}
+            onViewVault={() => clearNewUnlockBadges({ artifacts: true })}
+            onViewCompanions={() => clearNewUnlockBadges({ companions: true })}
+            onConfirmLaunch={(shipId) => {
+              setPendingLaunchShipId(shipId);
+              setScreen('COMPANION_SELECT');
+            }}
+            onBack={() => setScreen('MENU')}
+          />
+        )}
+        {screen === 'COMPANION_SELECT' && pendingLaunchShipId && (
+          <CompanionSelectScreen
+            onConfirm={(companionId) => {
+              setPendingLaunchCompanionId(companionId);
+              setScreen('PRE_RUN_SHOP');
+            }}
+            onBack={() => {
+              setPendingLaunchShipId(null);
+              setScreen('HANGAR');
+            }}
+          />
+        )}
+        {screen === 'PRE_RUN_SHOP' && pendingLaunchShipId && pendingLaunchCompanionId && (
+          <PreRunShop
+            metaScrap={metaScrap}
+            shipId={pendingLaunchShipId}
+            companionId={pendingLaunchCompanionId}
+            onConfirm={(purchasedIds, totalSpent) => {
+              if (totalSpent > 0 && !spendMetaScrap(totalSpent)) return;
+              setMetaScrap(getMetaScrap());
+              startGame(pendingLaunchShipId, pendingLaunchCompanionId, purchasedIds, totalSpent);
+              setPendingLaunchShipId(null);
+              setPendingLaunchCompanionId(null);
+            }}
+            onSkip={() => {
+              startGame(pendingLaunchShipId, pendingLaunchCompanionId);
+              setPendingLaunchShipId(null);
+              setPendingLaunchCompanionId(null);
+            }}
+            onBack={() => {
+              setScreen('COMPANION_SELECT');
+            }}
           />
         )}
         {screen === 'CAMPAIGN_SELECT' && (
           <CampaignSelect
             onStartLevel={startCampaignLevel}
+            onBack={() => setScreen('MENU')}
+          />
+        )}
+        {screen === 'RAILS_SELECT' && (
+          <RailsLevelSelect
+            levels={RAILS_LEVELS}
+            highScores={railsHighScores}
+            onSelectLevel={(id) => startRailsGame(id)}
             onBack={() => setScreen('MENU')}
           />
         )}
@@ -2047,10 +3053,37 @@ export default function App() {
         </div>
       )}
 
+      {screen === 'GAME' && devCheatsActive && (
+        <DevCheatsHud toast={devCheatToast} />
+      )}
+
+      {/* General notifications */}
+      {notification && (
+        <div
+          className="pointer-events-none fixed top-4 left-1/2 z-[100] -translate-x-1/2 max-w-[min(100vw-2rem,20rem)]"
+          aria-live="polite"
+        >
+          <div className={`rounded-lg px-4 py-2 text-center font-medium shadow-lg ${
+            notification.type === 'success' ? 'bg-green-900/90 text-green-100 ring-1 ring-green-500/40' :
+            notification.type === 'warning' ? 'bg-yellow-900/90 text-yellow-100 ring-1 ring-yellow-500/40' :
+            'bg-blue-900/90 text-blue-100 ring-1 ring-blue-500/40'
+          }`}>
+            {notification.message}
+          </div>
+        </div>
+      )}
+
       {screen === 'GAME' && uiState && uiState.bossArenaTransition > 0 && (
         <BossWarpOverlay
           bossId={uiState.activeBossId}
           bossArenaTransition={uiState.bossArenaTransition}
+        />
+      )}
+
+      {screen === 'GAME' && uiState && (uiState.bossVictoryBannerTimer ?? 0) > 0 && (
+        <BossVictoryBanner
+          bossId={uiState.lastBossDefeatedId}
+          timer={uiState.bossVictoryBannerTimer}
         />
       )}
 
@@ -2063,10 +3096,96 @@ export default function App() {
         />
       )}
 
+      {screen === 'GAME' &&
+        uiState?.gameMode === 'NORMAL' &&
+        !uiState.isGameOver && (() => {
+          const tier = getThreatTier(uiState.threatLevel);
+          const threatVisual = getThreatVisualConfig(tier);
+          return (
+            <div
+              className="absolute inset-0 pointer-events-none z-[8]"
+              style={{
+                background: `radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,${threatVisual.screenVignette}) 100%)`,
+              }}
+            />
+          );
+        })()}
+
+      {screen === 'GAME' &&
+        uiState?.gameMode === 'ON_RAILS' &&
+        showTouchControls &&
+        !showLevelUp &&
+        !showArtifactUnlock && (
+          <p className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-0 right-0 text-center text-[10px] font-mono uppercase tracking-[0.25em] text-cyan-400/50 pointer-events-none z-10">
+            Dra = flytt · Klicka = skjut
+          </p>
+        )}
+
+      {screen === 'GAME' &&
+        uiState?.gameMode === 'ON_RAILS' &&
+        gameStateRef.current?.rails &&
+        !uiState.isGameOver && (() => {
+          const gs = gameStateRef.current!;
+          const rails = gs.rails!;
+          const boss = gs.enemies.find(
+            (e) => e.enemyType === EnemyType.BOSS && e.health > 0
+          );
+          return (
+            <RailsHUD
+              survivalTime={uiState.survivalTime}
+              targetSeconds={rails.targetSeconds}
+              outcome={rails.outcome}
+              killCount={rails.killCount}
+              score={uiState.score}
+              health={uiState.health}
+              maxHealth={uiState.maxHealth}
+              hitTimer={gs.player.hitTimer}
+              bossSpawned={rails.bossSpawned}
+              bossCombatActive={rails.bossCombatActive}
+              bossDefeated={rails.bossDefeated}
+              bossId={boss?.railsBossId ?? null}
+              bossHealth={boss?.health}
+              bossMaxHealth={boss?.maxHealth}
+              weakPointOpen={rails.weakPointOpen ?? boss?.railsWeakPointOpen}
+              rapidFireUntil={rails.rapidFireUntil}
+              slowTimeUntil={rails.slowTimeUntil}
+              scoreMultUntil={rails.scoreMultUntil}
+              invincibleUntil={rails.invincibleUntil}
+              shieldBubbleHits={rails.shieldBubbleHits}
+              megaBlastCharges={rails.megaBlastCharges}
+            />
+          );
+        })()}
+
+      {screen === 'GAME' && unlockToasts.length > 0 && (
+        <UnlockToastStack
+          toasts={unlockToasts}
+          onDismiss={() => setUnlockToasts((prev) => prev.slice(1))}
+        />
+      )}
+
       {screen === 'GAME' && uiState && !showLevelUp && !showArtifactUnlock && (
         <motion.div key="game-ui-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="absolute inset-0 pointer-events-none">
           <GameHUD 
             health={uiState.health} maxHealth={uiState.maxHealth}
+            bossHealth={
+              gameStateRef.current?.enemies.find(
+                (e) => e.enemyType === EnemyType.BOSS && e.health > 0
+              )?.health ?? 0
+            }
+            bossMaxHealth={
+              gameStateRef.current?.enemies.find(
+                (e) => e.enemyType === EnemyType.BOSS && e.health > 0
+              )?.maxHealth ?? 0
+            }
+            companionId={uiState.companionId}
+            companionLevel={uiState.companionLevel}
+            companionHealth={uiState.companionHealth}
+            companionMaxHealth={uiState.companionMaxHealth}
+            companionAbilityCooldown={uiState.companionAbilityCooldown}
+            companionAbilityCooldownMax={uiState.companionAbilityCooldownMax}
+            companionAbilityName={uiState.companionAbilityName}
+            companionEnergy={uiState.companionEnergy}
             survivalTime={uiState.survivalTime}
             threatLevel={uiState.threatLevel}
             augmentTier={getAugmentTier(gameStateRef.current?.passives.length ?? 0)}
@@ -2083,79 +3202,128 @@ export default function App() {
                 syncUi();
               }
             }}
-            cardTimer={uiState.cardTimer}
-            cardInterval={getCardIntervalSeconds(
-              uiState.stage,
-              uiState.survivalTime,
-              uiState.passives.length
-            )}
+            cardTimer={uiState.stage === 1 ? 0 : uiState.cardTimer}
+            cardInterval={
+              uiState.stage === 1
+                ? 1
+                : getEffectiveCardIntervalSeconds(
+                    uiState.stage,
+                    uiState.survivalTime,
+                    uiState.passives,
+                    uiState.threatLevel,
+                  )
+            }
             activeWeaponSlot={uiState.activeWeaponSlot}
             equippedArtifacts={uiState.equippedArtifacts}
+            threatGameState={uiState.gameMode === 'NORMAL' ? gameStateRef.current : null}
+            buffs={uiState.buffs}
+            extraLifeCharges={uiState.extraLifeCharges}
             bossArenaTransition={uiState.bossArenaTransition}
             bossActive={uiState.bossActive}
             isMobile={isMobile}
             compactHud={compactHud}
             landscapeHud={landscapeHud}
             viewportProfile={viewportProfile}
-            tabletSpacious={viewportProfile === 'tablet' && compactHud}
+            selectedShip={uiState.selectedShip}
+            isPaused={uiState.isPaused}
+            survivalDifficultyLabel={
+              uiState.gameMode === 'NORMAL' ? getSurvivalDifficultyLabelSv() : undefined
+            }
+            miniBossKillsThisRun={gameStateRef.current?.miniBossKillsThisRun ?? 0}
+            miniBossActive={
+              uiState.gameMode === 'NORMAL' &&
+              !!gameStateRef.current?.enemies.some(
+                (e) => e.miniBossId && e.health > 0
+              )
+            }
+            miniBossDisplayName={(() => {
+              const mb = gameStateRef.current?.enemies.find(
+                (e) => e.miniBossId && e.health > 0
+              );
+              return mb?.miniBossId
+                ? getMiniBossDef(mb.miniBossId as MiniBossId).displayName
+                : '';
+            })()}
+            miniBossHealth={
+              gameStateRef.current?.enemies.find(
+                (e) => e.miniBossId && e.health > 0
+              )?.health ?? 0
+            }
+            miniBossMaxHealth={
+              gameStateRef.current?.enemies.find(
+                (e) => e.miniBossId && e.health > 0
+              )?.maxHealth ?? 0
+            }
+            miniBossAuraColor={(() => {
+              const mb = gameStateRef.current?.enemies.find(
+                (e) => e.miniBossId && e.health > 0
+              );
+              return mb?.miniBossId
+                ? getMiniBossDef(mb.miniBossId as MiniBossId).auraColor
+                : '#a855f7';
+            })()}
           />
-          {gameStateRef.current && (
+          {gameStateRef.current && uiState.gameMode === 'NORMAL' && (
             <SynergyBar
               lines={getActiveSynergies(gameStateRef.current)}
               layout={getSynergyBarLayout(viewportProfile)}
             />
           )}
-          {/* Buff Bar */}
-          <motion.div
-            className={`absolute left-1/2 -translate-x-1/2 flex flex-row flex-wrap justify-center gap-2 max-w-[80vw] z-50 pointer-events-none ${getBuffChipsTopClass(viewportProfile)}`}
-          >
-            {(uiState?.extraLifeCharges ?? 0) > 0 && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className={`flex items-center gap-1.5 bg-cyan-950/40 backdrop-blur-md rounded border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.3)] ${compactHud ? 'px-2 py-0.5' : 'px-3 py-1'}`}>
-                <Shield size={compactHud ? 12 : 16} className="text-cyan-400 shrink-0" />
-                <span className={`font-bold text-cyan-400 ${compactHud ? 'text-[9px]' : 'text-xs'}`}>
-                  {compactHud ? 'EXTRA LIV' : 'EXTRA LIV (1)'}
-                </span>
-              </motion.div>
-            )}
-            {uiState?.buffs.overdrive > 0 && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 bg-rose-500/20 backdrop-blur-md px-3 py-1 rounded border border-rose-500/50 shadow-[0_0_10px_rgba(244,63,94,0.3)] animate-pulse">
-                <Zap size={16} className="text-rose-400" />
-                <span className="text-xs font-bold text-rose-400 overflow-hidden text-ellipsis whitespace-nowrap">OVERDRIVE {Math.ceil(uiState.buffs.overdrive / 60)}s</span>
-              </motion.div>
-            )}
-            {uiState?.buffs.magnet > 0 && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 bg-cyan-500/10 backdrop-blur-md px-3 py-1 rounded border border-cyan-500/30 shadow-[0_0_10px_rgba(6,182,212,0.1)]">
-                <Target size={16} className="text-cyan-400/70" />
-                <span className="text-xs font-bold text-cyan-300/70 overflow-hidden text-ellipsis whitespace-nowrap">MAGNET {Math.ceil(uiState.buffs.magnet / 60)}s</span>
-              </motion.div>
-            )}
-            {uiState?.buffs.scoreX > 0 && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 bg-fuchsia-500/20 backdrop-blur-md px-3 py-1 rounded border border-fuchsia-500/50 shadow-[0_0_10px_rgba(217,70,239,0.3)] animate-pulse">
-                <Trophy size={16} className="text-fuchsia-400" />
-                <span className="text-xs font-bold text-fuchsia-400 overflow-hidden text-ellipsis whitespace-nowrap">2X SCORE {Math.ceil(uiState.buffs.scoreX / 60)}s</span>
-              </motion.div>
-            )}
-            {uiState?.buffs.rapidFire > 0 && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 bg-amber-500/20 backdrop-blur-md px-3 py-1 rounded border border-amber-500/50 shadow-[0_0_10px_rgba(245,158,11,0.3)] animate-pulse">
-                <Flame size={16} className="text-amber-400" />
-                <span className="text-xs font-bold text-amber-400 overflow-hidden text-ellipsis whitespace-nowrap">RAPID {Math.ceil(uiState.buffs.rapidFire / 60)}s</span>
-              </motion.div>
-            )}
-            {uiState?.buffs.timeSlow > 0 && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 bg-cyan-500/20 backdrop-blur-md px-3 py-1 rounded border border-cyan-500/50 shadow-[0_0_10px_rgba(6,182,212,0.3)] animate-pulse">
-                <RotateCcw size={16} className="text-cyan-400" />
-                <span className="text-xs font-bold text-cyan-400 overflow-hidden text-ellipsis whitespace-nowrap">SLOW-MO {Math.ceil(uiState.buffs.timeSlow / 60)}s</span>
-              </motion.div>
-            )}
-            {uiState?.buffs.piercing > 0 && (
-              <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex items-center gap-2 bg-fuchsia-500/20 backdrop-blur-md px-3 py-1 rounded border border-fuchsia-500/50 shadow-[0_0_10px_rgba(217,70,239,0.3)] animate-pulse">
-                <Swords size={16} className="text-fuchsia-400" />
-                <span className="text-xs font-bold text-fuchsia-400 overflow-hidden text-ellipsis whitespace-nowrap">PIERCE {Math.ceil(uiState.buffs.piercing / 60)}s</span>
-              </motion.div>
-            )}
-          </motion.div>
 
-          {showTouchControls && (() => {
+          {(gameStateRef.current?.miniBossIncomingTimer ?? 0) > 0 && (
+            <div
+              className="absolute left-1/2 top-[22%] z-25 -translate-x-1/2 pointer-events-none text-center"
+              style={{
+                color: gameStateRef.current?.miniBossIncomingColor ?? '#c084fc',
+                textShadow: `0 0 12px ${gameStateRef.current?.miniBossIncomingColor ?? '#c084fc'}55`,
+              }}
+            >
+              <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/60">
+                Miniboss i denna våg
+              </p>
+              <p className="text-sm font-bold uppercase tracking-wide">
+                {gameStateRef.current?.miniBossIncomingText ?? ''}
+              </p>
+            </div>
+          )}
+
+          {(gameStateRef.current?.miniBossSpawnPopupTimer ?? 0) > 0 && (
+            <div
+              className="absolute left-1/2 top-[28%] z-30 -translate-x-1/2 pointer-events-none text-center animate-pulse"
+              style={{
+                color: gameStateRef.current?.miniBossSpawnPopupColor ?? '#c084fc',
+                textShadow: `0 0 16px ${gameStateRef.current?.miniBossSpawnPopupColor ?? '#c084fc'}`,
+              }}
+            >
+              <p className="text-xs font-semibold tracking-widest uppercase text-white/70">
+                {gameStateRef.current?.miniBossSpawnPopupSubtext ?? 'Miniboss'}
+              </p>
+              <p className="text-base font-bold tracking-wide uppercase">
+                {gameStateRef.current?.miniBossSpawnPopupText ?? ''}
+              </p>
+            </div>
+          )}
+
+          {(gameStateRef.current?.miniBossPopupTimer ?? 0) > 0 && (
+            <div
+              className="absolute left-1/2 top-[38%] z-30 -translate-x-1/2 pointer-events-none text-center"
+              style={{
+                color: gameStateRef.current?.miniBossPopupColor ?? '#c084fc',
+                textShadow: `0 0 12px ${gameStateRef.current?.miniBossPopupColor ?? '#c084fc'}`,
+              }}
+            >
+              <p className="text-sm font-bold tracking-widest uppercase">
+                {gameStateRef.current?.miniBossPopupText ?? 'MINIBOSS BESEGRAD'}
+              </p>
+              {gameStateRef.current?.miniBossPopupSubtext && (
+                <p className="mt-1 text-xs font-semibold text-white/90">
+                  {gameStateRef.current.miniBossPopupSubtext}
+                </p>
+              )}
+            </div>
+          )}
+
+          {showTouchControls && uiState?.gameMode !== 'ON_RAILS' && (() => {
             const joystickSize = getJoystickSize(viewportProfile);
             const touchSize = getTouchActionSize(viewportProfile);
             const touchBtnClass =
@@ -2287,9 +3455,18 @@ export default function App() {
         </motion.div>
       )}
 
+      {screen === 'GAME' && stageIntroStage !== null && (
+        <StageIntroOverlay
+          key={stageIntroKey}
+          stage={stageIntroStage}
+          onComplete={clearStageIntro}
+        />
+      )}
+
 
       <BuffCardPicker
         show={showLevelUp && screen === 'GAME'}
+        choices={currentCardChoices}
         buffs={currentBuffs}
         passives={gameStateRef.current?.passives ?? []}
         onSelect={handleLevelUpChoice}
@@ -2297,46 +3474,16 @@ export default function App() {
         viewportProfile={viewportProfile}
       />
 
+      {screen === 'GAME' && (
+        <ArtifactAcquireOverlay event={artifactAcquirePopup} />
+      )}
+
       <ArtifactUnlockPicker
         show={showArtifactUnlock && screen === 'GAME'}
         choices={artifactUnlockChoices}
         unlocksRemaining={2 - (gameStateRef.current?.runArtifactUnlocks ?? 0)}
         onSelect={handleArtifactUnlockChoice}
         isMobile={isMobile}
-      />
-
-      <ArtifactInventory
-        isOpen={isInventoryOpen}
-        onClose={() => setIsInventoryOpen(false)}
-        unlockedIds={unlockedArtifactIds}
-        metaScrap={metaScrap}
-        newUnlockIds={newUnlockIds}
-        isMobile={isMobile}
-        onUnlockWithScrap={(artifactId, cost) => {
-          if (!spendMetaScrap(cost)) return false;
-          setMetaScrap(getMetaScrap());
-          if (!unlockedArtifactIds.includes(artifactId)) {
-            setUnlockedArtifactIds((prev) => [...prev, artifactId]);
-          }
-          playSfx('artifact');
-          return true;
-        }}
-        onOpenHangar={() => {
-          setIsInventoryOpen(false);
-          setIsGearOpen(true);
-        }}
-      />
-
-      <GearSystem
-        isMobile={isMobile} 
-        isOpen={isGearOpen}
-        onClose={() => setIsGearOpen(false)}
-        metaScrap={metaScrap}
-        unlockedArtifacts={unlockedArtifactIds.map(id => ARTIFACTS[id]).filter(Boolean)}
-        equippedIds={equippedArtifactIds}
-        onEquip={(slot, id) => {
-          setEquippedArtifactIds(prev => ({ ...prev, [slot]: id }));
-        }}
       />
 
       <AnimatePresence>
@@ -2350,6 +3497,19 @@ export default function App() {
             <div className="text-center mb-12">
               <h2 className="text-4xl md:text-6xl font-black text-white italic uppercase tracking-tighter">System Paused</h2>
               <p className="text-blue-400 font-mono text-[10px] md:text-sm tracking-widest mt-2 uppercase">Neural Link Suspended</p>
+              {uiState?.gameMode === 'NORMAL' && gameStateRef.current && (
+                <div className="mt-4 flex flex-wrap justify-center gap-2 text-[10px] font-mono uppercase tracking-widest">
+                  <span className="px-3 py-1 rounded-full border border-cyan-500/30 text-cyan-300/90 bg-cyan-500/10">
+                    {getSurvivalDifficultyLabelSv()}
+                  </span>
+                  <span className="px-3 py-1 rounded-full border border-violet-500/30 text-violet-300/90 bg-violet-500/10">
+                    Miniboss {gameStateRef.current.miniBossKillsThisRun ?? 0}
+                  </span>
+                  <span className="px-3 py-1 rounded-full border border-white/15 text-white/70 bg-white/5">
+                    S{gameStateRef.current.stage} · V{gameStateRef.current.wave}
+                  </span>
+                </div>
+              )}
             </div>
             
             <motion.div className="flex flex-col gap-4 w-full max-w-sm md:max-w-md pointer-events-auto px-4">
@@ -2407,20 +3567,67 @@ export default function App() {
       </AnimatePresence>
 
       {uiState?.isGameOver && gameStateRef.current ? (
-        <RunSummary
-          state={gameStateRef.current}
-          unlockedCount={unlockedArtifactIds.length}
-          totalArtifacts={Object.keys(ARTIFACTS).length}
-          lockedIds={Object.keys(ARTIFACTS).filter((id) => !unlockedArtifactIds.includes(id))}
-          scrapEarned={lastRunScrapEarned}
-          metaScrapTotal={metaScrap}
-          victory={uiState.stage > 25}
-          onRestart={() => {
-            gameStateRef.current = null;
-            startGame();
-          }}
-          onVault={() => setIsInventoryOpen(true)}
-        />
+        gameStateRef.current.gameMode === 'ON_RAILS' &&
+        gameStateRef.current.rails?.outcome === 'cleared' ? (
+          <RailsVictoryScreen
+            title={
+              getRailsLevel(gameStateRef.current.rails!.levelId)?.ui.clearedTitle ??
+              'SECTOR CLEARED!'
+            }
+            time={gameStateRef.current.survivalTime}
+            kills={gameStateRef.current.rails!.killCount}
+            score={gameStateRef.current.score}
+            medal={getRailsMedal(
+              gameStateRef.current.score,
+              gameStateRef.current.rails!.killCount
+            )}
+            hasNextLevel={
+              !!getNextRailsLevelId(gameStateRef.current.rails!.levelId)
+            }
+            onNextLevel={() => {
+              const levelId = gameStateRef.current?.rails?.levelId;
+              const nextId = levelId ? getNextRailsLevelId(levelId) : null;
+              gameStateRef.current = null;
+              if (nextId) {
+                startRailsGame(nextId);
+              } else {
+                setScreen('RAILS_SELECT');
+              }
+            }}
+            onLevelSelect={() => {
+              const levelId = gameStateRef.current?.rails?.levelId;
+              if (levelId && gameStateRef.current) {
+                saveRailsHighScore(levelId, gameStateRef.current.score);
+                setRailsHighScores(getRailsHighScores());
+              }
+              gameStateRef.current = null;
+              setScreen('RAILS_SELECT');
+            }}
+          />
+        ) : (
+          <RunSummary
+            state={gameStateRef.current}
+            unlockedCount={unlockedArtifactIds.length}
+            totalArtifacts={Object.keys(ARTIFACTS).length}
+            lockedIds={Object.keys(ARTIFACTS).filter((id) => !unlockedArtifactIds.includes(id))}
+            scrapEarned={lastRunScrapEarned}
+            metaScrapTotal={metaScrap}
+            runUnlocks={getRunUnlocks()}
+            newHighScoreThisRun={lastRunPersonalBest.score}
+            newLongestThisRun={lastRunPersonalBest.time}
+            personalBestScore={getSurvivalHighScore()}
+            personalBestTime={getLongestSurvivalSeconds()}
+            victory={uiState.stage > 25}
+            onRestart={restartAfterRun}
+            onVault={() => {
+              gameStateRef.current = null;
+              syncMetaUnlockState();
+              setHangarEntry('meta');
+              setHangarInitialTab('vault');
+              setScreen('HANGAR');
+            }}
+          />
+        )
       ) : null}
     </div>
   );

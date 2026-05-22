@@ -30,7 +30,7 @@ describe('getMaxAliveEnemies', () => {
         isRamping: false,
         mobile: false,
       })
-    ).toBeLessThanOrEqual(8);
+    ).toBeLessThanOrEqual(12); // Updated to match new higher early cap
 
     expect(
       getMaxAliveEnemies({
@@ -39,7 +39,7 @@ describe('getMaxAliveEnemies', () => {
         isRamping: true,
         mobile: false,
       })
-    ).toBeLessThanOrEqual(4);
+    ).toBeLessThanOrEqual(6); // Updated to match new higher ramping early cap
   });
 
   it('grows with progress', () => {
@@ -60,7 +60,7 @@ describe('getMaxAliveEnemies', () => {
 });
 
 describe('getSpawnChance', () => {
-  it('applies start grace for first 30 seconds', () => {
+  it('applies start grace for first 15 seconds', () => {
     const early = getSpawnChance({
       levelProgress: 0.5,
       threatFactor: 0,
@@ -74,6 +74,6 @@ describe('getSpawnChance', () => {
       mobile: false,
     });
     expect(early).toBeLessThan(later);
-    expect(early).toBeCloseTo(later * 0.35, 5);
+    expect(early).toBeCloseTo(later * 0.6, 5); // Updated to match new grace period (0.6 instead of 0.35)
   });
 });

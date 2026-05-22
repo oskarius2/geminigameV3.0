@@ -77,8 +77,14 @@ export function isPickAtCap(
   return (counts[type] ?? 0) >= cap;
 }
 
-function buildCandidatePicks(threatLevel: number): number[] {
+function buildCandidatePicks(threatLevel: number, stage = 1): number[] {
   const t = threatLevel;
+  if (stage <= 1) {
+    return [7, 7, 7, 7];
+  }
+  if (stage === 2) {
+    return [7, 7, 6, 6, 9, 9];
+  }
   return [
     9, 9,
     10, 10,
@@ -110,10 +116,10 @@ export function pickEnemyTypeForThreat(
   state: GameState,
   levelProgress: number
 ): number | null {
-  if (state.bossActive) return null;
+  if (state.bossActive && !state.inBossArena) return null;
 
   const counts = countEnemiesByType(state.enemies);
-  const candidates = buildCandidatePicks(state.threatLevel);
+  const candidates = buildCandidatePicks(state.threatLevel, state.stage);
 
   const weighted: number[] = [];
   for (const pick of candidates) {

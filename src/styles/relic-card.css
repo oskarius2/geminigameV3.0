@@ -1,0 +1,348 @@
+/* Relic Vault card — uses design-tokens.css variables only */
+
+.relic-vault-grid {
+  display: grid;
+  gap: var(--primitive-space-lg);
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+  .relic-vault-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1024px) {
+  .relic-vault-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.relic-card {
+  position: relative;
+  width: 100%;
+  max-width: var(--card-width);
+  min-height: var(--card-min-height);
+  margin-inline: auto;
+  background: var(--card-bg);
+  border: var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow), var(--card-glow);
+  padding: 0;
+  text-align: left;
+  overflow: hidden;
+  transition:
+    transform var(--primitive-duration-normal) var(--primitive-easing-ease-out),
+    border var(--primitive-duration-normal) ease,
+    box-shadow var(--primitive-duration-normal) ease,
+    opacity var(--primitive-duration-normal) ease;
+  cursor: pointer;
+}
+
+.relic-card:hover:not(.relic-card--locked) {
+  border: var(--card-border-hover);
+  box-shadow: var(--card-shadow-hover), var(--card-glow-hover);
+  transform: scale(var(--card-scale-hover));
+}
+
+.relic-card:active:not(.relic-card--locked) {
+  transform: scale(var(--card-scale-active));
+}
+
+.relic-card--equipped {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.relic-card--common {
+  --color-rarity-current: var(--color-rarity-common);
+}
+
+.relic-card--rare {
+  --color-rarity-current: var(--color-rarity-rare);
+}
+
+.relic-card--epic {
+  --color-rarity-current: var(--color-rarity-epic);
+}
+
+.relic-card--legendary {
+  --color-rarity-current: var(--color-rarity-legendary);
+  animation: legendary-pulse 2s ease-in-out infinite;
+}
+
+.relic-card--exclusive {
+  --color-rarity-current: var(--color-rarity-exclusive);
+}
+
+.relic-card--mystery {
+  --color-rarity-current: var(--color-rarity-mystery);
+}
+
+.relic-card__rarity-bar {
+  height: var(--rarity-bar-height);
+  background: var(--color-rarity-current);
+  border-radius: var(--rarity-bar-radius-top) var(--rarity-bar-radius-top) 0 0;
+  width: 100%;
+}
+
+.relic-card__content {
+  padding: var(--card-padding);
+  display: flex;
+  flex-direction: column;
+  gap: var(--primitive-space-md);
+}
+
+.relic-card__label {
+  font-size: var(--text-rarity-size);
+  font-weight: var(--text-rarity-weight);
+  text-transform: var(--text-rarity-transform);
+  letter-spacing: var(--text-rarity-letter-spacing);
+  color: var(--color-rarity-current);
+  font-family: var(--font-heading);
+}
+
+.relic-card__slot {
+  font-size: var(--primitive-size-xs);
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-primary);
+  opacity: 0.85;
+}
+
+.relic-card__name {
+  font-size: var(--text-card-name-size);
+  font-weight: var(--text-card-name-weight);
+  color: var(--text-card-name-color);
+  margin: 0;
+  font-family: var(--font-heading);
+  line-height: 1.25;
+}
+
+.relic-card__description {
+  font-size: var(--text-desc-size);
+  font-weight: var(--text-desc-weight);
+  color: var(--text-desc-color);
+  line-height: var(--text-desc-line-height);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: var(--text-desc-max-lines);
+  -webkit-box-orient: vertical;
+  margin: 0;
+  font-family: var(--font-body);
+}
+
+.relic-card__divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  width: 100%;
+}
+
+.relic-card__power {
+  font-size: var(--text-power-size);
+  font-weight: var(--text-power-weight);
+  color: var(--text-power-color);
+  font-family: var(--text-power-font);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.relic-card__badge {
+  position: absolute;
+  top: var(--primitive-space-md);
+  right: var(--primitive-space-md);
+  display: flex;
+  align-items: center;
+  gap: var(--primitive-space-xs);
+  font-size: var(--primitive-size-xs);
+  font-weight: var(--primitive-weight-bold);
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--color-rarity-legendary);
+  filter: drop-shadow(var(--badge-glow));
+  animation: spin-badge var(--badge-spin-duration) linear infinite;
+  z-index: 2;
+}
+
+.relic-card:hover .relic-card__badge {
+  animation-duration: var(--badge-spin-duration-hover);
+}
+
+.relic-card__lock {
+  position: absolute;
+  top: var(--primitive-space-lg);
+  right: var(--primitive-space-lg);
+  color: rgba(255, 255, 255, 0.25);
+  z-index: 2;
+}
+
+.relic-card--locked {
+  opacity: var(--locked-opacity);
+  backdrop-filter: blur(var(--locked-blur));
+  cursor: default;
+  border: var(--locked-border);
+}
+
+.relic-card--locked::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--locked-overlay);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.relic-card--locked .relic-card__content {
+  position: relative;
+  z-index: 0;
+}
+
+.relic-card__actions {
+  margin-top: var(--primitive-space-sm);
+}
+
+.relic-card__btn {
+  width: 100%;
+  min-height: 2.5rem;
+  border-radius: var(--primitive-radius-md);
+  font-size: var(--primitive-size-xs);
+  font-weight: var(--primitive-weight-bold);
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition:
+    background var(--primitive-duration-normal) ease,
+    border-color var(--primitive-duration-normal) ease,
+    color var(--primitive-duration-normal) ease;
+}
+
+.relic-card__btn--equip {
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  background: rgba(0, 100, 140, 0.25);
+  color: var(--color-primary);
+}
+
+.relic-card__btn--equip:hover {
+  background: rgba(0, 140, 180, 0.35);
+  border-color: var(--color-border-hover);
+}
+
+.relic-card__btn--unequip {
+  border: 1px solid rgba(255, 51, 51, 0.4);
+  background: rgba(80, 20, 30, 0.35);
+  color: #fca5a5;
+}
+
+.relic-vault-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--primitive-space-sm);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.relic-vault-chip {
+  flex-shrink: 0;
+  min-height: 2.5rem;
+  padding-inline: var(--primitive-space-md);
+  border-radius: 9999px;
+  font-size: var(--primitive-size-xs);
+  font-weight: var(--primitive-weight-bold);
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--color-text-secondary);
+  transition:
+    background var(--primitive-duration-normal) ease,
+    border-color var(--primitive-duration-normal) ease,
+    color var(--primitive-duration-normal) ease;
+}
+
+.relic-vault-chip--active {
+  background: rgba(0, 212, 255, 0.15);
+  border-color: var(--color-border-hover);
+  color: var(--color-text-primary);
+}
+
+.relic-vault-select,
+.relic-vault-search {
+  min-height: 2.5rem;
+  border-radius: var(--primitive-radius-md);
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--color-text-primary);
+  font-family: var(--font-heading);
+  font-size: var(--primitive-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-inline: var(--primitive-space-md);
+}
+
+.relic-vault-search {
+  flex: 1;
+  min-width: 120px;
+  max-width: 16rem;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: var(--font-body);
+  font-size: var(--primitive-size-sm);
+}
+
+.relic-vault-search::placeholder {
+  color: var(--color-text-secondary);
+  opacity: 0.7;
+}
+
+@keyframes legendary-pulse {
+  0%,
+  100% {
+    box-shadow: var(--shadow-card), var(--glow-accent);
+  }
+  50% {
+    box-shadow:
+      var(--shadow-card),
+      0 0 40px rgba(255, 215, 0, 0.8),
+      0 0 80px rgba(255, 215, 0, 0.3);
+  }
+}
+
+@keyframes spin-badge {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes relic-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.relic-card--enter {
+  animation: relic-card-enter var(--primitive-duration-slow) var(--primitive-easing-ease-out) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relic-card--legendary,
+  .relic-card__badge,
+  .relic-card--enter {
+    animation: none;
+  }
+
+  .relic-card:hover:not(.relic-card--locked) {
+    transform: none;
+  }
+}

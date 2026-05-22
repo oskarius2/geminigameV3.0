@@ -1,7 +1,7 @@
 import { PASSIVE_BUFFS } from '../content/buffs';
 import { BuffRarity, GameState } from '../types';
 import { Vector2 } from '../utils/vector';
-import { computeThreatLevel } from '../balance/threat';
+import { applyShopThreat } from '../shop/shopEffects';
 import { grantExtraLife } from '../balance/extraLife';
 import { countPassiveStacks } from './pickBuffs';
 
@@ -264,8 +264,7 @@ export function applyBuff(state: GameState, choiceId: string): void {
     state.pickJuiceTimer = 45;
     state.screenshake = Math.max(state.screenshake, 15);
   }
-  state.threatLevel = computeThreatLevel(state);
-  state.threatPeak = Math.max(state.threatPeak, state.threatLevel);
+  applyShopThreat(state);
 }
 
 export function hasPermanentOverdrive(state: GameState): boolean {

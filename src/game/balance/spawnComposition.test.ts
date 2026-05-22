@@ -56,6 +56,7 @@ describe('pickEnemyTypeForThreat', () => {
 
     const state = minimalState(onlyFast);
     state.threatLevel = 0;
+    state.stage = 3;
     let gotNonFast = false;
     for (let i = 0; i < 30; i++) {
       const pick = pickEnemyTypeForThreat(state, 1);
@@ -69,7 +70,7 @@ describe('pickEnemyTypeForThreat', () => {
     const state = minimalState([]);
     state.threatLevel = 0;
     const progress = 1;
-    const caps = [EnemyType.FAST, EnemyType.SWARMER, EnemyType.CHASER];
+    const caps = [...new Set(Object.values(PICK_TO_TYPE))];
     for (const type of caps) {
       const cap = getEffectiveTypeCap(type, progress);
       for (let i = 0; i < cap; i++) state.enemies.push(mockEnemy(type));

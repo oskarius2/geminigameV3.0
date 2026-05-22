@@ -11,10 +11,10 @@ interface SynergyBarProps {
 }
 
 const TOP_BY_LAYOUT: Record<HudVariant, string> = {
-  full: 'top-[11.5rem]',
-  compact: 'top-[4.75rem]',
-  landscape: 'top-11',
-  'tablet-landscape': 'top-[4.5rem]',
+  full: 'top-[10.5rem]',
+  compact: 'top-[8.5rem]',
+  landscape: 'top-10',
+  'tablet-landscape': 'top-[5.5rem]',
 };
 
 export const SynergyBar: React.FC<SynergyBarProps> = ({ lines, layout, compact = false }) => {

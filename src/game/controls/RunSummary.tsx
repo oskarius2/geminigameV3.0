@@ -1,11 +1,16 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { RotateCcw, Sparkles } from 'lucide-react';
+import { RotateCcw, Sparkles, Trophy } from 'lucide-react';
 import { SpaceBackground, HudCorner } from '../../components/ui/SpaceBackground';
 import { GameState } from '../types';
 import { ARTIFACTS } from '../content/artifacts';
 import { getBuildName, getTopPassives } from '../meta/buildName';
 import { getNextUnlockGoal } from '../meta/artifactGoals';
+import type { RunUnlocksSnapshot } from '../meta/metaProgress';
+import { getCompanionDisplayName } from '../meta/unlockHints';
+import { formatSurvivalTime } from '../meta/survivalStats';
+import { getSurvivalDifficultyLabelSv } from '../balance/miniBossDifficulty';
+import { getTotalMiniBossKills } from '../meta/survivalStats';
 
 interface RunSummaryProps {
   state: GameState;
@@ -14,6 +19,11 @@ interface RunSummaryProps {
   lockedIds: string[];
   scrapEarned: number;
   metaScrapTotal: number;
+  runUnlocks?: RunUnlocksSnapshot;
+  newHighScoreThisRun?: boolean;
+  newLongestThisRun?: boolean;
+  personalBestScore?: number;
+  personalBestTime?: number;
   onRestart: () => void;
   onVault: () => void;
   victory?: boolean;
@@ -26,6 +36,11 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
   lockedIds,
   scrapEarned,
   metaScrapTotal,
+  runUnlocks,
+  newHighScoreThisRun = false,
+  newLongestThisRun = false,
+  personalBestScore = 0,
+  personalBestTime = 0,
   onRestart,
   onVault,
   victory = false,
@@ -38,6 +53,14 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
   const goal = getNextUnlockGoal(lockedIds);
   const mins = Math.floor(state.survivalTime / 60);
   const secs = String(Math.floor(state.survivalTime % 60)).padStart(2, '0');
+  const newArtifacts =
+    runUnlocks?.artifacts.map((id) => ARTIFACTS[id]?.name).filter(Boolean) ?? [];
+  const newCompanions =
+    runUnlocks?.companions.map((id) => getCompanionDisplayName(id)) ?? [];
+  const hasNewUnlocks = newArtifacts.length > 0 || newCompanions.length > 0;
+  const miniBossKills = state.miniBossKillsThisRun ?? 0;
+  const careerMiniBossKills = getTotalMiniBossKills();
+  const showSurvivalExtras = state.gameMode === 'NORMAL';
 
   return (
     <motion.div
@@ -103,6 +126,23 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
             <p className="text-white/40 text-[10px] uppercase font-bold">Peak Heat</p>
             <p className="text-rose-400 font-black">{state.threatPeak}%</p>
           </motion.div>
+          {showSurvivalExtras && (
+            <>
+              <div className="bg-violet-500/10 border border-violet-500/25 p-3 rounded-xl">
+                <p className="text-white/40 text-[10px] uppercase font-bold">Minibossar</p>
+                <p className="text-violet-300 font-black">{miniBossKills}</p>
+                {careerMiniBossKills > miniBossKills && (
+                  <p className="text-violet-400/60 text-[10px] font-mono mt-0.5">
+                    Totalt: {careerMiniBossKills}
+                  </p>
+                )}
+              </div>
+              <div className="bg-cyan-500/10 border border-cyan-500/25 p-3 rounded-xl">
+                <p className="text-white/40 text-[10px] uppercase font-bold">Svårighet</p>
+                <p className="text-cyan-300 font-black">{getSurvivalDifficultyLabelSv()}</p>
+              </div>
+            </>
+          )}
         </motion.div>
 
         {topBuffs.length > 0 && (
@@ -114,6 +154,22 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
                   <span>{b.name}</span>
                   {b.stacks > 1 && <span className="text-cyan-400 font-mono">×{b.stacks}</span>}
                 </li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
+
+        {hasNewUnlocks && (
+          <motion.div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+            <p className="text-amber-300 text-[10px] uppercase font-black tracking-widest mb-2 flex items-center gap-1">
+              <Sparkles size={12} /> New unlocks this run
+            </p>
+            <ul className="text-xs text-amber-100/90 space-y-0.5">
+              {newArtifacts.map((name) => (
+                <li key={name}>Relic: {name}</li>
+              ))}
+              {newCompanions.map((name) => (
+                <li key={name}>Companion: {name}</li>
               ))}
             </ul>
           </motion.div>
@@ -132,11 +188,34 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
           </motion.div>
         )}
 
+        {(newHighScoreThisRun || newLongestThisRun) && (
+          <motion.div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-center">
+            <p className="text-cyan-300 text-[10px] uppercase font-black tracking-widest mb-1 flex items-center justify-center gap-1">
+              <Trophy size={12} /> Personal best
+            </p>
+            {newHighScoreThisRun && (
+              <p className="text-sm text-white font-bold">
+                Score: {personalBestScore.toLocaleString()} pts
+              </p>
+            )}
+            {newLongestThisRun && (
+              <p className="text-sm text-white font-bold mt-0.5">
+                Time: {formatSurvivalTime(personalBestTime)}
+              </p>
+            )}
+          </motion.div>
+        )}
+
         <motion.div className="grid grid-cols-2 gap-2 text-sm">
           <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl col-span-2 text-center">
             <p className="text-amber-300 text-2xl font-black">+{scrapEarned}</p>
             <p className="text-white/40 text-[10px] uppercase font-bold tracking-widest">scrap this run</p>
             <p className="text-white/50 text-xs mt-1">Total in hangar: {metaScrapTotal}</p>
+            {state.shopScrapSpent > 0 && (
+              <p className="text-white/40 text-xs mt-1">
+                Shop spend this launch: −{state.shopScrapSpent}
+              </p>
+            )}
           </div>
         </motion.div>
 
@@ -195,7 +274,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
         >
           <span className="flex items-center justify-center gap-2.5">
             <Sparkles size={14} />
-            Relic Vault
+            View in Vault
           </span>
         </motion.button>
       </motion.div>

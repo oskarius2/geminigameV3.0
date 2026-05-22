@@ -16,16 +16,21 @@ export interface MaxAliveParams {
   threatFactor: number;
   isRamping: boolean;
   mobile: boolean;
+  /** Survival stage — stage 1 gets a modest on-field bump only. */
+  stage?: number;
 }
 
 export function getMaxAliveEnemies(params: MaxAliveParams): number {
-  const { levelProgress, threatFactor, isRamping, mobile } = params;
-  const earlyCap = isRamping ? 4 : 8;
-  const lateCap = mobile ? 50 : 120;
+  const { levelProgress, threatFactor, isRamping, mobile, stage = 99 } = params;
+  let earlyCap = isRamping ? 6 : 12;
+  const lateCap = mobile ? 45 : 70;
+  if (stage === 1) {
+    earlyCap += isRamping ? 2 : 4;
+  }
   return Math.floor(
     earlyCap +
       levelProgress * levelProgress * (lateCap - earlyCap) +
-      threatFactor * (mobile ? 15 : 25)
+      threatFactor * (mobile ? 20 : 35)
   );
 }
 
@@ -38,9 +43,14 @@ export interface SpawnChanceParams {
 
 export function getSpawnChance(params: SpawnChanceParams): number {
   const { levelProgress, threatFactor, survivalTime, mobile } = params;
-  const startGrace = survivalTime < 30 ? 0.35 : 1;
-  const raw = 0.01 + levelProgress * 0.4 + threatFactor * 0.2;
-  const capped = Math.min(mobile ? 0.35 : 0.85, raw);
+  const startGrace = survivalTime < 15 ? 0.6 : 1; // Shorter grace period, higher start chance
+  // Dampen spawn scaling in the last 30% of a stage (avoids late-stage mob flood)
+  const progressForSpawn =
+    levelProgress <= 0.7
+      ? levelProgress
+      : 0.7 + (levelProgress - 0.7) * 0.4; // Less dampening in late stage
+  const raw = 0.02 + progressForSpawn * 0.6 + threatFactor * 0.15; // Higher base and multipliers
+  const capped = Math.min(mobile ? 0.5 : 1.0, raw); // Higher caps
   return capped * startGrace;
 }
 

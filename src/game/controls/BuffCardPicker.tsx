@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Target, Shield, Flame, Magnet, Activity, HeartPulse, ShieldCheck, Bomb, Swords, CircleIcon, MoveRight, RotateCcw, Trophy, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Zap, Target, Shield, Flame, Magnet, Activity, HeartPulse, ShieldCheck, Bomb, Swords, CircleIcon, MoveRight, RotateCcw, Trophy, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { SpaceBackground } from '../../components/ui/SpaceBackground';
-import { PassiveBuff, BuffRarity } from '../types';
+import { PassiveBuff, BuffRarity, Artifact } from '../types';
 import { getBuffStacksForDisplay } from '../buffs/pickBuffs';
+import type { SurvivalCardChoice } from '../buffs/pickSurvivalCards';
 import type { ViewportProfile } from './mobileLayout';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -46,9 +47,11 @@ const RARITY_STYLE: Record<BuffRarity, { border: string; bg: string; glow: strin
 
 interface BuffCardPickerProps {
   show: boolean;
-  buffs: PassiveBuff[];
+  /** @deprecated use choices */
+  buffs?: PassiveBuff[];
+  choices?: SurvivalCardChoice[];
   passives: string[];
-  onSelect: (buffId: string) => void;
+  onSelect: (choiceId: string) => void;
   isMobile?: boolean;
   viewportProfile?: ViewportProfile;
 }
@@ -188,15 +191,77 @@ function BuffCard({
   );
 }
 
+function ArtifactCard({
+  artifact,
+  onSelect,
+  isMobile,
+  landscapeCards,
+  index,
+}: {
+  artifact: Artifact;
+  onSelect: (id: string) => void;
+  isMobile: boolean;
+  landscapeCards: boolean;
+  index: number;
+}) {
+  const compactCard = isMobile || landscapeCards;
+  const style = RARITY_STYLE[artifact.rarity];
+  const isLegendary = artifact.rarity === BuffRarity.LEGENDARY;
+
+  return (
+    <motion.button
+      type="button"
+      initial={{ opacity: 0, y: 32, scale: 0.92 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ delay: 0.1 + index * 0.12, type: 'spring', stiffness: 260, damping: 22 }}
+      whileHover={isMobile ? undefined : { scale: 1.05, y: -8 }}
+      whileTap={{ scale: 0.96 }}
+      onClick={() => onSelect(artifact.id)}
+      className={`group relative w-full ${compactCard ? 'min-h-[140px]' : 'min-h-[240px] md:min-h-[340px] p-1'} rounded-3xl border-2 ${style.bg} ${style.border} ${style.glow} hover:shadow-2xl text-left overflow-hidden flex flex-col ${
+        isLegendary ? 'animate-pulse ring-2 ring-amber-400/40' : ''
+      }`}
+    >
+      <div className="relative z-10 flex flex-col h-full p-5 md:p-7 w-full">
+        <span
+          className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${style.text} bg-black/50 border ${style.border} w-fit`}
+        >
+          ARTIFACT · {style.label}
+        </span>
+        <div
+          className={`mt-5 mb-4 w-18 h-18 rounded-2xl flex items-center justify-center border-2 ${style.bg} ${style.border}`}
+        >
+          <Sparkles size={40} className={style.text} />
+        </div>
+        <h3 className="text-2xl font-black text-white italic uppercase leading-tight tracking-tight">
+          {artifact.name}
+        </h3>
+        <p className="mt-3 text-slate-400 text-sm leading-snug flex-1">{artifact.description}</p>
+        <div className="mt-5 py-3 rounded-xl bg-amber-500/20 border border-amber-400/40 text-center font-black text-amber-100 uppercase text-sm tracking-widest">
+          Equip Artifact
+        </div>
+      </div>
+    </motion.button>
+  );
+}
+
 export const BuffCardPicker: React.FC<BuffCardPickerProps> = ({
   show,
   buffs,
+  choices: choicesProp,
   passives,
   onSelect,
   isMobile = false,
   viewportProfile = 'desktop',
 }) => {
-  const hasExclusive = buffs.some((b) => b.rarity === BuffRarity.EXCLUSIVE || b.exclusive);
+  const choices: SurvivalCardChoice[] =
+    choicesProp ??
+    (buffs ?? []).map((buff) => ({ kind: 'buff' as const, buff }));
+  const hasExclusive = choices.some(
+    (c) =>
+      c.kind === 'buff' &&
+      (c.buff.rarity === BuffRarity.EXCLUSIVE || c.buff.exclusive),
+  );
+  const hasArtifact = choices.some((c) => c.kind === 'artifact');
   const landscapeCards = viewportProfile === 'phone-landscape';
   const stackVertical = isMobile && !landscapeCards;
 
@@ -208,7 +273,7 @@ export const BuffCardPicker: React.FC<BuffCardPickerProps> = ({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="absolute inset-0 z-[200] overflow-hidden flex flex-col items-center justify-center p-4 pt-[max(1rem,env(safe-area-inset-top))] pb-[max(1rem,env(safe-area-inset-bottom))] pointer-events-auto overflow-y-auto"
-          style={{ background: 'rgba(2,6,23,0.92)' }}
+          style={{ background: 'rgba(10,14,39,0.88)' }}
         >
           <SpaceBackground />
           <div className="relative z-10 w-full flex flex-col items-center">
@@ -217,30 +282,51 @@ export const BuffCardPicker: React.FC<BuffCardPickerProps> = ({
             animate={{ y: 0, opacity: 1 }}
             className="text-center mb-6 px-4 shrink-0"
           >
-            <h2 className="text-4xl md:text-7xl font-black text-transparent bg-clip-text bg-linear-to-b from-white via-cyan-200 to-cyan-600 tracking-tighter italic uppercase">
-              {hasExclusive ? 'Exclusive Augment' : 'Augment'}
+            <h2 className="text-3xl sm:text-4xl md:text-6xl font-black text-transparent bg-clip-text bg-linear-to-b from-white via-cyan-200 to-cyan-600 tracking-tighter italic uppercase">
+              {hasExclusive ? 'EXCLUSIVE AUGMENT' : hasArtifact ? 'CHOOSE RELIC' : 'CHOOSE BUFF'}
             </h2>
-            <p className="text-cyan-400 font-mono tracking-[0.25em] text-[10px] md:text-xs mt-2 uppercase">
-              {hasExclusive ? 'One choice. Maximum power.' : 'Choose one upgrade'}
+            <p className="text-cyan-400 font-mono tracking-[0.25em] text-xs md:text-sm mt-2 uppercase">
+              {hasExclusive
+                ? 'One choice. Maximum power.'
+                : hasArtifact
+                  ? 'Pick an artifact or augment'
+                  : 'Select one upgrade for this run'}
             </p>
           </motion.div>
 
           <motion.div 
             layout 
-            className={`flex w-full max-w-6xl justify-center items-stretch gap-3 sm:gap-4 md:gap-6 px-2 sm:px-4 pb-8 sm:pb-0 sm:mt-4 scrollbar-hide ${
+            className={`flex w-full justify-center items-stretch gap-3 sm:gap-4 md:gap-6 px-2 sm:px-4 pb-8 sm:pb-0 sm:mt-4 scrollbar-hide ${
               stackVertical
-                ? 'flex-col overflow-y-auto'
+                ? 'flex-col overflow-y-auto max-w-[500px] mx-auto'
                 : landscapeCards
-                  ? 'flex-row overflow-x-auto snap-x snap-mandatory'
-                  : 'flex-row overflow-x-auto sm:overflow-x-visible'
+                  ? 'flex-row overflow-x-auto snap-x snap-mandatory max-w-6xl'
+                  : 'flex-row overflow-x-auto sm:overflow-x-visible max-w-6xl'
             }`}
           >
-            {buffs.map((buff, i) => (
+            {choices.map((choice, i) => (
               <motion.div
-                key={`${buff.id}-${i}`}
+                key={choice.kind === 'artifact' ? `art-${choice.artifact.id}-${i}` : `buff-${choice.buff.id}-${i}`}
                 className={`shrink-0 ${stackVertical ? 'w-full' : landscapeCards ? 'w-[min(72vw,280px)] snap-center' : 'w-full sm:flex-1 sm:max-w-sm'}`}
               >
-                <BuffCard buff={buff} passives={passives} onSelect={onSelect} isMobile={isMobile} landscapeCards={landscapeCards} index={i} />
+                {choice.kind === 'artifact' ? (
+                  <ArtifactCard
+                    artifact={choice.artifact}
+                    onSelect={onSelect}
+                    isMobile={isMobile}
+                    landscapeCards={landscapeCards}
+                    index={i}
+                  />
+                ) : (
+                  <BuffCard
+                    buff={choice.buff}
+                    passives={passives}
+                    onSelect={onSelect}
+                    isMobile={isMobile}
+                    landscapeCards={landscapeCards}
+                    index={i}
+                  />
+                )}
               </motion.div>
             ))}
           </motion.div>

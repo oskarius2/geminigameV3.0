@@ -23,5 +23,6 @@ export function computeStageClearScrap(stage: number): number {
 /** Small in-run tally from kills (banked to meta at run end with rest). */
 export function scrapFromKill(state: GameState): number {
   if (Math.random() >= 0.12) return 0;
-  return Math.max(1, Math.floor(scrapMultiplier(state)));
+  const stageMult = 1 + (Math.min(5, state.stage) - 1) * 0.15;
+  return Math.max(1, Math.floor(scrapMultiplier(state) * stageMult));
 }

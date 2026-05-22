@@ -14,6 +14,7 @@ import {
   shouldTriggerHitFeedback,
 } from '../balance/combatDensity';
 import { beginBossWarp, pickRandomBoss } from '../content/bossArenas';
+import { applyBossDefeatState } from '../bossLifecycle';
 
 export interface BeamHitContext {
   next: GameState;
@@ -107,9 +108,7 @@ function handleEnemyDeath(ctx: BeamHitContext, e: Entity, chaosFactor: number): 
   if (item) next.items.push(item);
 
   if (e.enemyType === EnemyType.BOSS) {
-    next.bossActive = false;
-    next.pendingArenaRestore = true;
-    next.stageTransition = 90;
+    applyBossDefeatState(next);
     next.screenFlash = 25;
     onBossKill();
   } else if (

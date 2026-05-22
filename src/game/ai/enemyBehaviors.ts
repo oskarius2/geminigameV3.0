@@ -1,6 +1,7 @@
 import { Entity, EnemyType, EntityType, GameState, Particle } from '../types';
 import { Vector2 } from '../utils/vector';
 import { hasTimeSlowEffect } from '../buffs/applyBuff';
+import { getMiniBossVelocity, runMiniBossAttacks } from '../bosses/miniBossAI';
 
 type VelocityResult = { vx: number; vy: number };
 
@@ -38,7 +39,7 @@ export function steerAroundObstacles(
   return { vx: sx, vy: sy };
 }
 
-function pushProjectile(
+export function pushProjectile(
   state: GameState,
   enemy: Entity,
   angle: number,
@@ -72,11 +73,11 @@ function threatAdjustedInterval(intervalMs: number, state: GameState): number {
   return intervalMs;
 }
 
-function fireCooldownReady(enemy: Entity, intervalMs: number, state: GameState): boolean {
+export function fireCooldownReady(enemy: Entity, intervalMs: number, state: GameState): boolean {
   return Date.now() - (enemy.lastShot || 0) > threatAdjustedInterval(intervalMs, state);
 }
 
-function markFired(enemy: Entity): void {
+export function markFired(enemy: Entity): void {
   enemy.lastShot = Date.now();
 }
 
@@ -88,7 +89,7 @@ function isRetreating(vx: number, vy: number, toPlayer: Vector2): boolean {
   return dot < -0.2;
 }
 
-function fireAtPlayer(
+export function fireAtPlayer(
   state: GameState,
   enemy: Entity,
   angleToPlayer: number,
@@ -153,6 +154,10 @@ export function runEnemyAttacks(
   const angleToPlayer = Math.atan2(dy, dx);
   const toPlayer = dirToPlayer(enemy, state.player.pos, dist);
   const backingOff = enemy.aiState === 'retreat' || isRetreating(vx, vy, toPlayer);
+
+  if (enemy.miniBossId && runMiniBossAttacks(enemy, state, dist, dx, dy)) {
+    return;
+  }
 
   if (enemy.enemyType === EnemyType.RANGED) {
     const fireRate = (slow ? 5000 : 2200) * (0.75 + (enemy.behaviorSeed ?? 0.5) * 0.5);
@@ -634,6 +639,11 @@ export function computeEnemyVelocity(
   if (!enemy.aiState) enemy.aiState = 'chase';
   if (enemy.aiTimer === undefined) enemy.aiTimer = 0;
   enemy.aiTimer -= enemyDt;
+
+  if (enemy.miniBossId) {
+    const mbVel = getMiniBossVelocity(enemy, state, enemyDt, dist, dx, dy);
+    if (mbVel) return mbVel;
+  }
 
   switch (enemy.enemyType ?? EnemyType.CHASER) {
     case EnemyType.RANGED: {

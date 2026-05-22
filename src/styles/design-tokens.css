@@ -1,0 +1,171 @@
+/**
+ * SpaceHero design tokens — primitive → semantic → component
+ * Single source of truth for Relic Vault and hangar UI.
+ */
+
+:root {
+  /* --- Primitive: rarity --- */
+  --primitive-color-legendary: #ffd700;
+  --primitive-color-epic: #9d4edd;
+  --primitive-color-rare: #3b82f6;
+  --primitive-color-common: #888888;
+  --primitive-color-exclusive: #00d4ff;
+  --primitive-color-mystery: #c084fc;
+
+  /* --- Primitive: accents --- */
+  --primitive-color-cyan: #00d4ff;
+  --primitive-color-success: #33ff88;
+  --primitive-color-warning: #ff3333;
+  --primitive-color-white: #ffffff;
+  --primitive-color-gray-dark: #a0a0a0;
+
+  /* --- Primitive: background --- */
+  --primitive-color-bg-dark: #0a0e27;
+  --primitive-color-bg-card: #0f1436;
+  --primitive-color-bg-overlay: #0a0e27dd;
+
+  /* --- Primitive: typography --- */
+  --primitive-font-mono: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, monospace;
+  --primitive-font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --primitive-size-xs: 11px;
+  --primitive-size-sm: 12px;
+  --primitive-size-md: 14px;
+  --primitive-size-lg: 16px;
+  --primitive-size-xl: 18px;
+  --primitive-size-2xl: 24px;
+
+  --primitive-weight-regular: 400;
+  --primitive-weight-semibold: 600;
+  --primitive-weight-bold: 700;
+
+  /* --- Primitive: spacing --- */
+  --primitive-space-xs: 4px;
+  --primitive-space-sm: 8px;
+  --primitive-space-md: 12px;
+  --primitive-space-lg: 16px;
+  --primitive-space-xl: 24px;
+  --primitive-space-2xl: 32px;
+  --primitive-space-3xl: 48px;
+
+  /* --- Primitive: shadows --- */
+  --primitive-shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --primitive-shadow-md: 0 8px 24px rgba(0, 0, 0, 0.4);
+  --primitive-shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.5);
+
+  /* --- Primitive: glows --- */
+  --primitive-glow-cyan: 0 0 20px rgba(0, 212, 255, 0.4);
+  --primitive-glow-cyan-intense: 0 0 30px rgba(0, 212, 255, 0.6);
+  --primitive-glow-gold: 0 0 20px rgba(255, 215, 0, 0.4);
+  --primitive-glow-gold-intense: 0 0 30px rgba(255, 215, 0, 0.6);
+  --primitive-glow-purple: 0 0 20px rgba(157, 76, 221, 0.4);
+  --primitive-glow-purple-intense: 0 0 24px rgba(157, 76, 221, 0.5);
+
+  /* --- Primitive: radius --- */
+  --primitive-radius-sm: 4px;
+  --primitive-radius-md: 8px;
+  --primitive-radius-lg: 12px;
+
+  /* --- Primitive: motion --- */
+  --primitive-duration-fast: 0.05s;
+  --primitive-duration-normal: 0.2s;
+  --primitive-duration-slow: 0.4s;
+  --primitive-easing-ease-out: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* --- Semantic: interactive --- */
+  --color-primary: var(--primitive-color-cyan);
+  --color-primary-dark: #00a8cc;
+  --color-primary-darker: #007399;
+
+  --color-success: var(--primitive-color-success);
+  --color-warning: var(--primitive-color-warning);
+  --color-text-primary: var(--primitive-color-white);
+  --color-text-secondary: var(--primitive-color-gray-dark);
+  --color-border: rgba(0, 212, 255, 0.3);
+  --color-border-hover: var(--primitive-color-cyan);
+
+  --color-rarity-legendary: var(--primitive-color-legendary);
+  --color-rarity-epic: var(--primitive-color-epic);
+  --color-rarity-rare: var(--primitive-color-rare);
+  --color-rarity-common: var(--primitive-color-common);
+  --color-rarity-exclusive: var(--primitive-color-exclusive);
+  --color-rarity-mystery: var(--primitive-color-mystery);
+
+  --bg-base: var(--primitive-color-bg-dark);
+  --bg-card: var(--primitive-color-bg-card);
+  --bg-overlay: var(--primitive-color-bg-overlay);
+  --bg-hover: #1a1f3f;
+  --bg-selected: #2a2f4f;
+
+  --font-heading: var(--primitive-font-mono);
+  --font-body: var(--primitive-font-sans);
+  --size-heading: var(--primitive-size-2xl);
+  --size-title: var(--primitive-size-lg);
+  --size-label: var(--primitive-size-sm);
+  --size-body: var(--primitive-size-md);
+
+  --shadow-card: var(--primitive-shadow-sm);
+  --shadow-card-hover: var(--primitive-shadow-md);
+  --shadow-elevated: var(--primitive-shadow-lg);
+
+  --glow-default: var(--primitive-glow-cyan);
+  --glow-hover: var(--primitive-glow-cyan-intense);
+  --glow-accent: var(--primitive-glow-gold);
+
+  /* --- Component: relic card --- */
+  --card-width: 280px;
+  --card-min-height: 200px;
+  --card-radius: var(--primitive-radius-lg);
+  --card-padding: var(--primitive-space-lg);
+  --card-bg: var(--bg-card);
+  --card-border: 1px solid var(--color-border);
+  --card-border-hover: 2px solid var(--color-border-hover);
+  --card-shadow: var(--shadow-card);
+  --card-shadow-hover: var(--shadow-card-hover);
+  --card-glow: var(--glow-default);
+  --card-glow-hover: var(--glow-hover);
+  --card-scale-hover: 1.05;
+  --card-scale-active: 0.98;
+
+  --rarity-bar-height: 8px;
+  --rarity-bar-radius-top: var(--primitive-radius-lg);
+
+  --badge-size: 32px;
+  --badge-glow: 0 0 12px rgba(255, 215, 0, 0.8);
+  --badge-spin-duration: 3s;
+  --badge-spin-duration-hover: 1.5s;
+
+  --text-rarity-size: var(--primitive-size-xs);
+  --text-rarity-weight: 600;
+  --text-rarity-transform: uppercase;
+  --text-rarity-letter-spacing: 1.5px;
+
+  --text-card-name-size: var(--primitive-size-lg);
+  --text-card-name-weight: var(--primitive-weight-bold);
+  --text-card-name-color: var(--color-text-primary);
+
+  --text-desc-size: var(--primitive-size-sm);
+  --text-desc-weight: var(--primitive-weight-regular);
+  --text-desc-color: var(--color-text-secondary);
+  --text-desc-line-height: 1.4;
+  --text-desc-max-lines: 2;
+
+  --text-power-size: var(--primitive-size-sm);
+  --text-power-weight: 600;
+  --text-power-color: var(--color-success);
+  --text-power-font: var(--font-heading);
+
+  --locked-opacity: 0.65;
+  --locked-blur: 2px;
+  --locked-overlay: var(--bg-overlay);
+  --locked-border: 1px dashed #555555;
+
+  /* Bridge legacy HUD vars */
+  --hud-accent: var(--color-primary);
+  --hud-legendary: var(--color-rarity-legendary);
+  --hud-epic: var(--color-rarity-epic);
+  --hud-rare: var(--color-rarity-rare);
+  --hud-common: var(--color-rarity-common);
+  --background: var(--bg-base);
+  --surface: var(--bg-card);
+}
