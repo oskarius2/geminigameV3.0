@@ -27,21 +27,23 @@ export function MiniBossHud({
   return (
     <div className={wrapClass}>
       <div
-        className="rounded-lg border bg-black/65 backdrop-blur-md p-2"
-        style={{ borderColor: `${auraColor}66`, boxShadow: `0 0 20px ${auraColor}33` }}
+        className="ui-miniboss-hud"
+        style={{
+          borderColor: auraColor,
+          backgroundColor: `${auraColor}22`,
+          boxShadow: `0 0 28px ${auraColor}44, 0 0 48px ${auraColor}18`,
+        }}
       >
-        <p
-          className="text-[10px] font-mono uppercase tracking-widest mb-1 text-center"
-          style={{ color: auraColor }}
-        >
+        <p className="ui-miniboss-title" style={{ color: auraColor }}>
           Miniboss · {displayName}
         </p>
-        <div className="h-3 rounded-full overflow-hidden bg-black/50 border border-white/10">
+        <div className="ui-miniboss-hp-track">
           <div
-            className="h-full rounded-full transition-[width] duration-200 ease-out"
+            className="ui-miniboss-hp-fill"
             style={{
               width: `${pct}%`,
-              background: `linear-gradient(90deg, ${auraColor}, ${HUD_COLORS.accent})`,
+              background: `linear-gradient(90deg, ${auraColor}, ${HUD_COLORS.danger})`,
+              boxShadow: `0 0 12px ${auraColor}88`,
             }}
           />
         </div>

@@ -106,7 +106,7 @@ export function HangarScreen({
           className="shrink-0 mb-4"
         />
 
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           {tab === 'ship' && (
             <ShipTab selectedId={selectedShip} onSelect={(id) => setSelectedShip(id)} />
           )}
@@ -129,7 +129,14 @@ export function HangarScreen({
           {tab === 'progress' && <UnlockProgressTab />}
         </div>
 
-        <footer className="shrink-0 pt-4 flex flex-wrap justify-end gap-3 border-t border-cyan-500/15 mt-4">
+        <footer
+          className="shrink-0 pt-4 flex flex-wrap justify-end gap-3 mt-4 relative z-20"
+          style={{
+            borderTop: '1px solid var(--ui-border-purple, rgba(167, 139, 250, 0.5))',
+            background:
+              'linear-gradient(180deg, transparent 0%, rgba(4, 8, 22, 0.92) 24%, rgba(4, 8, 22, 0.98) 100%)',
+          }}
+        >
           {survivalMode ? (
             <PrimaryButton
               variant="accent"

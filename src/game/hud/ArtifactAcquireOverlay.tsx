@@ -1,80 +1,82 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles } from 'lucide-react';
+import { GameIcon } from '../../components/icons';
 import type { ArtifactAcquiredEvent } from './artifactPopup';
+
+export type ArtifactAcquirePlacement = 'corner';
 
 interface ArtifactAcquireOverlayProps {
   event: ArtifactAcquiredEvent | null;
+  placement?: ArtifactAcquirePlacement;
 }
 
-export function ArtifactAcquireOverlay({ event }: ArtifactAcquireOverlayProps) {
+export function ArtifactAcquireOverlay({
+  event,
+  placement = 'corner',
+}: ArtifactAcquireOverlayProps) {
+  const compact = placement === 'corner';
+
   return (
     <AnimatePresence>
       {event && (
-        <motion.div
-          key={event.artifactId}
-          initial={{ opacity: 0, scale: 0.88, y: 16 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.94, y: -12 }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
-          className="pointer-events-none fixed inset-0 z-[95] flex items-center justify-center px-4"
-          aria-live="assertive"
-          role="status"
-        >
-          <div
-            className={`relative max-w-md w-full rounded-2xl border-2 px-6 py-5 backdrop-blur-xl bg-slate-950/85 ${event.borderClass} ${event.glowClass} ${event.particleClass ?? ''}`}
+        <div className="ui-artifact-acquire-anchor" aria-live="assertive" role="status">
+          <motion.div
+            key={event.artifactId}
+            initial={{ opacity: 0, y: 12, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className={`ui-artifact-acquire-card relative w-full backdrop-blur-xl bg-slate-950/88 ${event.borderClass} ${event.glowClass} ${event.particleClass ?? ''} ${compact ? 'ui-artifact-acquire-card--compact' : ''}`}
             style={{
-              boxShadow: `0 0 40px ${event.rarityColor}44, inset 0 0 24px ${event.rarityColor}12`,
+              boxShadow: `0 0 32px ${event.rarityColor}44, inset 0 0 20px ${event.rarityColor}10`,
             }}
           >
             {event.rarity === 'LEGENDARY' || event.rarity === 'EXCLUSIVE' ? (
               <>
                 <span
-                  className="absolute -top-1 -left-1 h-2 w-2 rounded-full opacity-80"
+                  className="absolute -top-0.5 -left-0.5 h-1.5 w-1.5 rounded-full opacity-80"
                   style={{ background: event.rarityColor }}
                 />
                 <span
-                  className="absolute -top-2 right-4 h-1.5 w-1.5 rounded-full opacity-60"
-                  style={{ background: event.rarityColor }}
-                />
-                <span
-                  className="absolute bottom-2 -right-1 h-2 w-2 rounded-full opacity-70"
+                  className="absolute -top-1 right-3 h-1 w-1 rounded-full opacity-60"
                   style={{ background: event.rarityColor }}
                 />
               </>
             ) : null}
 
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-3">
               <div
-                className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/15"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-white/15"
                 style={{ background: `${event.rarityColor}22` }}
               >
-                <Sparkles size={28} style={{ color: event.rarityColor }} />
+                <GameIcon name="ui.artifact" size={22} color={event.rarityColor} glow />
               </div>
               <div className="min-w-0 flex-1">
                 <h2
-                  className={`font-display text-base md:text-lg font-black uppercase tracking-wide leading-tight ${event.textClass}`}
+                  className={`ui-artifact-acquire-title font-display font-black uppercase tracking-wide leading-tight ${event.textClass}`}
                 >
                   {event.title}
                 </h2>
                 {event.statChanges.length > 0 ? (
-                  <ul className="mt-3 space-y-1.5">
+                  <ul className="mt-2 space-y-0.5">
                     {event.statChanges.map((line) => (
                       <li
                         key={line}
-                        className={`text-sm font-mono font-bold tracking-wide ${event.textClass}`}
+                        className={`text-xs font-mono font-bold tracking-wide ${event.textClass}`}
                       >
                         {line}
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <p className="mt-2 text-sm text-slate-300 leading-snug">{event.subtitle}</p>
+                  <p className="mt-1 text-xs text-slate-300 leading-snug line-clamp-2">
+                    {event.subtitle}
+                  </p>
                 )}
               </div>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        </div>
       )}
     </AnimatePresence>
   );

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { getThreatTier } from '../balance/threat';
-import { mapBossIdToTheme } from './survivalMusic';
+import {
+  mapBossIdToTheme,
+  threatToMusicRatio,
+  threatToRootFrequency,
+  THREAT_MUSIC_MAX,
+} from './survivalMusic';
 
 describe('survivalMusic', () => {
   it('maps threat levels to four tiers', () => {
@@ -11,6 +16,14 @@ describe('survivalMusic', () => {
     expect(getThreatTier(51)).toBe('danger');
     expect(getThreatTier(75)).toBe('danger');
     expect(getThreatTier(76)).toBe('critical');
+  });
+
+  it('maps threat level to smooth frequency curve', () => {
+    expect(threatToMusicRatio(0)).toBe(0);
+    expect(threatToMusicRatio(THREAT_MUSIC_MAX)).toBe(1);
+    expect(threatToRootFrequency(0)).toBe(80);
+    expect(threatToRootFrequency(50)).toBe(160);
+    expect(threatToRootFrequency(100)).toBe(240);
   });
 
   it('maps survival boss ids to music themes', () => {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Shield, Zap, Target, Trophy, Flame, RotateCcw, Swords } from 'lucide-react';
+import { GameIconFromKey } from '../../../components/icons';
 
 interface BuffState {
   shield: number;
@@ -27,25 +27,25 @@ export function buildMobileBuffChips(
 ): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   if (extraLifeCharges > 0) {
-    out.push(chip('LIV', <Shield size={12} />));
+    out.push(chip('LIV', <GameIconFromKey iconKey="Shield" size={12} color="#67e8f9" />));
   }
   if (buffs.overdrive > 0) {
-    out.push(chip(`OD`, <Zap size={12} />));
+    out.push(chip(`OD`, <GameIconFromKey iconKey="Zap" size={12} color="#fda4af" />));
   }
   if (buffs.rapidFire > 0) {
-    out.push(chip(`RF`, <Flame size={12} />));
+    out.push(chip(`RF`, <GameIconFromKey iconKey="Flame" size={12} color="#fcd34d" />));
   }
   if (buffs.magnet > 0) {
-    out.push(chip(`MAG`, <Target size={12} />));
+    out.push(chip(`MAG`, <GameIconFromKey iconKey="Magnet" size={12} color="#67e8f9" />));
   }
   if (buffs.scoreX > 0) {
-    out.push(chip(`2X`, <Trophy size={12} />));
+    out.push(chip(`2X`, <GameIconFromKey iconKey="Trophy" size={12} color="#e879f9" />));
   }
   if (buffs.timeSlow > 0) {
-    out.push(chip(`SLW`, <RotateCcw size={12} />));
+    out.push(chip(`SLW`, <GameIconFromKey iconKey="RotateCcw" size={12} color="#a5b4fc" />));
   }
   if (buffs.piercing > 0) {
-    out.push(chip(`PRC`, <Swords size={12} />));
+    out.push(chip(`PRC`, <GameIconFromKey iconKey="Swords" size={12} color="#f9a8d4" />));
   }
   return out;
 }

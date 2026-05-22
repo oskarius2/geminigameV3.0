@@ -272,14 +272,18 @@ export const GameHUD: React.FC<HUDProps> = ({
 
   const bossBar =
     bossActive && bossMaxHealth > 0 ? (
-      <div className={`w-full ${useStackedHud || isLandscape ? '' : 'absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-30 px-4'}`}>
-        <div className="rounded-lg border border-rose-500/40 bg-black/60 backdrop-blur-md p-2">
-          <p className="text-[10px] font-mono uppercase tracking-widest text-rose-300 mb-1 text-center">
-            Boss
-          </p>
-          <div className="h-3 rounded-full overflow-hidden bg-black/50 border border-white/10">
+      <div
+        className={
+          useStackedHud || isLandscape
+            ? 'w-full flex justify-center px-2'
+            : 'absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-30 px-4 w-full max-w-[200px]'
+        }
+      >
+        <div className="boss-hp-hud w-full">
+          <p className="boss-hp-hud__label">Boss</p>
+          <div className="boss-hp-hud__track">
             <div
-              className="h-full rounded-full transition-[width] duration-300 ease-out"
+              className="boss-hp-hud__fill"
               style={{
                 width: `${bossHpPct}%`,
                 background: `linear-gradient(90deg, ${HUD_COLORS.danger}, #f97316)`,

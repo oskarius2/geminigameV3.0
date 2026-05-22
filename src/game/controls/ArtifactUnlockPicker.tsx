@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Sparkles } from 'lucide-react';
+import { GameIcon } from '../../components/icons';
 import { Artifact, BuffRarity } from '../types';
 import { RARITY_COLORS } from '../content/rarityColors';
 
@@ -28,7 +28,7 @@ export const ArtifactUnlockPicker: React.FC<ArtifactUnlockPickerProps> = ({
         className="absolute inset-0 z-[105] bg-gradient-to-br from-[#020617] via-[#0f172a] to-[#020617] backdrop-blur-xl flex flex-col items-center justify-center p-6 pointer-events-auto"
       >
         <div className="text-center mb-8 mt-12 md:mt-0">
-          <Sparkles className="mx-auto text-cyan-400 mb-3 animate-pulse" size={48} />
+          <GameIcon name="ui.relic" size={48} color="#00e5ff" glow className="mx-auto mb-3" />
           <h2 className="text-4xl md:text-5xl font-black text-white italic uppercase tracking-tighter drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]">
             RELIC SALVAGED
           </h2>

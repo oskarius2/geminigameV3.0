@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   STAGE_1_WAVES,
   STAGE_5_WAVES,
+  STAGE_WAVE_ENEMY_TARGETS,
   getStageWaveDuration,
   getWaveCompositionSnapshot,
+  getWaveEnemyTotal,
   getWaveForStage,
   getWavesForStage,
 } from './waveCompositions';
@@ -50,5 +52,18 @@ describe('waveCompositions', () => {
     expect(snap?.waveIndex).toBe(0);
     expect(snap?.totalEnemiesInWave).toBeGreaterThan(0);
     expect(getWavesForStage(2).length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('scales wave enemy counts toward stage targets', () => {
+    for (const stage of [1, 2, 3, 4] as const) {
+      const wave = getWaveForStage(stage, 0);
+      expect(wave).not.toBeNull();
+      const total = getWaveEnemyTotal(wave!);
+      const { min, max } = STAGE_WAVE_ENEMY_TARGETS[stage];
+      expect(total).toBeGreaterThanOrEqual(min);
+      expect(total).toBeLessThanOrEqual(max + 8);
+    }
+    const s5 = getWaveForStage(5, 0);
+    expect(getWaveEnemyTotal(s5!)).toBeGreaterThanOrEqual(STAGE_WAVE_ENEMY_TARGETS[5].min);
   });
 });

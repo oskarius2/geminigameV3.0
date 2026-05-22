@@ -117,7 +117,7 @@ export function RelicVaultTab({
 
       <div
         key={gridKey}
-        className="relic-vault-grid overflow-y-auto flex-1 pr-1 pb-[var(--primitive-space-lg)]"
+        className="relic-vault-grid overflow-y-auto flex-1 pr-1 pb-8 min-h-0"
       >
         {all.map((art, index) => {
           const owned = unlockedIds.includes(art.id);

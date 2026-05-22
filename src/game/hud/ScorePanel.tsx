@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Menu, Activity } from 'lucide-react';
+import { GameIcon } from '../../components/icons';
 import { getThreatTier } from '../balance/threat';
 import { HudPanel } from './HudPanel';
 import { HUD_COLORS } from './hudTokens';
@@ -108,7 +108,7 @@ export function ScorePanel({
           </motion.p>
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-mono">
             <span className="flex items-center gap-1" style={{ color: HUD_COLORS.textSecondary }}>
-              <Activity size={12} aria-hidden />
+              <GameIcon name="ui.activity" size={12} color="#67e8f9" />
               {formatSurvival(survivalTime)}
             </span>
             {stageLine ? (
@@ -136,7 +136,7 @@ export function ScorePanel({
           className={`pointer-events-auto shrink-0 h-9 w-9 flex items-center justify-center rounded-md text-cyan-300/80 hover:text-cyan-200 transition-colors touch-manipulation ${isPhone ? 'absolute right-0 top-0' : ''}`}
           style={{ border: `1px solid ${HUD_COLORS.accent}35`, background: 'rgba(0,212,255,0.06)' }}
         >
-          <Menu size={16} />
+          <GameIcon name="ui.menu" size={16} color="#00e5ff" />
         </button>
       </div>
 

@@ -2,6 +2,7 @@ import { Vector2 } from '../utils/vector';
 import { EntityType, EnemyType } from '../types';
 import type { CompanionGameState } from './companionGameState';
 import { selectClosestEnemy, selectTarget } from './companionTargeting';
+import { resolveScoutMoveTarget } from './companionAI';
 import type { CompanionDef, CompanionInstance, CompanionRuntime } from './companionTypes';
 import { CompanionAIState, CompanionType } from './companionTypes';
 
@@ -329,7 +330,10 @@ export function updateCompanionBehavior(
     runtime.markedEnemyId = null;
   }
 
-  const goal = getTargetPosition(runtime.aiState, instance, runtime, state, def);
+  let goal = getTargetPosition(runtime.aiState, instance, runtime, state, def);
+  if (instance.type === CompanionType.SCOUT) {
+    goal = resolveScoutMoveTarget(runtime, state, goal, dtSec);
+  }
   moveCompanionToward(runtime, goal, instance.type, state, dtSec);
   runtime.isAttacking = runtime.attackPulseTimer > 0;
 }

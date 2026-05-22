@@ -1,3 +1,8 @@
+import {
+  filterArtifactsByTier,
+  getRunBossesDefeated,
+  pickArtifact,
+} from '../balance/artifactTiers';
 import { ARTIFACTS } from '../content/artifacts';
 import { pickBuffs } from './pickBuffs';
 import { consumeLuckyArtifactPick } from '../shop/shopEffects';
@@ -29,24 +34,28 @@ export function pickSurvivalCardChoices(
 
   if (pool.length === 0) return choices;
 
+  const bossesDefeated = getRunBossesDefeated(state);
+  const tierPool = filterArtifactsByTier(pool, bossesDefeated);
   const chance = artifactOfferChance(state);
   const luckyPick = consumeLuckyArtifactPick(state);
-  const rarePlus = pool.filter(
+  const rarePlus = tierPool.filter(
     (a) =>
       a.rarity === BuffRarity.RARE ||
       a.rarity === BuffRarity.EPIC ||
       a.rarity === BuffRarity.LEGENDARY ||
       a.rarity === BuffRarity.EXCLUSIVE,
   );
-  const artifactPool = luckyPick && rarePlus.length > 0 ? rarePlus : pool;
+  const artifactPool = luckyPick && rarePlus.length > 0 ? rarePlus : tierPool;
 
   for (let i = 0; i < choices.length; i++) {
     const forceRare = luckyPick && i === 0;
     if (forceRare || Math.random() < chance) {
-      choices[i] = {
-        kind: 'artifact',
-        artifact: artifactPool[Math.floor(Math.random() * artifactPool.length)],
-      };
+      const minRarity =
+        forceRare && bossesDefeated >= 1 ? BuffRarity.RARE : undefined;
+      const picked =
+        pickArtifact(unlockedArtifactIds, bossesDefeated, minRarity) ??
+        artifactPool[Math.floor(Math.random() * artifactPool.length)];
+      choices[i] = { kind: 'artifact', artifact: picked };
     }
   }
 

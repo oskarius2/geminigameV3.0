@@ -1,37 +1,7 @@
 import React from 'react';
-import {
-  ArrowUpCircle,
-  Bot,
-  Cloud,
-  Crosshair,
-  Gauge,
-  HeartPulse,
-  Package,
-  Shield,
-  ShieldCheck,
-  Sparkles,
-  TrendingUp,
-  Wind,
-  Zap,
-  type LucideIcon,
-} from 'lucide-react';
+import { clsx } from 'clsx';
 import type { ShopItemDef } from '../../game/shop/shopTypes';
-
-const ICONS: Record<string, LucideIcon> = {
-  Zap,
-  Gauge,
-  Shield,
-  Crosshair,
-  HeartPulse,
-  Package,
-  TrendingUp,
-  Sparkles,
-  ShieldCheck,
-  Wind,
-  Cloud,
-  ArrowUpCircle,
-  Bot,
-};
+import { GameIconFromKey } from '../icons';
 
 interface ShopCardProps {
   item: ShopItemDef;
@@ -41,7 +11,6 @@ interface ShopCardProps {
 }
 
 export function ShopCard({ item, selected, affordable, onToggle }: ShopCardProps) {
-  const Icon = ICONS[item.icon] ?? Package;
   const disabled = !affordable && !selected;
 
   return (
@@ -50,28 +19,27 @@ export function ShopCard({ item, selected, affordable, onToggle }: ShopCardProps
       onClick={() => onToggle(item.id)}
       disabled={disabled}
       aria-pressed={selected}
-      className={`text-left rounded-xl p-4 border transition-all min-h-[120px] flex flex-col ${
-        selected
-          ? 'border-cyan-400/70 bg-cyan-950/40 shadow-[0_0_20px_rgba(0,212,255,0.2)] scale-[1.02]'
-          : disabled
-            ? 'border-white/10 bg-black/30 opacity-50 cursor-not-allowed'
-            : 'border-white/15 bg-black/40 hover:border-cyan-400/50 hover:scale-[1.02]'
-      }`}
+      className={clsx(
+        'ui-menu-card text-left p-4 min-h-[120px] flex flex-col',
+        selected && 'ring-2 ring-cyan-400/60',
+        disabled && 'opacity-50 cursor-not-allowed',
+      )}
     >
-      <div className="flex gap-3 items-start">
+      <div className="flex items-start gap-3 flex-1">
         <div
-          className={`shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
-            selected ? 'bg-cyan-500/20 text-cyan-300' : 'bg-white/5 text-white/60'
-          }`}
+          className="shrink-0 w-11 h-11 rounded-lg flex items-center justify-center border border-white/10"
+          style={{ background: 'rgba(0,229,255,0.08)' }}
         >
-          <Icon size={22} />
+          <GameIconFromKey iconKey={item.icon} size={22} color="#7df9ff" glow />
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-base font-bold text-white leading-tight">{item.name}</p>
-          <p className="text-xs text-white/55 mt-1 line-clamp-2">{item.description}</p>
+        <div className="min-w-0 flex-1">
+          <p className="font-display font-bold text-white text-sm uppercase tracking-wide">
+            {item.name}
+          </p>
+          <p className="text-xs text-slate-400 mt-1 line-clamp-2">{item.description}</p>
         </div>
       </div>
-      <p className="mt-3 text-lg font-mono font-bold text-cyan-400">{item.costScrap} scrap</p>
+      <p className="mt-3 text-sm font-mono text-cyan-300">{item.costScrap.toLocaleString()} scrap</p>
     </button>
   );
 }

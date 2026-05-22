@@ -11,6 +11,7 @@ import {
   startSurvivalMusic,
   stopSurvivalMusic,
   updateBossMusicIntensity,
+  updateMusicThreat,
 } from './survivalMusic';
 import { duckMusic, scheduleMusicDuck } from './audioEngine';
 import { playSfx, type SfxEvent } from './sfx';
@@ -45,7 +46,9 @@ export function updateSurvivalAudio(state: GameState): void {
   if (tier !== lastThreatTier) {
     if (lastThreatTier != null) playSfx('threatChange');
     lastThreatTier = tier;
-    if (!state.bossActive) setSurvivalThreatMusic(state.threatLevel);
+    if (!state.bossActive) setSurvivalThreatMusic(state.threatLevel, 1.2);
+  } else if (!state.bossActive) {
+    updateMusicThreat(state.threatLevel);
   }
 
   if (state.bossActive && state.activeBossId) {

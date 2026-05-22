@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Play, Map, MoveHorizontal, Wrench, Sparkles, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
+import { GameIcon, GameIconFromKey } from '../../components/icons';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { SecondaryButton } from '../../components/ui/SecondaryButton';
 import { TacticalFrame } from '../../components/ui/TacticalFrame';
@@ -245,26 +246,26 @@ export const StartPage: React.FC<StartPageProps> = ({
           className="w-full mb-2"
         >
           <PrimaryButton onClick={onStartSurvival} variant="accent">
-            <Play size={15} fill="currentColor" strokeWidth={0} />
+            <GameIcon name="ui.play" size={15} color="currentColor" />
             Start Survival
           </PrimaryButton>
         </motion.div>
 
         <div className="w-full flex flex-col gap-1.5 mt-1">
           {[
-            { delay: 0.36, onClick: onOpenHangar, icon: <Wrench size={13} />, label: 'Hangar', accent: 'default' as const },
+            { delay: 0.36, onClick: onOpenHangar, icon: <GameIcon name="ui.wrench" size={13} color="#7df9ff" />, label: 'Hangar', accent: 'default' as const },
             onOpenUnlocks
               ? {
                   delay: 0.4,
                   onClick: onOpenUnlocks,
-                  icon: <Sparkles size={13} />,
+                  icon: <GameIcon name="ui.sparkles" size={13} color="#e8b84a" />,
                   label: 'Unlocks',
                   accent: 'gold' as const,
                   badge: hasPendingUnlocks,
                 }
               : null,
-            { delay: 0.44, onClick: onOnRails, icon: <MoveHorizontal size={13} />, label: 'On Rails', accent: 'amber' as const },
-            { delay: 0.48, onClick: onCampaign, icon: <Map size={13} />, label: 'Campaign', accent: 'default' as const },
+            { delay: 0.44, onClick: onOnRails, icon: <GameIconFromKey iconKey="MoveHorizontal" size={13} color="#ffaa00" />, label: 'On Rails', accent: 'amber' as const },
+            { delay: 0.48, onClick: onCampaign, icon: <GameIcon name="ui.map" size={13} color="#7df9ff" />, label: 'Campaign', accent: 'default' as const },
           ]
             .filter(Boolean)
             .map((item) => {

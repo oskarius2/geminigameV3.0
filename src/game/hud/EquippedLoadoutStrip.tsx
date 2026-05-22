@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, Zap, Flame, Sword } from 'lucide-react';
+import { GameIcon, getSlotIconName } from '../../components/icons';
 import { ARTIFACTS } from '../content/artifacts';
 import { RARITY_COLORS } from '../content/rarityColors';
 import { ArtifactSlot, BuffRarity } from '../types';
@@ -69,7 +69,7 @@ export function EquippedLoadoutStrip({
                 className={`flex items-center gap-1 rounded-md px-1.5 py-1 border ${rarityCls.border} ${rarityCls.bg}`}
                 style={{ boxShadow: `0 0 8px ${hex}33` }}
               >
-                <Sparkles size={12} style={{ color: hex }} aria-hidden />
+                <GameIcon name="ui.relic" size={12} color={hex} />
                 <span className={`text-[10px] font-mono font-bold uppercase ${rarityCls.text}`}>
                   {compact ? SLOT_LABELS[slot] : art.name.slice(0, 8)}
                 </span>
@@ -84,7 +84,7 @@ export function EquippedLoadoutStrip({
           <HudPanel className="p-1 flex gap-1 pointer-events-auto">
             {(['CANNON_A', 'CANNON_B'] as const).map((slot) => {
               const active = activeWeaponSlot === slot;
-              const Icon = slot === 'CANNON_B' ? Flame : Sword;
+              const iconName = getSlotIconName(slot);
               return (
                 <button
                   key={slot}
@@ -109,7 +109,11 @@ export function EquippedLoadoutStrip({
                         }
                   }
                 >
-                  <Icon size={18} className={active ? 'text-cyan-300' : 'text-white/30'} />
+                  <GameIcon
+                    name={iconName}
+                    size={18}
+                    color={active ? '#67e8f9' : 'rgba(255,255,255,0.3)'}
+                  />
                 </button>
               );
             })}

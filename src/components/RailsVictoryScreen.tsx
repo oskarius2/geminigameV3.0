@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Trophy } from 'lucide-react';
+import { GameIcon } from './icons';
 
 export type RailsMedal = 'bronze' | 'silver' | 'gold';
 
@@ -52,7 +52,7 @@ export const RailsVictoryScreen: React.FC<RailsVictoryScreenProps> = ({
         transition={{ duration: 1, ease: 'easeInOut' }}
         className="mb-6"
       >
-        <Trophy size={72} strokeWidth={1.5} style={{ color: medalColor }} />
+        <GameIcon name="ui.trophy" size={72} color={medalColor} glow />
       </motion.div>
 
       <motion.h1

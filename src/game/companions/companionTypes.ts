@@ -154,6 +154,17 @@ export interface CompanionRuntime {
   /** Recent damage burst counter for scout evasion trigger. */
   playerHitBurstTimer: number;
   playerHitsInBurst: number;
+  /** Scout-only: dash tracking / prediction memory. */
+  scoutTrack?: ScoutTrackMemory;
+}
+
+/** Position memory for Scout drone follow-after-dash. */
+export interface ScoutTrackMemory {
+  lastPlayerPos: Vector2;
+  lastKnownPosition: Vector2;
+  lastPlayerVelocity: Vector2;
+  /** Seconds remaining in "lost track" recovery (move to last known first). */
+  lostTrackTime: number;
 }
 
 /** Meta progress entry (also stored in localStorage via companionLeveling). */

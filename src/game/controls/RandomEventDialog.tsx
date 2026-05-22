@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { AlertTriangle } from 'lucide-react';
+import { GameIcon } from '../../components/icons';
 import { HudCorner } from '../../components/ui/SpaceBackground';
 import { RandomEvent } from '../types';
 
@@ -51,7 +51,7 @@ export const RandomEventDialog: React.FC<RandomEventDialogProps> = ({ event, onC
                 className="p-3 rounded-xl"
                 style={{ background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.25)' }}
               >
-                <AlertTriangle size={32} />
+                <GameIcon name="ui.alert" size={32} color="#fbbf24" glow />
               </div>
               <div>
                 <h2 className="text-2xl font-black italic uppercase tracking-tighter text-white">Incoming Transmission</h2>

@@ -288,6 +288,54 @@ const STAGE_WAVE_TABLE: Record<number, readonly WaveTemplate[]> = {
 
 const ENDLESS_STAGE = 5;
 
+/** Design targets: enemies spawned per wave (min–max) by stage. */
+export const STAGE_WAVE_ENEMY_TARGETS: Record<number, { min: number; max: number }> = {
+  1: { min: 5, max: 8 },
+  2: { min: 8, max: 12 },
+  3: { min: 12, max: 18 },
+  4: { min: 18, max: 30 },
+  5: { min: 30, max: 50 },
+};
+
+/** Exponential enemy count scaling per survival stage (targets STAGE_WAVE_ENEMY_TARGETS). */
+export function scaleWaveEnemyCount(stage: number, count: number): number {
+  const mult =
+    stage <= 1
+      ? 1.35
+      : stage === 2
+        ? 1.45
+        : stage === 3
+          ? 1.12
+          : stage === 4
+            ? 2.55
+            : 3.5;
+  return Math.max(1, Math.round(count * mult));
+}
+
+/** Faster spawn cadence in later stages (multiplier on spawnDelay). */
+export function getStageSpawnDelayScale(stage: number): number {
+  if (stage <= 1) return 0.92;
+  if (stage === 2) return 0.8;
+  if (stage === 3) return 0.68;
+  if (stage === 4) return 0.55;
+  return 0.45;
+}
+
+function applyWaveScaling(wave: WaveTemplate): WaveTemplate {
+  return {
+    ...wave,
+    spawnDelay: Math.max(0.3, wave.spawnDelay * getStageSpawnDelayScale(wave.stage)),
+    enemies: wave.enemies.map((slot) => ({
+      ...slot,
+      count: scaleWaveEnemyCount(wave.stage, slot.count),
+    })),
+  };
+}
+
+export function getWaveEnemyTotal(wave: WaveTemplate): number {
+  return wave.enemies.reduce((sum, slot) => sum + slot.count, 0);
+}
+
 export function getWavesForStage(stage: number): readonly WaveTemplate[] {
   if (stage >= ENDLESS_STAGE) return STAGE_5_WAVES;
   return STAGE_WAVE_TABLE[stage] ?? STAGE_5_WAVES;
@@ -310,12 +358,12 @@ function resolveWaveAtTime(
   for (const wave of waves) {
     const windowEnd = elapsed + wave.duration;
     if (timeInStage < windowEnd) {
-      return { ...wave, stage };
+      return applyWaveScaling({ ...wave, stage });
     }
     elapsed = windowEnd;
   }
 
-  return { ...waves[waves.length - 1], stage };
+  return applyWaveScaling({ ...waves[waves.length - 1], stage });
 }
 
 /**

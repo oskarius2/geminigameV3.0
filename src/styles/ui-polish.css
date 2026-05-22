@@ -1,0 +1,518 @@
+/**
+ * SpaceHero V3 — UI finpolish layer
+ * Glow, borders, rarity badges, toasts — uses design-tokens + premium-ui
+ */
+
+/* --- Premium game icons (SVG) --- */
+.game-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.game-icon--glow {
+  filter: drop-shadow(0 0 6px currentColor);
+}
+
+:root {
+  --ui-bg-deep: #1e1b4b;
+  --ui-bg-deepest: #0f172a;
+  --ui-accent-purple: #a78bfa;
+  --ui-accent-purple-dim: rgba(167, 139, 250, 0.5);
+  --ui-border-purple: rgba(167, 139, 250, 0.5);
+  --ui-glow-purple: 0 0 20px rgba(167, 139, 250, 0.3);
+  --ui-glow-purple-intense: 0 0 28px rgba(167, 139, 250, 0.45), 0 0 48px rgba(167, 139, 250, 0.15);
+  --ui-text-neon: 0 0 8px rgba(167, 139, 250, 0.5);
+  --ui-text-gold-neon: 0 0 10px rgba(251, 191, 36, 0.45);
+  --ui-glass-dark: rgba(15, 23, 42, 0.82);
+  --ui-desc-muted: #9ca3af;
+}
+
+/* --- Toasts & notifications --- */
+.ui-toast-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  pointer-events: none;
+}
+
+.ui-toast {
+  border-radius: 12px;
+  border: 1px solid var(--ui-border-purple);
+  background: var(--ui-glass-dark);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--ui-glow-purple), 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 16px;
+  animation: ui-toast-in 0.3s ease-out forwards;
+}
+
+.ui-toast--gold {
+  border-color: rgba(251, 191, 36, 0.45);
+  box-shadow: var(--primitive-glow-gold, 0 0 20px rgba(251, 191, 36, 0.25)), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.ui-toast--success {
+  border-color: rgba(16, 185, 129, 0.45);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.25), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.ui-toast--warning {
+  border-color: rgba(251, 191, 36, 0.4);
+  box-shadow: 0 0 18px rgba(251, 191, 36, 0.2), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.ui-toast--info {
+  border-color: rgba(0, 229, 255, 0.35);
+  box-shadow: var(--premium-cyan-glow, 0 0 20px rgba(0, 229, 255, 0.2)), 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.ui-toast__text {
+  color: #f0f8ff;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.6), var(--ui-text-neon);
+}
+
+.ui-toast-floating {
+  pointer-events: none;
+  position: fixed;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(92vw, 20rem);
+  padding: 0 8px;
+}
+
+@media (min-width: 768px) {
+  .ui-toast-floating {
+    top: 1rem;
+    right: 1rem;
+    left: auto;
+    transform: none;
+    max-width: 22rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .ui-toast-floating {
+    top: auto;
+    bottom: max(7rem, calc(env(safe-area-inset-bottom) + 5.5rem));
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(92vw, 20rem);
+    z-index: 176;
+  }
+}
+
+/* Mini-boss / incoming banners — side bands, not center */
+.ui-banner-anchor {
+  position: absolute;
+  z-index: 165;
+  left: 50%;
+  transform: translateX(-50%);
+  pointer-events: none;
+  text-align: center;
+  max-width: min(92vw, 18rem);
+}
+
+.ui-banner-anchor--incoming {
+  top: max(18%, 7.5rem);
+}
+
+.ui-banner-anchor--spawn {
+  top: max(22%, 8.5rem);
+}
+
+.ui-banner-anchor--defeat {
+  top: auto;
+  bottom: max(32%, 11rem);
+}
+
+@media (max-width: 767px) {
+  .ui-banner-anchor--incoming,
+  .ui-banner-anchor--spawn {
+    left: max(0.75rem, env(safe-area-inset-left));
+    transform: none;
+    text-align: left;
+    max-width: min(11rem, 42vw);
+  }
+
+  .ui-banner-anchor--defeat {
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    bottom: max(34%, 10rem);
+    max-width: min(92vw, 16rem);
+  }
+}
+
+@media (min-width: 768px) {
+  .ui-toast-floating {
+    top: auto;
+    bottom: max(1.5rem, env(safe-area-inset-bottom));
+    left: max(1rem, env(safe-area-inset-left));
+    right: auto;
+    transform: none;
+  }
+}
+
+/* --- Achievement unlock panel --- */
+.ui-achievement-panel {
+  border-radius: 14px;
+  border: 1px solid var(--ui-border-purple);
+  background: linear-gradient(165deg, var(--ui-bg-deep) 0%, var(--ui-bg-deepest) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: var(--ui-glow-purple-intense), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  padding: 16px;
+  animation: ui-achievement-in 0.3s ease-out forwards;
+}
+
+.ui-achievement-header {
+  font-family: var(--font-display);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--ui-accent-purple);
+  text-shadow: var(--ui-text-neon);
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.2);
+}
+
+.ui-achievement-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(167, 139, 250, 0.12);
+}
+
+.ui-achievement-card:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.ui-achievement-card:first-of-type {
+  padding-top: 0;
+}
+
+.ui-achievement-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(30, 27, 75, 0.6);
+  box-shadow: var(--ui-glow-purple);
+}
+
+.ui-achievement-title {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
+}
+
+.ui-achievement-desc {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--ui-desc-muted);
+  margin-top: 4px;
+}
+
+.ui-achievement-kicker {
+  font-family: var(--primitive-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ui-accent-purple-dim);
+  text-shadow: var(--ui-text-neon);
+}
+
+/* --- Rarity badges --- */
+.ui-rarity-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  margin-top: 6px;
+  font-family: var(--primitive-font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.ui-rarity-badge--common {
+  color: var(--color-rarity-common);
+  box-shadow: 0 0 10px rgba(100, 116, 139, 0.35);
+}
+
+.ui-rarity-badge--rare {
+  color: var(--color-rarity-rare);
+  box-shadow: 0 0 12px rgba(37, 99, 235, 0.4);
+}
+
+.ui-rarity-badge--epic {
+  color: var(--color-rarity-epic);
+  box-shadow: 0 0 14px rgba(139, 43, 226, 0.45);
+}
+
+.ui-rarity-badge--legendary {
+  color: var(--color-rarity-legendary);
+  box-shadow: 0 0 16px rgba(255, 196, 0, 0.5);
+}
+
+.ui-rarity-badge--exclusive {
+  color: var(--color-rarity-exclusive);
+  box-shadow: 0 0 14px rgba(0, 229, 255, 0.45);
+}
+
+.ui-rarity-badge--mystery {
+  color: var(--color-rarity-mystery);
+  box-shadow: 0 0 14px rgba(192, 38, 211, 0.45);
+}
+
+/* --- Mini-boss HUD --- */
+.ui-miniboss-hud {
+  border-radius: 10px;
+  border-width: 2px;
+  border-style: solid;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 10px 12px;
+}
+
+.ui-miniboss-title {
+  font-family: var(--primitive-font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: center;
+  margin-bottom: 8px;
+  text-shadow: 0 0 12px currentColor, 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+.ui-miniboss-hp-track {
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.ui-miniboss-hp-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.2s ease-out;
+}
+
+/* --- Menu / shop cards --- */
+.ui-menu-card {
+  border-radius: 12px;
+  border: 1px solid var(--ui-border-purple);
+  background: rgba(8, 16, 24, 0.75);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.ui-menu-card:hover:not(:disabled) {
+  border-color: rgba(167, 139, 250, 0.75);
+  box-shadow: var(--ui-glow-purple-intense);
+}
+
+.ui-menu-card--selected {
+  border-color: rgba(0, 229, 255, 0.55);
+  background: rgba(0, 229, 255, 0.08);
+  box-shadow: var(--premium-cyan-glow), var(--ui-glow-purple);
+}
+
+.ui-menu-card--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Z-index: HUD ~50, vignette 8, achievements 170, artifact toast 175, modals 200+ --- */
+
+/* --- Achievement stack — right column, below score (never center) --- */
+.ui-achievement-anchor {
+  position: absolute;
+  z-index: 170;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  width: min(16rem, calc(100vw - 11rem));
+  max-width: 280px;
+  max-height: min(42vh, 320px);
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+  padding-left: 0.25rem;
+  top: max(10.5rem, calc(env(safe-area-inset-top) + 9.5rem));
+  right: 0;
+  left: auto;
+  transform: none;
+  pointer-events: none;
+}
+
+.ui-achievement-anchor .ui-achievement-panel {
+  max-height: min(38vh, 280px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+}
+
+@media (max-width: 767px) {
+  .ui-achievement-anchor {
+    width: min(9.5rem, calc(100vw - 10.5rem));
+    max-width: 152px;
+    top: max(11rem, calc(env(safe-area-inset-top) + 10rem));
+  }
+
+  .ui-achievement-header {
+    font-size: 9px;
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+  }
+
+  .ui-achievement-title {
+    font-size: 14px;
+  }
+
+  .ui-achievement-icon {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+@media (min-width: 768px) {
+  .ui-achievement-anchor {
+    top: max(11rem, calc(env(safe-area-inset-top) + 10rem));
+    padding-right: max(1.25rem, env(safe-area-inset-right));
+    width: min(17rem, 28vw);
+  }
+}
+
+/* --- Legendary / artifact acquire toast (corner — never blocks center cards) --- */
+.ui-artifact-acquire-anchor {
+  position: fixed;
+  z-index: 175;
+  pointer-events: none;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-end;
+  padding: 0 max(0.75rem, env(safe-area-inset-right))
+    max(1rem, env(safe-area-inset-bottom));
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  bottom: max(6.5rem, calc(env(safe-area-inset-bottom) + 5.5rem));
+  left: 0;
+  right: auto;
+  top: auto;
+  max-width: min(20rem, calc(100vw - 1.5rem));
+}
+
+.ui-artifact-acquire-card {
+  width: 100%;
+  border-radius: 14px;
+  border-width: 2px;
+  padding: 14px 16px;
+  backdrop-filter: blur(12px);
+}
+
+.ui-artifact-acquire-card--compact {
+  padding: 10px 12px;
+}
+
+.ui-artifact-acquire-card--compact .ui-artifact-acquire-title {
+  font-size: 0.8rem;
+}
+
+@media (min-width: 768px) {
+  .ui-artifact-acquire-anchor {
+    bottom: max(1.5rem, env(safe-area-inset-bottom));
+    left: auto;
+    right: max(1rem, env(safe-area-inset-right));
+    padding: 0;
+    max-width: 22rem;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 767px) {
+  .ui-artifact-acquire-anchor {
+    bottom: max(7.5rem, calc(env(safe-area-inset-bottom) + 6.5rem));
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    max-width: min(92vw, 20rem);
+  }
+}
+
+/* --- Achievement collapsed badge --- */
+.ui-achievement-badge-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+  max-width: 100%;
+  padding: 10px 16px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  background: linear-gradient(165deg, var(--ui-bg-deep) 0%, rgba(0, 0, 0, 0.85) 100%);
+  backdrop-filter: blur(8px);
+  color: #fef3c7;
+  box-shadow: var(--primitive-glow-gold, 0 0 20px rgba(251, 191, 36, 0.2));
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  cursor: pointer;
+}
+
+.ui-achievement-badge-btn:hover {
+  border-color: rgba(251, 191, 36, 0.65);
+  box-shadow: var(--primitive-glow-gold-intense, 0 0 28px rgba(251, 191, 36, 0.35));
+}
+
+@keyframes ui-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ui-achievement-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-toast,
+  .ui-achievement-panel {
+    animation: none;
+  }
+}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Menu } from 'lucide-react';
+import { GameIcon, getShipIconName } from '../../../components/icons';
 import { getThreatTier, getThreatVisualConfig } from '../../balance/threat';
 import { getCompanionDef } from '../../companions/companionDefs';
 import { HUD_COLORS } from '../hudTokens';
@@ -31,6 +31,12 @@ export function MobileShipCorner({
 }) {
   const hpPct = playerMaxHP > 0 ? Math.max(0, Math.min(100, (playerHP / playerMaxHP) * 100)) : 0;
   const lowHp = hpPct < 25;
+  const midHp = !lowHp && hpPct < 55;
+  const hpGlowClass = lowHp
+    ? 'mobile-ship-corner__hp-fill--low'
+    : midHp
+      ? 'mobile-ship-corner__hp-fill--mid'
+      : '';
 
   return (
     <div className="mobile-hud-card mobile-ship-corner">
@@ -42,18 +48,25 @@ export function MobileShipCorner({
             borderColor: `${ship.color}55`,
           }}
         >
-          <div className="mobile-ship-corner__icon-dot" style={{ backgroundColor: ship.color }} />
+          <GameIcon
+            name={getShipIconName(ship.id)}
+            size={22}
+            color={ship.color}
+            glow
+          />
         </div>
         <span className="mobile-ship-corner__name">{ship.name}</span>
       </div>
       <div className="mobile-ship-corner__hp-track">
         <div
-          className="mobile-ship-corner__hp-fill"
+          className={`mobile-ship-corner__hp-fill ${hpGlowClass}`}
           style={{
             width: `${hpPct}%`,
             background: lowHp
-              ? `linear-gradient(90deg, ${HUD_COLORS.danger}, #f97316)`
-              : `linear-gradient(90deg, ${HUD_COLORS.success}, ${HUD_COLORS.accent})`,
+              ? `linear-gradient(90deg, ${HUD_COLORS.danger}, #ef4444)`
+              : midHp
+                ? `linear-gradient(90deg, #f97316, ${HUD_COLORS.accent})`
+                : `linear-gradient(90deg, ${HUD_COLORS.success}, ${HUD_COLORS.accent})`,
           }}
         />
       </div>
@@ -121,7 +134,7 @@ export function MobileScoreCorner({
           onOpenMenu?.();
         }}
       >
-        <Menu size={14} />
+        <GameIcon name="ui.menu" size={14} color="var(--primitive-color-cyan, #00e5ff)" />
       </button>
       <p className="mobile-score-corner__label">Score</p>
       <p className="mobile-score-corner__value">{score.toLocaleString()}</p>
@@ -140,8 +153,10 @@ export function MobileThreatCorner({ state }: { state: GameState }) {
   const { hudColor } = getThreatVisualConfig(tier);
   const fill = Math.min(100, Math.max(0, level));
 
+  const critical = tier === 'critical' || tier === 'danger';
+
   return (
-    <div className="mobile-threat-corner">
+    <div className={`mobile-threat-corner${critical ? ' mobile-threat-corner--critical' : ''}`}>
       <p className="mobile-threat-corner__tier" style={{ color: hudColor }}>
         {tierLabel(level)}
       </p>

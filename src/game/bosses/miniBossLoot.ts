@@ -1,4 +1,5 @@
 import { playArtifactAcquireSfx } from '../audio/sfx';
+import { filterArtifactsByTier, getRunBossesDefeated } from '../balance/artifactTiers';
 import { ARTIFACTS } from '../content/artifacts';
 import { Artifact, BuffRarity, GameState } from '../types';
 import { getMiniBossDef, type MiniBossDef, type MiniBossId } from './miniBossDefs';
@@ -45,13 +46,20 @@ function rollLootRarity(def: MiniBossDef, rng = Math.random()): BuffRarity {
 function pickArtifactByRarity(
   rarity: BuffRarity,
   unlockedIds: string[],
+  bossesDefeated: number,
   rng = Math.random(),
 ): Artifact | null {
-  const pool = Object.values(ARTIFACTS).filter(
-    (a) => a.rarity === rarity && !unlockedIds.includes(a.id),
+  const tierCap = (list: Artifact[]) => filterArtifactsByTier(list, bossesDefeated);
+
+  const pool = tierCap(
+    Object.values(ARTIFACTS).filter(
+      (a) => a.rarity === rarity && !unlockedIds.includes(a.id),
+    ),
   );
-  const fallback = Object.values(ARTIFACTS).filter((a) => a.rarity === rarity);
-  const source = pool.length > 0 ? pool : fallback.length > 0 ? fallback : Object.values(ARTIFACTS);
+  const fallback = tierCap(Object.values(ARTIFACTS).filter((a) => a.rarity === rarity));
+  const anyTier = tierCap(Object.values(ARTIFACTS));
+  const source =
+    pool.length > 0 ? pool : fallback.length > 0 ? fallback : anyTier;
   if (source.length === 0) return null;
   return source[Math.floor(rng * source.length)];
 }
@@ -59,11 +67,12 @@ function pickArtifactByRarity(
 export function rollMiniBossArtifact(
   miniBossId: MiniBossId,
   unlockedIds: string[],
+  bossesDefeated = 0,
   rng = Math.random(),
 ): Artifact | null {
   const def = getMiniBossDef(miniBossId);
   const rarity = rollLootRarity(def, rng);
-  return pickArtifactByRarity(rarity, unlockedIds, rng);
+  return pickArtifactByRarity(rarity, unlockedIds, bossesDefeated, rng);
 }
 
 export function rollMiniBossPassive(
@@ -91,7 +100,12 @@ export function applyMiniBossDefeatRewards(
   rng = Math.random(),
 ): MiniBossDefeatRewards | null {
   const def = getMiniBossDef(miniBossId);
-  const artifact = rollMiniBossArtifact(miniBossId, unlockedArtifactIds, rng);
+  const artifact = rollMiniBossArtifact(
+    miniBossId,
+    unlockedArtifactIds,
+    getRunBossesDefeated(state),
+    rng,
+  );
   if (!artifact) return null;
 
   state.threatLevel = Math.max(0, state.threatLevel - def.threatReduction);

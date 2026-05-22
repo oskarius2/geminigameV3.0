@@ -38,6 +38,8 @@ export interface CompanionGameState {
   companionGrantedThisRun: boolean;
   selectedShip: string;
   companionRuntime: CompanionRuntime | null;
+  /** True while the player is in a mobility dash (NORMAL survival). */
+  isPlayerDashing: boolean;
 }
 
 /** Subset written by meta XP / loadout (leveling module). */
@@ -85,6 +87,7 @@ export function fromGameState(state: GameState): CompanionGameState {
     companionGrantedThisRun: state.companionGrantedThisRun,
     selectedShip: state.selectedShip,
     companionRuntime: state.companionRuntime,
+    isPlayerDashing: state.isDashing ?? false,
   };
 }
 

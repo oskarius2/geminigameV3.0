@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Crosshair, Rocket, Bot, Zap, Heart, Gauge } from 'lucide-react';
+import { GameIconFromKey } from './icons';
+import { GameIcon, getShipIconName } from './icons';
 import { Panel } from './ui/Panel';
 import {
   SHIP_DEFINITIONS,
@@ -21,11 +22,16 @@ const BASELINE = {
   fireRate: 1,
 };
 
-function ShipIcon({ id }: { id: ShipId }) {
-  const size = 24;
-  if (id === 'interceptor') return <Rocket size={size} className="text-blue-400" />;
-  if (id === 'gunship') return <Crosshair size={size} className="text-red-600" />;
-  return <Bot size={size} className="text-gray-200" />;
+function ShipIcon({ id, size = 24 }: { id: ShipId; size?: number }) {
+  const ship = SHIP_DEFINITIONS[id];
+  return (
+    <GameIcon
+      name={getShipIconName(id)}
+      size={size}
+      color={ship.color}
+      glow
+    />
+  );
 }
 
 function StatRow({
@@ -161,9 +167,9 @@ export function ShipSelect({ onSelect, onBack }: ShipSelectProps) {
       {/* Header - Compact */}
       <div className="mb-4 sm:mb-6 text-center max-w-lg">
         <div className="flex items-center justify-center gap-2 text-cyan-400/70 mb-2">
-          <Gauge size={14} />
-          <Heart size={14} />
-          <Zap size={14} />
+          <GameIconFromKey iconKey="Gauge" size={14} color="#7df9ff" />
+          <GameIconFromKey iconKey="HeartPulse" size={14} color="#4ade80" />
+          <GameIconFromKey iconKey="Zap" size={14} color="#f472b6" />
         </div>
         <h1 className="font-display text-xl sm:text-2xl md:text-3xl font-black uppercase tracking-[0.18em] text-white">
           Select Your Vessel

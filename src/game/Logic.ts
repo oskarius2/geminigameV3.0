@@ -358,6 +358,7 @@ export const INITIAL_STATE = (
     companionGrantedThisRun: false,
     collectedShipLoot: [],
     miniBossKillsThisRun: 0,
+    runBossesDefeated: 0,
     shopPurchasedIds: [],
     shopRunFlags: {},
     shopScrapSpent: 0,

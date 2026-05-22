@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Circle, Hexagon, Sparkles } from 'lucide-react';
+import { GameIconFromKey } from './icons';
 import { RailsLevel } from '../game/onRails/types';
 
 interface RailsLevelSelectProps {
@@ -10,11 +10,10 @@ interface RailsLevelSelectProps {
   onBack: () => void;
 }
 
-function LevelIcon({ icon }: { icon: RailsLevel['ui']['icon'] }) {
-  const size = 28;
-  if (icon === 'asteroid') return <Hexagon size={size} className="text-orange-300" />;
-  if (icon === 'void') return <Sparkles size={size} className="text-violet-200" />;
-  return <Circle size={size} className="text-cyan-300" />;
+function LevelIcon({ icon, accent }: { icon: RailsLevel['ui']['icon']; accent: string }) {
+  const color =
+    icon === 'asteroid' ? '#fdba74' : icon === 'void' ? '#ddd6fe' : accent;
+  return <GameIconFromKey iconKey={icon} size={28} color={color} glow />;
 }
 
 export const RailsLevelSelect: React.FC<RailsLevelSelectProps> = ({
@@ -28,11 +27,14 @@ export const RailsLevelSelect: React.FC<RailsLevelSelectProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       className="absolute inset-0 z-[100] flex flex-col items-center justify-center p-6 overflow-y-auto"
-      style={{ background: '#282c34' }}
+      style={{
+        background:
+          'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(167,139,250,0.12) 0%, transparent 60%), var(--ui-bg-deepest, #0f172a)',
+      }}
     >
       <h1
-        className="font-display font-bold text-white uppercase tracking-[0.15em] mb-8"
-        style={{ fontSize: '2rem' }}
+        className="font-display font-bold text-white uppercase tracking-[0.05em] mb-8"
+        style={{ fontSize: '2rem', textShadow: 'var(--ui-text-neon)' }}
       >
         Select Level
       </h1>
@@ -48,13 +50,13 @@ export const RailsLevelSelect: React.FC<RailsLevelSelectProps> = ({
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: i * 0.2, duration: 0.45 }}
               onClick={() => onSelectLevel(level.id)}
-              className="w-full text-left rounded-2xl p-5 pointer-events-auto border border-white/10 hover:border-white/25 transition-colors"
+              className="ui-menu-card w-full text-left rounded-2xl p-5 pointer-events-auto hover:scale-[1.01]"
               style={{
                 background: `linear-gradient(135deg, ${level.ui.gradientFrom} 0%, ${level.ui.gradientTo} 100%)`,
               }}
             >
               <div className="flex items-start gap-4">
-                <LevelIcon icon={level.ui.icon} />
+                <LevelIcon icon={level.ui.icon} accent={level.ui.accentText} />
                 <div className="min-w-0 flex-1">
                   <p
                     className="font-display font-bold text-lg"

@@ -51,6 +51,15 @@ const STAGE_LAYER_GAIN: Record<number, number> = {
   5: 0.75,
 };
 
+/** Master output before music bus — keeps procedural stems from clipping. */
+const MUSIC_MASTER_GAIN = 0.12;
+/** Stereo pad carriers (Hz): left warm, right air — avoids harsh 300–1000 Hz squares. */
+const PAD_FREQ_LEFT = 100;
+const PAD_FREQ_RIGHT = 200;
+const BASS_CARRIER_HZ = 100;
+const MELODY_CARRIER_HZ = 200;
+const STEM_VOICE_GAIN = 0.04;
+
 type StemId = 'pad' | 'drums' | 'bass' | 'melody';
 
 let running = false;
@@ -67,6 +76,88 @@ let bossTheme: BossMusicTheme | null = null;
 let stageLayerGain = 0.35;
 let bossIntensity = 1;
 let lastBossIntensitySample = -1;
+let lastThreatMusicSample = -1;
+let lastAppliedBpm = 100;
+
+/** Game threat scale (computeThreatLevel clamps to 0–100). */
+export const THREAT_MUSIC_MAX = 100;
+
+const THREAT_FREQ_MIN_HZ = 80;
+const THREAT_FREQ_MAX_HZ = 240;
+const THREAT_BPM_MIN = 100;
+const THREAT_BPM_MAX = 160;
+const THREAT_RAMP_SEC = 0.1;
+const THREAT_BPM_STEP_THRESHOLD = 3;
+
+/** Normalized threat 0–1 for audio mapping. */
+export function threatToMusicRatio(threatLevel: number, maxThreat = THREAT_MUSIC_MAX): number {
+  const clamped = Math.min(maxThreat, Math.max(0, threatLevel));
+  return clamped / maxThreat;
+}
+
+/** Root frequency (Hz) for bass/pad — calm → intense. */
+export function threatToRootFrequency(threatLevel: number): number {
+  const ratio = threatToMusicRatio(threatLevel);
+  return THREAT_FREQ_MIN_HZ + (THREAT_FREQ_MAX_HZ - THREAT_FREQ_MIN_HZ) * ratio;
+}
+
+function lerpStemTargets(ratio: number): Record<StemId, number> {
+  const calm = STEM_TARGETS.calm;
+  const critical = STEM_TARGETS.critical;
+  return {
+    pad: calm.pad + (critical.pad - calm.pad) * ratio,
+    drums: calm.drums + (critical.drums - calm.drums) * ratio,
+    bass: calm.bass + (critical.bass - calm.bass) * ratio,
+    melody: calm.melody + (critical.melody - calm.melody) * ratio,
+  };
+}
+
+function applyContinuousStemGains(ratio: number): void {
+  const ac = getAudioContext();
+  if (!ac) return;
+  const targets = lerpStemTargets(ratio);
+  (Object.keys(targets) as StemId[]).forEach((id) => {
+    const g = stemGains[id];
+    if (!g) return;
+    const mult = bossTheme ? Math.min(1, targets[id] * 1.15) : targets[id];
+    g.gain.setTargetAtTime(mult * bossIntensity, ac.currentTime, THREAT_RAMP_SEC);
+  });
+}
+
+function applyThreatOscillatorFrequencies(rootHz: number): void {
+  const ac = getAudioContext();
+  if (!ac) return;
+  const padRoot = rootHz;
+  const padMults = [1, 1.25, 1.5];
+  padOscs.forEach((o, i) => {
+    if (!o) return;
+    o.frequency.setTargetAtTime(padRoot * padMults[i], ac.currentTime, THREAT_RAMP_SEC);
+  });
+  if (bassOsc) {
+    bassOsc.frequency.setTargetAtTime(rootHz * 0.5, ac.currentTime, THREAT_RAMP_SEC);
+  }
+  if (melodyOsc) {
+    melodyOsc.frequency.setTargetAtTime(rootHz * 2, ac.currentTime, THREAT_RAMP_SEC);
+  }
+}
+
+function applyThreatMasterGain(ratio: number): void {
+  const ac = getAudioContext();
+  if (!ac || !masterMusicGain) return;
+  const base = 0.72 + stageLayerGain * 0.12;
+  const target = base + 0.12 * ratio;
+  masterMusicGain.gain.setTargetAtTime(target, ac.currentTime, THREAT_RAMP_SEC);
+}
+
+function createMusicCompressor(ac: AudioContext): DynamicsCompressorNode {
+  const compressor = ac.createDynamicsCompressor();
+  compressor.threshold.value = -24;
+  compressor.ratio.value = 4;
+  compressor.knee.value = 12;
+  compressor.attack.value = 0.003;
+  compressor.release.value = 0.25;
+  return compressor;
+}
 
 function themeRootFreq(theme: BossMusicTheme | null): number {
   switch (theme) {
@@ -116,7 +207,7 @@ function tickDrums(): void {
   const src = ac.createBufferSource();
   src.buffer = buf;
   const g = ac.createGain();
-  g.gain.value = currentTier === 'critical' ? 0.2 : 0.12;
+  g.gain.value = currentTier === 'critical' ? 0.08 : 0.05;
   const f = ac.createBiquadFilter();
   f.type = 'highpass';
   f.frequency.value = bossTheme === 'void_whisper' ? 400 : 120;
@@ -132,18 +223,22 @@ function tickMelody(): void {
   if (!ac || !melodyOsc || !stemGains.melody) return;
   const g = stemGains.melody.gain.value;
   if (g < 0.08) return;
-  const roots = [1, 1.25, 1.5, 1.25];
-  const idx = Math.floor(Date.now() / 200) % roots.length;
-  const root = themeRootFreq(bossTheme) * 2;
-  melodyOsc.frequency.setTargetAtTime(root * roots[idx], ac.currentTime, 0.04);
+  const ladder = [0.75, 0.875, 1, 0.875];
+  const idx = Math.floor(Date.now() / 200) % ladder.length;
+  const themeScale =
+    bossTheme === 'void_whisper' ? 0.9 : bossTheme === 'titan_strike' ? 1.05 : 1;
+  const freq = Math.min(MELODY_CARRIER_HZ, MELODY_CARRIER_HZ * ladder[idx] * themeScale);
+  melodyOsc.frequency.setTargetAtTime(freq, ac.currentTime, 0.04);
 }
 
 function startStems(): void {
   const ac = getAudioContext();
   if (!ac) return;
   masterMusicGain = ac.createGain();
-  masterMusicGain.gain.value = 0.85;
-  connectToMusic(masterMusicGain, 1);
+  masterMusicGain.gain.value = MUSIC_MASTER_GAIN;
+  const compressor = createMusicCompressor(ac);
+  masterMusicGain.connect(compressor);
+  connectToMusic(compressor, 1);
 
   (['pad', 'drums', 'bass', 'melody'] as StemId[]).forEach((id) => {
     const g = ac.createGain();
@@ -152,41 +247,53 @@ function startStems(): void {
     stemGains[id] = g;
   });
 
-  const root = themeRootFreq(null);
-  padOscs = [root, root * 1.25, root * 1.5].map((freq, i) => {
+  const padSpec: { freq: number; pan: number; gain: number }[] = [
+    { freq: PAD_FREQ_LEFT, pan: -0.35, gain: STEM_VOICE_GAIN },
+    { freq: PAD_FREQ_RIGHT, pan: 0.35, gain: STEM_VOICE_GAIN * 0.85 },
+  ];
+  padOscs = padSpec.map(({ freq, pan, gain }) => {
     const o = ac.createOscillator();
     const g = ac.createGain();
     o.type = 'sine';
     o.frequency.value = freq;
-    g.gain.value = 0.04 / (i + 1);
+    g.gain.value = gain;
+    const p = ac.createStereoPanner();
+    p.pan.value = pan;
     o.connect(g);
-    g.connect(stemGains.pad!);
+    g.connect(p);
+    p.connect(stemGains.pad!);
     o.start();
     return o;
   });
 
   bassOsc = ac.createOscillator();
   const bassG = ac.createGain();
-  bassOsc.type = 'sawtooth';
-  bassOsc.frequency.value = root * 0.5;
-  bassG.gain.value = 0.03;
+  bassOsc.type = 'sine';
+  bassOsc.frequency.value = BASS_CARRIER_HZ;
+  bassG.gain.value = STEM_VOICE_GAIN;
+  const bassPan = ac.createStereoPanner();
+  bassPan.pan.value = -0.2;
   bassOsc.connect(bassG);
-  bassG.connect(stemGains.bass!);
+  bassG.connect(bassPan);
+  bassPan.connect(stemGains.bass!);
   bassOsc.start();
 
   melodyOsc = ac.createOscillator();
   const melG = ac.createGain();
-  melodyOsc.type = 'triangle';
-  melodyOsc.frequency.value = root * 2;
-  melG.gain.value = 0.025;
+  melodyOsc.type = 'sine';
+  melodyOsc.frequency.value = MELODY_CARRIER_HZ * 0.875;
+  melG.gain.value = STEM_VOICE_GAIN * 0.75;
+  const melPan = ac.createStereoPanner();
+  melPan.pan.value = 0.25;
   melodyOsc.connect(melG);
-  melG.connect(stemGains.melody!);
+  melG.connect(melPan);
+  melPan.connect(stemGains.melody!);
   melodyOsc.start();
 
   const lfo = ac.createOscillator();
   const lfoG = ac.createGain();
   lfo.frequency.value = 0.06;
-  lfoG.gain.value = 6;
+  lfoG.gain.value = 3;
   lfo.connect(lfoG);
   if (padOscs[0]) lfoG.connect(padOscs[0].frequency);
   lfo.start();
@@ -207,14 +314,46 @@ export function startSurvivalMusic(): void {
   const ac = getAudioContext();
   if (!ac) return;
   running = true;
+  lastThreatMusicSample = -1;
+  lastAppliedBpm = THREAT_BPM_MIN;
   startStems();
-  setBpm(BPM_BY_TIER.calm);
+  setBpm(THREAT_BPM_MIN);
   crossfadeStems('calm', 0.5);
+}
+
+/**
+ * Smooth threat → frequency, stem mix, and tempo. Call every frame during survival.
+ */
+export function updateMusicThreat(threatLevel: number): void {
+  if (!running || bossTheme) return;
+
+  const ratio = threatToMusicRatio(threatLevel);
+  if (Math.abs(ratio - lastThreatMusicSample) < 0.008) return;
+  lastThreatMusicSample = ratio;
+
+  const rootHz = threatToRootFrequency(threatLevel);
+  applyThreatOscillatorFrequencies(rootHz);
+  applyContinuousStemGains(ratio);
+  applyThreatMasterGain(ratio);
+
+  const targetBpm =
+    THREAT_BPM_MIN + (THREAT_BPM_MAX - THREAT_BPM_MIN) * ratio;
+  if (Math.abs(targetBpm - lastAppliedBpm) >= THREAT_BPM_STEP_THRESHOLD) {
+    lastAppliedBpm = targetBpm;
+    setBpm(Math.round(targetBpm));
+  }
+
+  const tier = getThreatTier(threatLevel);
+  if (tier !== currentTier) {
+    currentTier = tier;
+  }
 }
 
 export function stopSurvivalMusic(): void {
   running = false;
   lastBossIntensitySample = -1;
+  lastThreatMusicSample = -1;
+  lastAppliedBpm = THREAT_BPM_MIN;
   if (drumTimer) clearInterval(drumTimer);
   if (melodyTimer) clearInterval(melodyTimer);
   drumTimer = null;
@@ -235,13 +374,11 @@ export function stopSurvivalMusic(): void {
 
 export function setSurvivalThreatMusic(threatLevel: number, fadeSec = 2.5): void {
   if (!running) return;
+  lastThreatMusicSample = -1;
+  updateMusicThreat(threatLevel);
   const tier = getThreatTier(threatLevel);
-  if (tier === currentTier && !bossTheme) return;
   currentTier = tier;
-  const visual = getThreatVisualConfig(tier);
-  const bpm = Math.round(BPM_BY_TIER[tier] * (visual.musicTempo / 1));
-  if (!bossTheme) setBpm(bpm);
-  crossfadeStems(tier, fadeSec);
+  if (!bossTheme) crossfadeStems(tier, fadeSec);
 }
 
 export function setSurvivalStageLayer(stage: number): void {
@@ -273,7 +410,13 @@ export function enterBossMusic(bossId: string, stage: number, healthRatio = 1): 
   crossfadeStems('danger', 1.2);
   const ac = getAudioContext();
   if (ac && bassOsc) {
-    bassOsc.frequency.setTargetAtTime(themeRootFreq(bossTheme), ac.currentTime, 0.8);
+    const bassTarget =
+      bossTheme === 'titan_strike'
+        ? BASS_CARRIER_HZ * 1.05
+        : bossTheme === 'void_whisper'
+          ? BASS_CARRIER_HZ * 0.95
+          : BASS_CARRIER_HZ;
+    bassOsc.frequency.setTargetAtTime(bassTarget, ac.currentTime, 0.8);
   }
 }
 
@@ -315,18 +458,18 @@ export function playVictorySting(stage: number): void {
   if (!ac || isMusicMuted()) return;
   const notes =
     stage >= 5
-      ? [523, 659, 784, 1047]
+      ? [196, 247, 294, 392]
       : stage >= 4
-        ? [440, 554, 659, 880]
-        : [392, 494, 587, 740];
+        ? [165, 208, 247, 330]
+        : [147, 185, 220, 277];
   notes.forEach((f, i) => {
     const o = ac.createOscillator();
     const g = ac.createGain();
-    o.type = stage >= 5 ? 'sawtooth' : 'triangle';
+    o.type = 'sine';
     o.frequency.value = f;
     const t = ac.currentTime + i * 0.12;
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.12, t + 0.02);
+    g.gain.linearRampToValueAtTime(0.08, t + 0.02);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
     o.connect(g);
     connectToMusic(g, 1);
@@ -338,13 +481,13 @@ export function playVictorySting(stage: number): void {
 export function playDefeatSting(): void {
   const ac = getAudioContext();
   if (!ac || isMusicMuted()) return;
-  [220, 165, 110].forEach((f, i) => {
+  [110, 82.5, 55].forEach((f, i) => {
     const o = ac.createOscillator();
     const g = ac.createGain();
     o.type = 'sine';
     o.frequency.value = f;
     const t = ac.currentTime + i * 0.25;
-    g.gain.setValueAtTime(0.1, t);
+    g.gain.setValueAtTime(0.08, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
     o.connect(g);
     connectToMusic(g, 1);

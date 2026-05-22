@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Shield, Zap, Target, Trophy, Flame, RotateCcw, Swords } from 'lucide-react';
+import { GameIconFromKey } from '../../components/icons';
 import { HudPanel } from './HudPanel';
 import type { HudVariant } from '../controls/mobileLayout';
 
@@ -53,37 +53,37 @@ export function ActiveBuffChips({ buffs, extraLifeCharges, hudVariant }: ActiveB
 
   if (extraLifeCharges > 0) {
     chips.push(
-      <Chip key="life" icon={<Shield size={12} />} label={compact ? 'EXTRA' : 'EXTRA LIV'} tone="cyan" />,
+      <Chip key="life" icon={<GameIconFromKey iconKey="Shield" size={12} color="#67e8f9" />} label={compact ? 'EXTRA' : 'EXTRA LIV'} tone="cyan" />,
     );
   }
   if (buffs.overdrive > 0) {
     chips.push(
-      <Chip key="od" icon={<Zap size={12} />} label={`OD ${Math.ceil(buffs.overdrive / 60)}s`} tone="rose" />,
+      <Chip key="od" icon={<GameIconFromKey iconKey="Zap" size={12} color="#fda4af" />} label={`OD ${Math.ceil(buffs.overdrive / 60)}s`} tone="rose" />,
     );
   }
   if (buffs.magnet > 0) {
     chips.push(
-      <Chip key="mag" icon={<Target size={12} />} label={`MAG ${Math.ceil(buffs.magnet / 60)}s`} tone="cyan" />,
+      <Chip key="mag" icon={<GameIconFromKey iconKey="Magnet" size={12} color="#67e8f9" />} label={`MAG ${Math.ceil(buffs.magnet / 60)}s`} tone="cyan" />,
     );
   }
   if (buffs.scoreX > 0) {
     chips.push(
-      <Chip key="sx" icon={<Trophy size={12} />} label={`2X ${Math.ceil(buffs.scoreX / 60)}s`} tone="fuchsia" />,
+      <Chip key="sx" icon={<GameIconFromKey iconKey="Trophy" size={12} color="#e879f9" />} label={`2X ${Math.ceil(buffs.scoreX / 60)}s`} tone="fuchsia" />,
     );
   }
   if (buffs.rapidFire > 0) {
     chips.push(
-      <Chip key="rf" icon={<Flame size={12} />} label={`RAP ${Math.ceil(buffs.rapidFire / 60)}s`} tone="amber" />,
+      <Chip key="rf" icon={<GameIconFromKey iconKey="Flame" size={12} color="#fcd34d" />} label={`RAP ${Math.ceil(buffs.rapidFire / 60)}s`} tone="amber" />,
     );
   }
   if (buffs.timeSlow > 0) {
     chips.push(
-      <Chip key="ts" icon={<RotateCcw size={12} />} label={`SLOW ${Math.ceil(buffs.timeSlow / 60)}s`} tone="cyan" />,
+      <Chip key="ts" icon={<GameIconFromKey iconKey="RotateCcw" size={12} color="#a5b4fc" />} label={`SLOW ${Math.ceil(buffs.timeSlow / 60)}s`} tone="cyan" />,
     );
   }
   if (buffs.piercing > 0) {
     chips.push(
-      <Chip key="pr" icon={<Swords size={12} />} label={`PRC ${Math.ceil(buffs.piercing / 60)}s`} tone="fuchsia" />,
+      <Chip key="pr" icon={<GameIconFromKey iconKey="Swords" size={12} color="#f9a8d4" />} label={`PRC ${Math.ceil(buffs.piercing / 60)}s`} tone="fuchsia" />,
     );
   }
 

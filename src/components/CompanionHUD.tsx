@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Shield, Radar, HeartPulse, Crosshair, Zap } from 'lucide-react';
+import { GameIcon, getCompanionIconName } from './icons';
 import { HudPanel } from '../game/hud/HudPanel';
 import { HUD_COLORS } from '../game/hud/hudTokens';
 import { getCompanionDef } from '../game/companions/companionDefs';
@@ -15,10 +15,13 @@ const COMPANION_COLORS: Record<CompanionId, string> = {
 };
 
 function CompanionIcon({ id, size = 16 }: { id: CompanionId; size?: number }) {
-  if (id === 'guardian') return <Shield size={size} aria-hidden />;
-  if (id === 'scout') return <Radar size={size} aria-hidden />;
-  if (id === 'healer') return <HeartPulse size={size} aria-hidden />;
-  return <Crosshair size={size} aria-hidden />;
+  return (
+    <GameIcon
+      name={getCompanionIconName(id)}
+      size={size}
+      color={COMPANION_COLORS[id]}
+    />
+  );
 }
 
 export interface CompanionHUDProps {
@@ -157,7 +160,11 @@ export function CompanionHUD({
           <div>
             <div className="flex justify-between items-center gap-2 text-[10px] font-mono uppercase tracking-wider mb-0.5">
               <span className="text-slate-400 flex items-center gap-1">
-                <Zap size={10} className={abilityReady ? 'text-amber-300' : 'text-slate-500'} />
+                <GameIcon
+                  name="ui.ultimate"
+                  size={10}
+                  color={abilityReady ? '#fcd34d' : '#64748b'}
+                />
                 {abilityLabel}
               </span>
               <span className={abilityReady ? 'text-emerald-400' : 'text-slate-400 tabular-nums'}>

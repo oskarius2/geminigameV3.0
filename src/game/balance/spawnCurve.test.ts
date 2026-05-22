@@ -29,8 +29,9 @@ describe('getMaxAliveEnemies', () => {
         threatFactor: 0,
         isRamping: false,
         mobile: false,
+        stage: 1,
       })
-    ).toBeLessThanOrEqual(12); // Updated to match new higher early cap
+    ).toBeLessThanOrEqual(16);
 
     expect(
       getMaxAliveEnemies({
@@ -38,8 +39,9 @@ describe('getMaxAliveEnemies', () => {
         threatFactor: 0,
         isRamping: true,
         mobile: false,
+        stage: 1,
       })
-    ).toBeLessThanOrEqual(6); // Updated to match new higher ramping early cap
+    ).toBeLessThanOrEqual(10);
   });
 
   it('grows with progress', () => {

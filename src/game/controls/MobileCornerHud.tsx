@@ -182,13 +182,11 @@ export function MobileCornerHud({
             />
           )}
           {bossActive && bossMaxHealth > 0 && (
-            <div className="mobile-hud-card p-2">
-              <p className="text-[10px] font-mono uppercase tracking-widest text-rose-300 mb-1 text-center">
-                Boss
-              </p>
-              <div className="h-2 rounded-full overflow-hidden bg-black/50 border border-white/10">
+            <div className="boss-hp-hud w-full">
+              <p className="boss-hp-hud__label">Boss</p>
+              <div className="boss-hp-hud__track">
                 <div
-                  className="h-full rounded-full transition-[width] duration-300"
+                  className="boss-hp-hud__fill"
                   style={{
                     width: `${bossHpPct}%`,
                     background: 'linear-gradient(90deg, #ef4444, #f97316)',

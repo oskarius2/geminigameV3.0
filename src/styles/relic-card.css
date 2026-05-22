@@ -4,6 +4,7 @@
   display: grid;
   gap: var(--primitive-space-lg);
   grid-template-columns: 1fr;
+  align-items: start;
 }
 
 @media (min-width: 768px) {
@@ -20,6 +21,8 @@
 
 .relic-card {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: var(--card-width);
   min-height: var(--card-min-height);
@@ -30,13 +33,13 @@
   box-shadow: var(--card-shadow), var(--card-glow);
   padding: 0;
   text-align: left;
-  overflow: hidden;
+  overflow: visible;
   transition:
     transform var(--primitive-duration-normal) var(--primitive-easing-ease-out),
     border var(--primitive-duration-normal) ease,
     box-shadow var(--primitive-duration-normal) ease,
     opacity var(--primitive-duration-normal) ease;
-  cursor: pointer;
+  cursor: default;
 }
 
 .relic-card:hover:not(.relic-card--locked) {
@@ -80,6 +83,7 @@
 }
 
 .relic-card__rarity-bar {
+  flex-shrink: 0;
   height: var(--rarity-bar-height);
   background: var(--color-rarity-current);
   border-radius: var(--rarity-bar-radius-top) var(--rarity-bar-radius-top) 0 0;
@@ -87,10 +91,15 @@
 }
 
 .relic-card__content {
+  position: relative;
+  z-index: 2;
+  flex: 1 1 auto;
   padding: var(--card-padding);
+  padding-bottom: var(--primitive-space-lg);
   display: flex;
   flex-direction: column;
   gap: var(--primitive-space-md);
+  overflow: visible;
 }
 
 .relic-card__label {
@@ -100,6 +109,7 @@
   letter-spacing: var(--text-rarity-letter-spacing);
   color: var(--color-rarity-current);
   font-family: var(--font-heading);
+  text-shadow: 0 0 10px color-mix(in srgb, var(--color-rarity-current) 55%, transparent);
 }
 
 .relic-card__slot {
@@ -201,12 +211,23 @@
 }
 
 .relic-card__actions {
-  margin-top: var(--primitive-space-sm);
+  margin-top: auto;
+  padding-top: var(--primitive-space-sm);
+  flex-shrink: 0;
+}
+
+.relic-card__actions--primary {
+  margin-top: 0;
+  padding-top: 0;
 }
 
 .relic-card__btn {
+  position: relative;
+  z-index: 3;
   width: 100%;
-  min-height: 2.5rem;
+  min-height: 2.75rem;
+  cursor: pointer;
+  pointer-events: auto;
   border-radius: var(--primitive-radius-md);
   font-size: var(--primitive-size-xs);
   font-weight: var(--primitive-weight-bold);

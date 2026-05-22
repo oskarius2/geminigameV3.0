@@ -126,7 +126,9 @@ export function pickEnemyTypeForThreat(
     if (isPickAtCap(pick, counts, levelProgress)) continue;
     const type = PICK_TO_TYPE[pick];
     if (!type) continue;
-    const cap = getEffectiveTypeCap(type, levelProgress);
+    const stageCapMult =
+      state.stage >= 5 ? 1.55 : state.stage >= 4 ? 1.35 : state.stage >= 3 ? 1.2 : 1;
+    const cap = Math.ceil(getEffectiveTypeCap(type, levelProgress) * stageCapMult);
     const current = counts[type] ?? 0;
     const slotsLeft = Math.max(1, cap - current);
     for (let w = 0; w < slotsLeft; w++) weighted.push(pick);

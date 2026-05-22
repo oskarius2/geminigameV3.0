@@ -1,21 +1,11 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import {
-  Zap, Target, Shield, Flame, Magnet, Activity, HeartPulse,
-  ShieldCheck, Bomb, Swords, CircleIcon, MoveRight, RotateCcw, Trophy, Sparkles,
-} from 'lucide-react';
+import { GameIcon, GameIconFromKey } from '../../components/icons';
 import { SpaceBackground } from '../../components/ui/SpaceBackground';
 import { PassiveBuff, BuffRarity, Artifact } from '../types';
 import { getBuffStacksForDisplay } from '../buffs/pickBuffs';
 import type { SurvivalCardChoice } from '../buffs/pickSurvivalCards';
 import type { ViewportProfile } from './mobileLayout';
-
-const ICON_MAP: Record<string, React.ReactNode> = {
-  Zap: <Zap />, Target: <Target />, Shield: <Shield />, Flame: <Flame />,
-  Magnet: <Magnet />, Activity: <Activity />, HeartPulse: <HeartPulse />,
-  ShieldCheck: <ShieldCheck />, Bomb: <Bomb />, Swords: <Swords />,
-  CircleIcon: <CircleIcon />, MoveRight: <MoveRight />, RotateCcw: <RotateCcw />, Trophy: <Trophy />,
-};
 
 interface RarityStyle {
   borderColor: string;
@@ -195,9 +185,7 @@ function BuffCard({
             animate={isExclusive ? { scale: [1, 1.07, 1] } : {}}
             transition={{ repeat: Infinity, duration: 1.6 }}
           >
-            {React.cloneElement((ICON_MAP[buff.icon] || <Zap />) as React.ReactElement, {
-              size: 28, strokeWidth: 1.5, color: s.textColor,
-            })}
+            <GameIconFromKey iconKey={buff.icon} size={28} color={s.textColor} glow />
           </motion.div>
 
           <div className="flex-1 flex flex-col justify-center min-w-0">
@@ -277,9 +265,7 @@ function BuffCard({
             animate={isExclusive ? { scale: [1, 1.07, 1] } : isLegendary ? { scale: [1, 1.04, 1] } : {}}
             transition={{ repeat: Infinity, duration: 1.8 }}
           >
-            {React.cloneElement((ICON_MAP[buff.icon] || <Zap />) as React.ReactElement, {
-              size: 40, strokeWidth: 1.5, color: s.textColor,
-            })}
+            <GameIconFromKey iconKey={buff.icon} size={40} color={s.textColor} glow />
           </motion.div>
 
           <h3
@@ -376,7 +362,7 @@ function ArtifactCard({
             boxShadow: `0 0 24px ${s.barColor}28`,
           }}
         >
-          <Sparkles size={36} color={s.textColor} strokeWidth={1.5} />
+          <GameIcon name="ui.relic" size={36} color={s.textColor} glow />
         </div>
 
         <h3

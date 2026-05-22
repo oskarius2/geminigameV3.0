@@ -1,5 +1,6 @@
 import React from 'react';
-import { Lock, Sparkles } from 'lucide-react';
+import { Lock } from 'lucide-react';
+import { GameIcon } from '../icons';
 import { clsx } from 'clsx';
 import type { Artifact, ArtifactSlot } from '../../game/types';
 import { BuffRarity } from '../../game/types';
@@ -52,7 +53,7 @@ export function RelicCard({
 
       {isNew && owned && (
         <span className="relic-card__badge" aria-label="New unlock">
-          <Sparkles size={12} strokeWidth={2.5} aria-hidden />
+          <GameIcon name="ui.sparkles" size={12} color="#e8b84a" />
           NEW
         </span>
       )}
@@ -68,11 +69,8 @@ export function RelicCard({
 
         {owned && (
           <>
-            <div className="relic-card__divider" />
-            <p className="relic-card__description">{description}</p>
-            <span className="relic-card__power">Power: {artifactPowerScore(artifact)}</span>
             {onEquip && (
-              <div className="relic-card__actions">
+              <div className="relic-card__actions relic-card__actions--primary">
                 <button
                   type="button"
                   className={clsx(
@@ -88,6 +86,9 @@ export function RelicCard({
                 </button>
               </div>
             )}
+            <div className="relic-card__divider" />
+            <p className="relic-card__description">{description}</p>
+            <span className="relic-card__power">Power: {artifactPowerScore(artifact)}</span>
           </>
         )}
 

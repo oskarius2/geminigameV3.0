@@ -1,7 +1,9 @@
 import React from 'react';
-import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
+import { GameIcon } from '../../../components/icons';
 import { ARTIFACTS } from '../../content/artifacts';
 import { RARITY_COLORS } from '../../content/rarityColors';
+import { HUD_RARITY_HEX } from '../hudTokens';
 import { BuffRarity, type ArtifactSlot } from '../../types';
 
 const SLOT_LABELS: Record<ArtifactSlot, string> = {
@@ -198,6 +200,7 @@ export function MobileBottomDock({
                 const art = ARTIFACTS[id];
                 if (!art) return null;
                 const cls = RARITY_COLORS[art.rarity] ?? RARITY_COLORS[BuffRarity.COMMON];
+                const hex = HUD_RARITY_HEX[art.rarity] ?? HUD_RARITY_HEX[BuffRarity.COMMON];
                 return (
                   <div
                     key={slot}
@@ -205,7 +208,7 @@ export function MobileBottomDock({
                     className={`mobile-dock-relics__chip ${cls.border} ${cls.bg}`}
                     title={art.name}
                   >
-                    <Sparkles size={12} className={cls.text} aria-hidden />
+                    <GameIcon name="ui.relic" size={12} color={hex} />
                     <span className={`mobile-dock-relics__slot ${cls.text}`}>{SLOT_LABELS[slot]}</span>
                     <span className="mobile-dock-relics__name">{art.name}</span>
                   </div>

@@ -416,6 +416,8 @@ export interface GameState {
   collectedShipLoot: string[];
   /** Mini-bosses defeated this survival run. */
   miniBossKillsThisRun: number;
+  /** Survival stage bosses defeated this run (gates artifact power tiers). */
+  runBossesDefeated: number;
 
   /** Pre-run shop purchases applied this run. */
   shopPurchasedIds: ShopItemId[];

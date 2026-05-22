@@ -66,6 +66,7 @@ export function applyBossDefeatState(state: GameState): void {
   state.inBossArena = false;
   state.pendingArenaRestore = true;
   state.stageTransition = 90;
+  state.runBossesDefeated = (state.runBossesDefeated ?? 0) + 1;
   state.enemies = state.enemies.filter(
     (e) => !(e.enemyType === EnemyType.BOSS && e.health <= 0)
   );

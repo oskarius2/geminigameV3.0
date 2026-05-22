@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Lock, Sparkles } from 'lucide-react';
+import { Lock } from 'lucide-react';
+import { GameIcon } from '../../components/icons';
 import { SpaceBackground } from '../../components/ui/SpaceBackground';
 import { ArtifactSlot } from '../types';
 import { ARTIFACTS, artifactPowerScore } from '../content/artifacts';
@@ -108,7 +109,7 @@ export const ArtifactInventory: React.FC<ArtifactInventoryProps> = ({
               >
                 {isNew && owned && (
                   <span className="absolute top-3 right-3 flex items-center gap-1 text-[9px] font-black uppercase text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-full border border-cyan-500/20">
-                    <Sparkles size={10} /> NEW
+                    <GameIcon name="ui.sparkles" size={10} color="#e8b84a" /> NEW
                   </span>
                 )}
                 {!owned && <Lock className="absolute top-4 right-4 text-white/20" size={16} />}

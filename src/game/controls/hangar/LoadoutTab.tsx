@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Swords, Shield, Zap, Wind } from 'lucide-react';
+import { GameIcon, getSlotIconName } from '../../../components/icons';
 import { Artifact, ArtifactSlot } from '../../types';
 import { ARTIFACTS } from '../../content/artifacts';
 import { formatArtifactStats } from '../../meta/formatArtifactStats';
@@ -14,13 +14,23 @@ const SLOT_LABELS: Record<ArtifactSlot, string> = {
   MOBILITY: 'Mobility',
 };
 
-const SLOT_ICONS: Record<ArtifactSlot, React.ReactNode> = {
-  CANNON_A: <Swords size={22} className="text-cyan-400" />,
-  CANNON_B: <Swords size={22} className="text-cyan-400" />,
-  ULTIMATE: <Zap size={22} className="text-fuchsia-400" />,
-  ARMOR: <Shield size={22} className="text-sky-400" />,
-  MOBILITY: <Wind size={22} className="text-teal-400" />,
+const SLOT_ICON_COLORS: Record<ArtifactSlot, string> = {
+  CANNON_A: '#00e5ff',
+  CANNON_B: '#7df9ff',
+  ULTIMATE: '#ff2d9b',
+  ARMOR: '#60a5fa',
+  MOBILITY: '#2dd4bf',
 };
+
+function SlotIcon({ slot }: { slot: ArtifactSlot }) {
+  return (
+    <GameIcon
+      name={getSlotIconName(slot)}
+      size={22}
+      color={SLOT_ICON_COLORS[slot]}
+    />
+  );
+}
 
 const SLOTS: ArtifactSlot[] = ['CANNON_A', 'CANNON_B', 'ULTIMATE', 'ARMOR', 'MOBILITY'];
 
@@ -66,7 +76,7 @@ export function LoadoutTab({
               className="min-h-[100px] p-4 rounded-xl border border-white/10 bg-black/40 text-left hover:border-[var(--hud-accent)]/40 transition-colors"
             >
               <div className="flex items-center gap-2 text-[10px] font-mono uppercase text-cyan-400/70">
-                {SLOT_ICONS[slot]}
+                <SlotIcon slot={slot} />
                 {SLOT_LABELS[slot]}
               </div>
               {art ? (
@@ -86,7 +96,7 @@ export function LoadoutTab({
                       e.stopPropagation();
                       onEquip(slot, null);
                     }}
-                    className="mt-2 text-[10px] uppercase text-rose-400/80 hover:text-rose-300"
+                    className="relic-card__btn relic-card__btn--unequip mt-3 w-full"
                   >
                     Unequip
                   </button>

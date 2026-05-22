@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { RotateCcw, Sparkles, Trophy } from 'lucide-react';
+import { GameIcon, GameIconFromKey } from '../../components/icons';
 import { SpaceBackground } from '../../components/ui/SpaceBackground';
 import { TacticalFrame } from '../../components/ui/TacticalFrame';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
@@ -153,7 +153,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
         {hasNewUnlocks && (
           <motion.div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
             <p className="text-amber-300 text-[10px] uppercase font-black tracking-widest mb-2 flex items-center gap-1">
-              <Sparkles size={12} /> New unlocks this run
+              <GameIcon name="ui.sparkles" size={12} color="#e879f9" /> New unlocks this run
             </p>
             <ul className="text-xs text-amber-100/90 space-y-0.5">
               {newArtifacts.map((name) => (
@@ -169,7 +169,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
         {runArts.length > 0 && (
           <motion.div>
             <p className="text-white/30 text-[10px] uppercase font-black tracking-widest mb-2 flex items-center gap-1">
-              <Sparkles size={12} className="text-fuchsia-400" /> Relics this run
+              <GameIcon name="ui.relic" size={12} color="#e879f9" /> Relics this run
             </p>
             <ul className="text-xs text-fuchsia-200/90 space-y-0.5">
               {runArts.map((name) => (
@@ -182,7 +182,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
         {(newHighScoreThisRun || newLongestThisRun) && (
           <motion.div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-center">
             <p className="text-cyan-300 text-[10px] uppercase font-black tracking-widest mb-1 flex items-center justify-center gap-1">
-              <Trophy size={12} /> Personal best
+              <GameIcon name="ui.trophy" size={12} color="#fbbf24" /> Personal best
             </p>
             {newHighScoreThisRun && (
               <p className="text-sm text-white font-bold">
@@ -226,11 +226,11 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
 
       <motion.div className="flex flex-col gap-3 w-full max-w-sm px-4">
         <PrimaryButton variant="accent" onClick={onRestart} className="!w-full">
-          <RotateCcw size={16} />
+          <GameIconFromKey iconKey="RotateCcw" size={16} color="#7df9ff" />
           New Run
         </PrimaryButton>
         <PrimaryButton variant="primary" onClick={onVault} className="!w-full">
-          <Sparkles size={14} />
+          <GameIcon name="ui.relic" size={14} color="#c084fc" />
           View in Vault
         </PrimaryButton>
       </motion.div>

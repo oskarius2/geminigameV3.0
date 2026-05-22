@@ -4,6 +4,7 @@
 @import "./styles/premium-ui.css";
 @import "./styles/relic-card.css";
 @import "./styles/game-hud-mobile.css";
+@import "./styles/ui-polish.css";
 
 @theme {
   --font-sans: var(--primitive-font-sans);

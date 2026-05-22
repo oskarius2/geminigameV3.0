@@ -29,6 +29,7 @@ import {
   type CompanionInstance,
   type CompanionRuntime,
   type PlayerCompanionStats,
+  type ScoutTrackMemory,
 } from './companionTypes';
 
 export type { CompanionRuntime } from './companionTypes';
@@ -47,6 +48,74 @@ const ORBIT_RADIUS: Record<CompanionType, number> = {
   [CompanionType.HEALER]: 48,
   [CompanionType.GUNNER]: 64,
 };
+
+/** Per-frame player displacement above this ≈ dash (normal move is ~speed×dt). */
+const SCOUT_DASH_SPEED_MULT = 3.5;
+const SCOUT_LOST_TRACK_DIST = 500;
+const SCOUT_PREDICT_FRAMES = 2;
+const SCOUT_LOST_TRACK_DURATION = 0.5;
+
+function dashDisplacementThreshold(playerSpeed: number): number {
+  return Math.max(280, playerSpeed * SCOUT_DASH_SPEED_MULT);
+}
+
+function ensureScoutTrackMemory(
+  runtime: CompanionRuntime,
+  playerPos: Vector2,
+): ScoutTrackMemory {
+  if (!runtime.scoutTrack) {
+    runtime.scoutTrack = {
+      lastPlayerPos: playerPos.clone(),
+      lastKnownPosition: playerPos.clone(),
+      lastPlayerVelocity: new Vector2(0, 0),
+      lostTrackTime: 0,
+    };
+  }
+  return runtime.scoutTrack;
+}
+
+/**
+ * Scout drone: remember player motion and predict landing after dash.
+ * Call once per frame before movement; pass result into moveCompanionToward.
+ */
+export function resolveScoutMoveTarget(
+  runtime: CompanionRuntime,
+  state: CompanionGameState,
+  roleTarget: Vector2,
+  dtSec: number,
+): Vector2 {
+  const mem = ensureScoutTrackMemory(runtime, state.player.pos);
+  const currentPlayerPos = state.player.pos;
+  const playerVelocity = currentPlayerPos.sub(mem.lastPlayerPos);
+  const dashThreshold = dashDisplacementThreshold(state.player.speed);
+  const dashByMotion = playerVelocity.magnitude() > dashThreshold;
+  const dashDetected = state.isPlayerDashing || dashByMotion;
+  const distToPlayer = runtime.pos.distanceTo(currentPlayerPos);
+
+  if (dashDetected) {
+    mem.lastKnownPosition = mem.lastPlayerPos.clone();
+    if (distToPlayer > SCOUT_LOST_TRACK_DIST) {
+      mem.lostTrackTime = SCOUT_LOST_TRACK_DURATION;
+    }
+  }
+
+  mem.lastPlayerVelocity = playerVelocity;
+  mem.lastPlayerPos = currentPlayerPos.clone();
+
+  if (mem.lostTrackTime > 0) {
+    mem.lostTrackTime = Math.max(0, mem.lostTrackTime - dtSec);
+    if (mem.lostTrackTime > 0) {
+      return mem.lastKnownPosition.clone();
+    }
+  }
+
+  if (dashDetected && playerVelocity.magnitude() > 1) {
+    const predictedPos = currentPlayerPos.add(playerVelocity.mul(SCOUT_PREDICT_FRAMES));
+    return roleTarget.lerp(predictedPos, 0.7);
+  }
+
+  return roleTarget;
+}
 
 function createRuntimeDefaults(
   state: CompanionGameState,
@@ -98,6 +167,14 @@ function patchRuntimeDefaults(rt: CompanionRuntime): void {
   if (rt.visualTime === undefined) rt.visualTime = 0;
   if (rt.playerHitBurstTimer === undefined) rt.playerHitBurstTimer = 0;
   if (rt.playerHitsInBurst === undefined) rt.playerHitsInBurst = 0;
+  if (rt.scoutTrack) {
+    if (!rt.scoutTrack.lastPlayerPos) rt.scoutTrack.lastPlayerPos = new Vector2(0, 0);
+    if (!rt.scoutTrack.lastKnownPosition) {
+      rt.scoutTrack.lastKnownPosition = rt.scoutTrack.lastPlayerPos.clone();
+    }
+    if (!rt.scoutTrack.lastPlayerVelocity) rt.scoutTrack.lastPlayerVelocity = new Vector2(0, 0);
+    if (rt.scoutTrack.lostTrackTime === undefined) rt.scoutTrack.lostTrackTime = 0;
+  }
 }
 
 export function buildCompanionInstance(state: CompanionGameState): CompanionInstance | null {
@@ -173,6 +250,9 @@ export function ensureCompanionRuntime(state: CompanionGameState): CompanionRunt
 
   if (!state.companionRuntime) {
     state.companionRuntime = createRuntimeDefaults(state, defaultMax);
+    if (companionIdToType(state.activeCompanionId) === CompanionType.SCOUT) {
+      ensureScoutTrackMemory(state.companionRuntime, state.player.pos);
+    }
   } else {
     const rt = state.companionRuntime;
     patchRuntimeDefaults(rt);

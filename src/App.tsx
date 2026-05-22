@@ -1,6 +1,6 @@
 ﻿import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Circle, Flame, Gem, Play, RotateCcw, Shield, Sparkles, Swords, Zap, Trophy, Target } from 'lucide-react';
+import { GameIcon, GameIconFromKey, getSlotIconName } from './components/icons';
 import { StartPage } from './game/controls/StartPage';
 import { Joystick } from './game/controls/Joystick';
 import { GameHUD } from './game/controls/GameHUD';
@@ -167,7 +167,6 @@ import {
 } from './game/meta/metaProgress';
 import { grantStageMilestoneUnlocks, metaUnlockArtifactFromRun } from './game/meta/unlockSystem';
 import {
-  UnlockToastStack,
   buildArtifactUnlockToast,
   buildCompanionUnlockToast,
   buildPersonalBestToast,
@@ -234,6 +233,7 @@ import {
 import { getActiveSynergies, countTag } from './game/buffs/synergies';
 import { SynergyBar } from './game/controls/SynergyBar';
 import { RunSummary } from './game/controls/RunSummary';
+import { AchievementStack } from './components/AchievementStack';
 import { BossWarpOverlay } from './game/controls/BossWarpOverlay';
 import { StageIntroOverlay } from './game/controls/StageIntroOverlay';
 import { PASSIVE_BUFFS } from './game/content/buffs';
@@ -430,6 +430,9 @@ export default function App() {
 
   const [artifactUnlockChoices, setArtifactUnlockChoices] = useState<Artifact[]>([]);
   const [showArtifactUnlock, setShowArtifactUnlock] = useState(false);
+  const [showLevelUp, setShowLevelUp] = useState(false);
+  const showLevelUpRef = useRef(showLevelUp);
+  const showArtifactUnlockRef = useRef(showArtifactUnlock);
   const [viewportProfile, setViewportProfile] = useState<ViewportProfile>('desktop');
   const [compactHud, setCompactHud] = useState(false);
   const [landscapeHud, setLandscapeHud] = useState(false);
@@ -441,9 +444,57 @@ export default function App() {
     () => getMetaProgress().pendingNewArtifacts,
   );
   const [unlockToasts, setUnlockToasts] = useState<UnlockToast[]>([]);
+  const [achievementsVisible, setAchievementsVisible] = useState(true);
   const playtimeAccumRef = useRef(0);
   const prevHighScoreRef = useRef(getSurvivalHighScore());
   const prevLongestRef = useRef(getLongestSurvivalSeconds());
+
+  useEffect(() => {
+    if (unlockToasts.length > 0) {
+      setAchievementsVisible(true);
+    }
+  }, [unlockToasts.length]);
+
+  useEffect(() => {
+    if (showLevelUp || showArtifactUnlock) {
+      setAchievementsVisible(false);
+    }
+  }, [showLevelUp, showArtifactUnlock]);
+
+  const toggleAchievementsVisible = useCallback(() => {
+    setAchievementsVisible((prev) => !prev);
+  }, []);
+
+  const presentLegendaryArtifactPopup = useCallback((artifact: Artifact) => {
+    if (
+      artifact.rarity !== BuffRarity.LEGENDARY &&
+      artifact.rarity !== BuffRarity.EXCLUSIVE
+    ) {
+      return;
+    }
+    const event = buildArtifactAcquiredEvent(artifact);
+    if (showLevelUpRef.current || showArtifactUnlockRef.current) {
+      pendingArtifactAcquireRef.current = event;
+      return;
+    }
+    setArtifactAcquirePopup(event);
+    if (artifactPopupTimerRef.current) clearTimeout(artifactPopupTimerRef.current);
+    artifactPopupTimerRef.current = setTimeout(() => {
+      setArtifactAcquirePopup(null);
+    }, ARTIFACT_POPUP_DURATION_MS);
+  }, []);
+
+  useEffect(() => {
+    if (showLevelUp || showArtifactUnlock) return;
+    const pending = pendingArtifactAcquireRef.current;
+    if (!pending) return;
+    pendingArtifactAcquireRef.current = null;
+    setArtifactAcquirePopup(pending);
+    if (artifactPopupTimerRef.current) clearTimeout(artifactPopupTimerRef.current);
+    artifactPopupTimerRef.current = setTimeout(() => {
+      setArtifactAcquirePopup(null);
+    }, ARTIFACT_POPUP_DURATION_MS);
+  }, [showLevelUp, showArtifactUnlock]);
 
   const syncMetaUnlockState = useCallback(() => {
     const p = getMetaProgress();
@@ -525,14 +576,11 @@ export default function App() {
   });
 
   const lastFireTime = useRef(0);
-  const [showLevelUp, setShowLevelUp] = useState(false);
   const unlockedArtifactIdsRef = useRef(unlockedArtifactIds);
   const equippedArtifactIdsRef = useRef(equippedArtifactIds);
   const joystickDeadZoneRef = useRef(joystickDeadZone);
   const hapticsEnabledRef = useRef(hapticsEnabled);
   const musicMutedRef = useRef(musicMuted);
-  const showLevelUpRef = useRef(showLevelUp);
-  const showArtifactUnlockRef = useRef(showArtifactUnlock);
   const pendingArtifactUnlockRef = useRef<Artifact[] | null>(null);
   const [metaScrap, setMetaScrap] = useState(() => getMetaScrap());
   const [lastRunScrapEarned, setLastRunScrapEarned] = useState(0);
@@ -541,6 +589,7 @@ export default function App() {
   const [artifactAcquirePopup, setArtifactAcquirePopup] = useState<ArtifactAcquiredEvent | null>(
     null,
   );
+  const pendingArtifactAcquireRef = useRef<ArtifactAcquiredEvent | null>(null);
   const artifactPopupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const forceUiSyncRef = useRef(false);
 
@@ -614,15 +663,8 @@ export default function App() {
     }
     playArtifactAcquireSfx(artifact.rarity);
 
-    if (artifact.rarity === BuffRarity.LEGENDARY) {
-      const event = buildArtifactAcquiredEvent(artifact);
-      setArtifactAcquirePopup(event);
-      if (artifactPopupTimerRef.current) clearTimeout(artifactPopupTimerRef.current);
-      artifactPopupTimerRef.current = setTimeout(() => {
-        setArtifactAcquirePopup(null);
-      }, ARTIFACT_POPUP_DURATION_MS);
-    }
-  }, []);
+    presentLegendaryArtifactPopup(artifact);
+  }, [presentLegendaryArtifactPopup]);
 
   const openBuffPicker = (state: GameState) => {
     state.isPaused = true;
@@ -750,6 +792,7 @@ export default function App() {
     initialState.runScrapEarned = 0;
     initialState.postBossBuffPick = false;
     initialState.miniBossKillsThisRun = 0;
+    initialState.runBossesDefeated = 0;
     resetWaveSpawnState(initialState);
     gameStateRef.current = initialState;
     setLastRunScrapEarned(0);
@@ -1153,6 +1196,18 @@ export default function App() {
         }
       }
       if (e.key.toLowerCase() === 'e') controls.current.wantUltimate = true;
+
+      const canToggleAchievements =
+        unlockToasts.length > 0 && !showLevelUp && !showArtifactUnlock;
+      if (
+        canToggleAchievements &&
+        (e.key === 'h' || e.key === 'H' || e.key === 'Escape')
+      ) {
+        e.preventDefault();
+        toggleAchievementsVisible();
+        return;
+      }
+
       if (e.key === 'p' || e.key === 'Escape') togglePause();
     };
 
@@ -1201,7 +1256,16 @@ export default function App() {
       if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
       if (artifactPopupTimerRef.current) clearTimeout(artifactPopupTimerRef.current);
     };
-  }, [screen, devCheatsActive, showDevCheatToast, syncUi]);
+  }, [
+    screen,
+    devCheatsActive,
+    showDevCheatToast,
+    syncUi,
+    unlockToasts.length,
+    showLevelUp,
+    showArtifactUnlock,
+    toggleAchievementsVisible,
+  ]);
 
   useEffect(() => {
     if (screen !== 'GAME' || !gameStateRef.current) return;
@@ -2090,6 +2154,7 @@ export default function App() {
             threatFactor,
             survivalTime: next.survivalTime,
             mobile,
+            stage: next.gameMode === 'NORMAL' ? next.stage : undefined,
           }) *
           tierMods.spawnChanceMult *
           (survivalMods?.spawnChanceMult ?? 1);
@@ -2543,16 +2608,7 @@ export default function App() {
                         const dropLine = notifyMiniBossArtifactDrop(rewards.artifact);
                         showNotification(dropLine, 'success', rewards.artifact.rarity);
                         applyArtifactAcquireJuice(next, rewards.artifact);
-                        if (rewards.artifact.rarity === BuffRarity.LEGENDARY) {
-                          const event = buildArtifactAcquiredEvent(rewards.artifact);
-                          setArtifactAcquirePopup(event);
-                          if (artifactPopupTimerRef.current) {
-                            clearTimeout(artifactPopupTimerRef.current);
-                          }
-                          artifactPopupTimerRef.current = setTimeout(() => {
-                            setArtifactAcquirePopup(null);
-                          }, ARTIFACT_POPUP_DURATION_MS);
-                        }
+                        presentLegendaryArtifactPopup(rewards.artifact);
                         applyMiniBossDefeatJuice(next, mbId, rewards);
                         playMiniBossDefeatSfx(mbId);
                         const mbDef = tryGetMiniBossDef(mbId);
@@ -3147,33 +3203,30 @@ export default function App() {
 
       {/* General notifications */}
       {notification && (
-        <div
-          className={`pointer-events-none fixed left-1/2 z-[100] -translate-x-1/2 max-w-[min(92vw,20rem)] px-2 ${
-            viewportProfile !== 'desktop'
-              ? 'top-[max(5.25rem,env(safe-area-inset-top))]'
-              : 'top-4'
-          }`}
-          aria-live="polite"
-        >
-          <div className={`rounded-lg px-4 py-2 font-medium shadow-lg flex items-center justify-center gap-2 ${
-            notification.type === 'success' ? 'bg-green-900/90 text-green-100 ring-1 ring-green-500/40' :
-            notification.type === 'warning' ? 'bg-yellow-900/90 text-yellow-100 ring-1 ring-yellow-500/40' :
-            'bg-blue-900/90 text-blue-100 ring-1 ring-blue-500/40'
-          }`}>
+        <div className="ui-toast-floating" aria-live="polite">
+          <div
+            className={`ui-toast pointer-events-none flex items-center justify-center gap-2 ${
+              notification.type === 'success'
+                ? 'ui-toast--success'
+                : notification.type === 'warning'
+                  ? 'ui-toast--warning'
+                  : 'ui-toast--info'
+            }`}
+          >
             {notification.rarity != null && (
-              <span className="shrink-0" aria-hidden>
+              <span className="shrink-0" aria-hidden style={{ filter: `drop-shadow(0 0 6px ${HUD_RARITY_HEX[notification.rarity]}88)` }}>
                 {notification.rarity === BuffRarity.LEGENDARY ||
                 notification.rarity === BuffRarity.EXCLUSIVE ? (
-                  <Sparkles size={18} color={HUD_RARITY_HEX[notification.rarity]} />
+                  <GameIcon name="ui.sparkles" size={20} color={HUD_RARITY_HEX[notification.rarity]} glow />
                 ) : notification.rarity === BuffRarity.EPIC ||
                   notification.rarity === BuffRarity.RARE ? (
-                  <Gem size={18} color={HUD_RARITY_HEX[notification.rarity]} />
+                  <GameIcon name="ui.gem" size={20} color={HUD_RARITY_HEX[notification.rarity]} glow />
                 ) : (
-                  <Circle size={18} color={HUD_RARITY_HEX[notification.rarity]} />
+                  <GameIcon name="buff.circle" size={20} color={HUD_RARITY_HEX[notification.rarity]} />
                 )}
               </span>
             )}
-            <span className="text-center text-sm">{notification.message}</span>
+            <span className="text-center text-sm font-medium ui-toast__text">{notification.message}</span>
           </div>
         </div>
       )}
@@ -3262,9 +3315,15 @@ export default function App() {
           );
         })()}
 
-      {screen === 'GAME' && unlockToasts.length > 0 && (
-        <UnlockToastStack
+      {screen === 'GAME' &&
+        unlockToasts.length > 0 &&
+        !showLevelUp &&
+        !showArtifactUnlock &&
+        !isPauseMenuOpen && (
+        <AchievementStack
           toasts={unlockToasts}
+          visible={achievementsVisible}
+          onToggleVisible={toggleAchievementsVisible}
           onDismiss={() => setUnlockToasts((prev) => prev.slice(1))}
         />
       )}
@@ -3388,7 +3447,7 @@ export default function App() {
 
           {(gameStateRef.current?.miniBossIncomingTimer ?? 0) > 0 && (
             <div
-              className="absolute left-1/2 top-[22%] z-25 -translate-x-1/2 pointer-events-none text-center"
+              className="ui-banner-anchor ui-banner-anchor--incoming"
               style={{
                 color: gameStateRef.current?.miniBossIncomingColor ?? '#c084fc',
                 textShadow: `0 0 12px ${gameStateRef.current?.miniBossIncomingColor ?? '#c084fc'}55`,
@@ -3405,7 +3464,7 @@ export default function App() {
 
           {(gameStateRef.current?.miniBossSpawnPopupTimer ?? 0) > 0 && (
             <div
-              className="absolute left-1/2 top-[28%] z-30 -translate-x-1/2 pointer-events-none text-center animate-pulse"
+              className="ui-banner-anchor ui-banner-anchor--spawn animate-pulse"
               style={{
                 color: gameStateRef.current?.miniBossSpawnPopupColor ?? '#c084fc',
                 textShadow: `0 0 16px ${gameStateRef.current?.miniBossSpawnPopupColor ?? '#c084fc'}`,
@@ -3422,7 +3481,7 @@ export default function App() {
 
           {(gameStateRef.current?.miniBossPopupTimer ?? 0) > 0 && (
             <div
-              className="absolute left-1/2 top-[38%] z-30 -translate-x-1/2 pointer-events-none text-center"
+              className="ui-banner-anchor ui-banner-anchor--defeat"
               style={{
                 color: gameStateRef.current?.miniBossPopupColor ?? '#c084fc',
                 textShadow: `0 0 12px ${gameStateRef.current?.miniBossPopupColor ?? '#c084fc'}`,
@@ -3507,7 +3566,12 @@ export default function App() {
                       }`}
                       aria-label="Ultimate"
                     >
-                      <Zap size={touchIconSize} fill={uiState && uiState.ultimateCharge >= 100 ? 'white' : 'rgba(255,255,255,0.2)'} />
+                      <GameIcon
+                        name="ui.ultimate"
+                        size={touchIconSize}
+                        color={uiState && uiState.ultimateCharge >= 100 ? '#fff' : 'rgba(255,255,255,0.35)'}
+                        glow={!!uiState && uiState.ultimateCharge >= 100}
+                      />
                     </motion.button>
                     <motion.div className="relative pointer-events-auto">
                       {uiState && uiState.energy < 30 && (
@@ -3526,7 +3590,12 @@ export default function App() {
                         }`}
                         aria-label="Dash"
                       >
-                        <Zap size={touchIconSize} fill={uiState && uiState.energy >= 30 ? 'white' : 'rgba(255,255,255,0.2)'} />
+                        <GameIcon
+                          name="ui.dash"
+                          size={touchIconSize}
+                          color={uiState && uiState.energy >= 30 ? '#fff' : 'rgba(255,255,255,0.35)'}
+                          glow={!!uiState && uiState.energy >= 30}
+                        />
                       </motion.button>
                     </motion.div>
                   </div>
@@ -3566,13 +3635,18 @@ export default function App() {
                       className="relative rounded-full border-2 flex flex-col items-center justify-center text-white transition-all shadow-lg touch-manipulation min-h-12 min-w-12 bg-cyan-950/60 border-cyan-500"
                       aria-label="Swap Weapon"
                     >
-                      {uiState?.activeWeaponSlot === 'CANNON_A' && <Swords size={20} className="text-cyan-400" />}
-                      {uiState?.activeWeaponSlot === 'CANNON_B' && <Flame size={20} className="text-cyan-400" />}
+                      {uiState?.activeWeaponSlot && (
+                        <GameIcon
+                          name={getSlotIconName(uiState.activeWeaponSlot)}
+                          size={20}
+                          color="#67e8f9"
+                        />
+                      )}
                       <span className="text-[7px] font-mono font-black mt-0.5 text-cyan-200">
                         WPN.{(uiState ? ['CANNON_A', 'CANNON_B'].indexOf(uiState.activeWeaponSlot) + 1 : 1).toString().padStart(2, '0')}
                       </span>
                       <motion.div className="absolute -top-1 -right-1 bg-cyan-900 rounded-full border border-cyan-400/50 p-1">
-                        <RotateCcw size={10} className="text-cyan-400" />
+                        <GameIconFromKey iconKey="RotateCcw" size={10} color="#67e8f9" />
                       </motion.div>
                     </motion.button>
                   </motion.div>
@@ -3615,7 +3689,7 @@ export default function App() {
         viewportProfile={viewportProfile}
       />
 
-      {screen === 'GAME' && (
+      {screen === 'GAME' && !showLevelUp && !showArtifactUnlock && (
         <ArtifactAcquireOverlay event={artifactAcquirePopup} />
       )}
 
@@ -3689,7 +3763,7 @@ export default function App() {
                 onClick={togglePause}
                 className="bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 shadow-lg shadow-blue-500/30 transition-all mt-2"
               >
-                <Play size={24} fill="white" /> RESUME MISSION
+                <GameIcon name="ui.play" size={24} color="#fff" /> RESUME MISSION
               </button>
               <button 
                 onClick={() => {
@@ -3700,7 +3774,7 @@ export default function App() {
                 }}
                 className="bg-white/5 hover:bg-white/10 border border-white/10 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-colors pointer-events-auto"
               >
-                <RotateCcw size={24} /> ABORT TO MENU
+                <GameIconFromKey iconKey="RotateCcw" size={24} color="#f87171" /> ABORT TO MENU
               </button>
             </motion.div>
           </motion.div>

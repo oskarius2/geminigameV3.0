@@ -38,6 +38,7 @@ describe('bossLifecycle', () => {
     });
 
     applyBossDefeatState(s);
+    expect(s.runBossesDefeated).toBe(1);
     expect(s.bossActive).toBe(false);
     expect(s.activeBossId).toBeNull();
     expect(s.inBossArena).toBe(false);

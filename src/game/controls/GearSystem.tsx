@@ -1,15 +1,7 @@
 import React from "react";
 import { motion } from "motion/react";
-import {
-  Swords,
-  Shield,
-  Zap,
-  Info,
-  Gem,
-  Sparkles,
-  Activity,
-  AlertCircle,
-} from "lucide-react";
+import { Info, AlertCircle } from "lucide-react";
+import { GameIcon, getSlotIconName } from "../../components/icons";
 import { SpaceBackground } from '../../components/ui/SpaceBackground';
 import { Artifact, ArtifactSlot, BuffRarity } from "../types";
 import {
@@ -37,12 +29,12 @@ const RARITY_COLORS: Record<BuffRarity, string> = {
   [BuffRarity.MYSTERY]: "border-fuchsia-700 bg-fuchsia-900/10 text-fuchsia-400",
 };
 
-const SLOT_ICONS: Record<ArtifactSlot, React.ReactNode> = {
-  CANNON_A: <Swords size={24} className="text-cyan-400" />,
-  CANNON_B: <Swords size={24} className="text-cyan-400" />,
-  ULTIMATE: <Zap size={24} className="text-fuchsia-400" />,
-  ARMOR: <Shield size={24} className="text-cyan-400" />,
-  MOBILITY: <Zap size={24} className="text-cyan-400" />,
+const SLOT_ICON_COLORS: Record<ArtifactSlot, string> = {
+  CANNON_A: "#00e5ff",
+  CANNON_B: "#7df9ff",
+  ULTIMATE: "#ff2d9b",
+  ARMOR: "#60a5fa",
+  MOBILITY: "#2dd4bf",
 };
 
 const SLOT_LABELS: Record<ArtifactSlot, string> = {
@@ -144,10 +136,11 @@ export const GearSystem: React.FC<GearSystemProps> = ({
                 <div
                   className={`p-1 sm:p-2 rounded sm:rounded-xl ${selectedSlot === slot ? "bg-cyan-500/20" : "bg-white/5"} shrink-0`}
                 >
-                  {React.isValidElement(SLOT_ICONS[slot]) ? 
-                    React.cloneElement(SLOT_ICONS[slot] as React.ReactElement<any>, { size: isMobile ? 12 : 24 }) : 
-                    SLOT_ICONS[slot]
-                  }
+                  <GameIcon
+                    name={getSlotIconName(slot)}
+                    size={isMobile ? 12 : 24}
+                    color={SLOT_ICON_COLORS[slot]}
+                  />
                 </div>
                 <div className="text-[8px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest truncate">
                   {SLOT_LABELS[slot].split(' ')[0]}

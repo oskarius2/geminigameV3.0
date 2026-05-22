@@ -176,41 +176,41 @@ export const RailsHUD: React.FC<RailsHUDProps> = ({
       </div>
 
       {showBossBlock && bossDef && (
-        <div className="absolute left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] w-[min(92vw,22rem)] -translate-x-1/2 text-center">
-          <p
-            className="text-xs font-bold uppercase tracking-[0.35em] text-red-400"
-            style={{ textShadow: '0 0 16px rgba(248, 113, 113, 0.8)' }}
-          >
-            Boss fight
-          </p>
-          <p className="mt-1 text-[11px] font-semibold uppercase tracking-widest text-slate-200">
-            {bossDef.name}
-          </p>
-          <div className="relative mx-auto mt-2 h-2.5 w-full max-w-xs overflow-hidden rounded-full bg-white/15">
-            <div
-              className="h-full rounded-full transition-all duration-150"
-              style={{
-                width: `${bossRatio * 100}%`,
-                background: `linear-gradient(90deg, ${bossDef.colors[0]}, ${bossDef.colors[1]})`,
-                boxShadow: `0 0 12px ${bossDef.colors[0]}88`,
-              }}
-            />
-            {weakPointOpen && (
-              <span
-                className="absolute top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-red-500"
+        <div className="absolute left-1/2 top-[max(0.75rem,env(safe-area-inset-top))] w-[min(80vw,14rem)] -translate-x-1/2 text-center">
+          <div className="boss-hp-hud boss-hp-hud--rails w-full">
+            <p
+              className="boss-hp-hud__label"
+              style={{ textShadow: '0 0 10px rgba(248, 113, 113, 0.6)' }}
+            >
+              Boss fight
+            </p>
+            <p className="boss-hp-hud__subtitle">{bossDef.name}</p>
+            <div className="boss-hp-hud__track relative">
+              <div
+                className="boss-hp-hud__fill"
                 style={{
-                  left: `${bossRatio * 42}%`,
-                  boxShadow: '0 0 10px #ef4444',
+                  width: `${bossRatio * 100}%`,
+                  background: `linear-gradient(90deg, ${bossDef.colors[0]}, ${bossDef.colors[1]})`,
+                  boxShadow: `0 0 8px ${bossDef.colors[0]}66`,
                 }}
-                aria-hidden
               />
+              {weakPointOpen && (
+                <span
+                  className="absolute top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-red-500"
+                  style={{
+                    left: `${bossRatio * 42}%`,
+                    boxShadow: '0 0 8px #ef4444',
+                  }}
+                  aria-hidden
+                />
+              )}
+            </div>
+            {weakPointOpen && (
+              <p className="mt-1 text-[8px] uppercase tracking-widest text-red-300/90">
+                Svag punkt öppen
+              </p>
             )}
           </div>
-          {weakPointOpen && (
-            <p className="mt-1 text-[9px] uppercase tracking-widest text-red-300/90">
-              Svag punkt öppen
-            </p>
-          )}
         </div>
       )}
 

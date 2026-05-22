@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { Shield, Radar, HeartPulse, Crosshair, Lock, Sparkles } from 'lucide-react';
+import { Lock } from 'lucide-react';
+import { GameIcon, getCompanionIconName } from './icons';
 import { Panel } from './ui/Panel';
 import { SpaceBackground } from './ui/SpaceBackground';
 import { PrimaryButton } from './ui/PrimaryButton';
@@ -39,11 +40,8 @@ const ROLE_LABELS: Record<CompanionDef['role'], string> = {
 };
 
 function CompanionIcon({ id }: { id: CompanionId }) {
-  const size = 22;
-  if (id === 'guardian') return <Shield size={size} />;
-  if (id === 'scout') return <Radar size={size} />;
-  if (id === 'healer') return <HeartPulse size={size} />;
-  return <Crosshair size={size} />;
+  const color = COMPANION_COLORS[id];
+  return <GameIcon name={getCompanionIconName(id)} size={22} color={color} glow />;
 }
 
 interface CompanionCardProps {
@@ -109,7 +107,7 @@ function CompanionCard({
               </h2>
               {isNew && unlocked && (
                 <span className="flex items-center gap-0.5 text-[9px] font-black uppercase text-amber-300">
-                  <Sparkles size={9} /> NEW
+                  <GameIcon name="ui.sparkles" size={9} color="#fcd34d" /> NEW
                 </span>
               )}
               <span

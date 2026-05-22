@@ -6,12 +6,14 @@ import {
   ensureCompanionRuntime,
   getCompanionHudSnapshot,
   getTargetSelectionStrategy,
+  resolveScoutMoveTarget,
   selectClosestEnemy,
   selectHighestThreat,
   selectTarget,
   updateCompanionPosition,
   shouldUseActiveAbility,
 } from './companionAI';
+import { fromGameState } from './companionGameState';
 import { CompanionType, createCompanionInstance, getCompanionDef } from './companionDefs';
 import { CompanionAIState } from './companionTypes';
 
@@ -157,5 +159,69 @@ describe('companionAI', () => {
     const instance = createCompanionInstance('healer', 1);
     const def = getCompanionDef(CompanionType.HEALER)!;
     expect(selectTarget(instance, state, def)).toBeNull();
+  });
+
+  it('resolveScoutMoveTarget predicts ahead when player dashes', () => {
+    const app = mockState({
+      activeCompanionId: 'scout',
+      isDashing: true,
+      player: {
+        id: 'player',
+        type: EntityType.PLAYER,
+        pos: new Vector2(600, 0),
+        radius: 20,
+        health: 100,
+        maxHealth: 100,
+        speed: 100,
+        velocity: new Vector2(1200, 0),
+        color: '#0ff',
+        aimDir: new Vector2(1, 0),
+      },
+    });
+    const gs = fromGameState(app);
+    const rt = ensureCompanionRuntime(gs)!;
+    rt.pos = new Vector2(400, 0);
+    rt.scoutTrack = {
+      lastPlayerPos: new Vector2(0, 0),
+      lastKnownPosition: new Vector2(0, 0),
+      lastPlayerVelocity: new Vector2(0, 0),
+      lostTrackTime: 0,
+    };
+    const roleTarget = new Vector2(50, 0);
+    const goal = resolveScoutMoveTarget(rt, gs, roleTarget, 1 / 60);
+    expect(goal.x).toBeGreaterThan(600);
+    expect(goal.y).toBe(0);
+  });
+
+  it('resolveScoutMoveTarget uses last known position when far during dash', () => {
+    const app = mockState({
+      activeCompanionId: 'scout',
+      isDashing: true,
+      player: {
+        id: 'player',
+        type: EntityType.PLAYER,
+        pos: new Vector2(800, 0),
+        radius: 20,
+        health: 100,
+        maxHealth: 100,
+        speed: 100,
+        velocity: new Vector2(1200, 0),
+        color: '#0ff',
+        aimDir: new Vector2(1, 0),
+      },
+    });
+    const gs = fromGameState(app);
+    const rt = ensureCompanionRuntime(gs)!;
+    rt.pos = new Vector2(0, 0);
+    rt.scoutTrack = {
+      lastPlayerPos: new Vector2(100, 0),
+      lastKnownPosition: new Vector2(100, 0),
+      lastPlayerVelocity: new Vector2(0, 0),
+      lostTrackTime: 0,
+    };
+    const goal = resolveScoutMoveTarget(rt, gs, new Vector2(0, 0), 1 / 60);
+    expect(goal.x).toBe(100);
+    expect(goal.y).toBe(0);
+    expect(rt.scoutTrack!.lostTrackTime).toBeGreaterThan(0);
   });
 });

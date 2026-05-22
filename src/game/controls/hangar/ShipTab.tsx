@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Crosshair, Rocket, Bot, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
+import { GameIcon, getShipIconName } from '../../../components/icons';
 import {
   SHIP_DEFINITIONS,
   SHIP_IDS,
@@ -11,9 +12,10 @@ import { ShipId } from '../../types';
 const BASELINE = { hp: 450, speed: 9, damage: 18, fireRate: 1 };
 
 function ShipIcon({ id, size = 32 }: { id: ShipId; size?: number }) {
-  if (id === 'interceptor') return <Rocket size={size} className="text-blue-400" />;
-  if (id === 'gunship') return <Crosshair size={size} className="text-red-500" />;
-  return <Bot size={size} className="text-gray-200" />;
+  const ship = SHIP_DEFINITIONS[id];
+  return (
+    <GameIcon name={getShipIconName(id)} size={size} color={ship.color} glow />
+  );
 }
 
 function rarityStars(ship: ShipDef): number {
