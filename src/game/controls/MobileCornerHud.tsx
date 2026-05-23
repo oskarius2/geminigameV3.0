@@ -115,8 +115,12 @@ export function MobileCornerHud({
 }: MobileCornerHudProps) {
   const isLandscape = hudVariant === 'landscape';
   const joystickSize = getJoystickSize(viewportProfile, viewportW, viewportH);
-  const collapsedInset = joystickSize + 40;
-  const expandedInset = joystickSize + (isLandscape ? 88 : 108);
+  // The joystick container sits at (joystickSize + 12)px from screen bottom.
+  // The joystick circle itself extends joystickSize px upward from there.
+  // So the top of the joystick circle = 2*joystickSize + 12 from screen bottom.
+  // Add 16px gap so the dock clears the joystick circle cleanly.
+  const collapsedInset = 2 * joystickSize + 28;
+  const expandedInset = 2 * joystickSize + (isLandscape ? 76 : 96);
   const dockBottom = loadoutExpanded ? expandedInset : collapsedInset;
 
   const style = useMemo(
