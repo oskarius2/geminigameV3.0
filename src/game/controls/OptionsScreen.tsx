@@ -5,7 +5,6 @@ import { SpaceBackground } from '../../components/ui/SpaceBackground';
 import { GhostButton } from '../../components/ui/GhostButton';
 import { PrimaryButton } from '../../components/ui/PrimaryButton';
 import { TacticalFrame } from '../../components/ui/TacticalFrame';
-import { AudioSettingsPanel } from '../ui/AudioSettingsPanel';
 import {
   ALL_KEYBIND_ACTIONS,
   DEFAULT_KEYBINDS,
@@ -242,49 +241,61 @@ export function OptionsScreen({
 
           {tab === 'audio' && (
             <div className="space-y-4">
-            <AudioSettingsPanel />
-            <TacticalFrame size="md" glow className="p-5 space-y-5">
-              <div>
-                <label className="hud-micro-label">SFX volume</label>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={Math.round(sfxVolume * 100)}
-                  onChange={(e) => onSfxVolume(Number(e.target.value) / 100)}
-                  className="w-full mt-2 accent-cyan-400"
-                />
-                <label className="mt-3 flex items-center gap-2 text-sm text-white/80 cursor-pointer">
+              <TacticalFrame size="md" glow className="p-5 space-y-5">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="hud-micro-label">SFX volume</label>
+                    <span className="font-mono text-[10px] text-cyan-400/70 tabular-nums">
+                      {sfxMuted ? 'MUTED' : `${Math.round(sfxVolume * 100)}%`}
+                    </span>
+                  </div>
                   <input
-                    type="checkbox"
-                    checked={sfxMuted}
-                    onChange={(e) => onSfxMuted(e.target.checked)}
-                    className="accent-cyan-500"
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(sfxVolume * 100)}
+                    onChange={(e) => onSfxVolume(Number(e.target.value) / 100)}
+                    disabled={sfxMuted}
+                    className="w-full mt-1 accent-cyan-400 disabled:opacity-40"
                   />
-                  Mute SFX
-                </label>
-              </div>
-              <div className="pt-2 border-t border-white/10">
-                <label className="hud-micro-label">Music volume</label>
-                <input
-                  type="range"
-                  min={0}
-                  max={100}
-                  value={Math.round(musicVolume * 100)}
-                  onChange={(e) => onMusicVolume(Number(e.target.value) / 100)}
-                  className="w-full mt-2 accent-fuchsia-500"
-                />
-                <label className="mt-3 flex items-center gap-2 text-sm text-white/80 cursor-pointer">
+                  <label className="mt-3 flex items-center gap-2 text-sm text-white/75 cursor-pointer select-none min-h-touch">
+                    <input
+                      type="checkbox"
+                      checked={sfxMuted}
+                      onChange={(e) => onSfxMuted(e.target.checked)}
+                      className="accent-cyan-500 w-4 h-4"
+                    />
+                    Mute SFX
+                  </label>
+                </div>
+
+                <div className="pt-3 border-t border-white/10">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="hud-micro-label">Music volume</label>
+                    <span className="font-mono text-[10px] text-fuchsia-400/70 tabular-nums">
+                      {musicMuted ? 'MUTED' : `${Math.round(musicVolume * 100)}%`}
+                    </span>
+                  </div>
                   <input
-                    type="checkbox"
-                    checked={musicMuted}
-                    onChange={(e) => onMusicMuted(e.target.checked)}
-                    className="accent-fuchsia-500"
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={Math.round(musicVolume * 100)}
+                    onChange={(e) => onMusicVolume(Number(e.target.value) / 100)}
+                    disabled={musicMuted}
+                    className="w-full mt-1 accent-fuchsia-500 disabled:opacity-40"
                   />
-                  Mute music
-                </label>
-              </div>
-            </TacticalFrame>
+                  <label className="mt-3 flex items-center gap-2 text-sm text-white/75 cursor-pointer select-none min-h-touch">
+                    <input
+                      type="checkbox"
+                      checked={musicMuted}
+                      onChange={(e) => onMusicMuted(e.target.checked)}
+                      className="accent-fuchsia-500 w-4 h-4"
+                    />
+                    Mute music
+                  </label>
+                </div>
+              </TacticalFrame>
             </div>
           )}
 

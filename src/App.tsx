@@ -225,7 +225,7 @@ import {
   getSfxVolume,
   resumeAudio,
 } from './game/audio/sfx';
-import { startMusic, stopMusic, duckMusic, loadMusicSettings, setMusicMuted, setMusicVolume } from './game/audio/music';
+import { startMusic, stopMusic, duckMusic, loadMusicSettings, setMusicMuted, setMusicVolume, getMusicVolume } from './game/audio/music';
 import { AudioManager } from './game/audio/AudioManager';
 import { useAudioManager } from './game/audio/useAudioManager';
 import {
@@ -658,6 +658,7 @@ export default function App() {
     setSfxMutedState(localStorage.getItem('sfxMuted') === '1');
     setMusicMutedState(localStorage.getItem('musicMuted') === '1');
     setSfxVol(getSfxVolume());
+    setMusicVol(getMusicVolume());
     const applyViewport = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -4063,6 +4064,7 @@ export default function App() {
             onMusicMuted={(m) => {
               setMusicMutedState(m);
               setMusicMuted(m);
+              AudioManager.setMuted(m);
               if (m) {
                 AudioManager.stopAllMusic();
                 stopMusic();
