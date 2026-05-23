@@ -523,6 +523,11 @@
   transition: width 0.05s linear;
 }
 
+.weapon-hud__slot--switching {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 /* --- Z-index: HUD ~50, vignette 8, achievements 170, artifact toast 175, modals 200+ --- */
 
 /* --- Achievement stack — right column, below score (never center) --- */

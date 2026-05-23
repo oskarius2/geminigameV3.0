@@ -479,7 +479,6 @@ export default function App() {
     return {
       CANNON_A: 'iron_sights',
       CANNON_B: 'backup_cannon',
-      CANNON_C: null,
       ULTIMATE: null,
       ARMOR: 'basic_hull',
       MOBILITY: 'basic_thrusters',
@@ -2167,11 +2166,6 @@ export default function App() {
            size: 3,
            decay: 1.0
         });
-
-        if (next.activeWeaponSlot === 'CANNON_C') {
-          // Cannon particles are larger
-          next.screenshake = Math.min(next.screenshake + 1.0, 3.5);
-        }
 
         if (next.hasBackshot) {
           const backAngle = Math.atan2(-aimDir.y, -aimDir.x);
