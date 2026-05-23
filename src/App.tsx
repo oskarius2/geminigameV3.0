@@ -3815,7 +3815,7 @@ export default function App() {
                   : 'bottom-6 right-6 md:bottom-10 md:right-10';
             const moveCornerStyle = safeCorner ? touchBottomStyle : undefined;
             const aimCornerStyle = safeCorner ? touchBottomStyle : undefined;
-            const actionStackClass = landscapeHud ? 'flex flex-col gap-2 mb-1' : 'flex gap-3 mb-2';
+            const actionStackClass = landscapeHud ? 'flex gap-1 mb-1' : 'flex gap-3 mb-2';
 
             return (
               <>

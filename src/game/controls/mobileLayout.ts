@@ -103,7 +103,7 @@ export function getJoystickSize(profile: ViewportProfile, w?: number, h?: number
   if (variant === 'landscape') return 100;
   switch (profile) {
     case 'phone-portrait':
-      return PHONE_JOYSTICK_PX;
+      return 100;
     case 'phone-landscape':
       return PHONE_JOYSTICK_PX;
     case 'tablet':

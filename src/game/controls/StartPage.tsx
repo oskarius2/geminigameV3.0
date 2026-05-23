@@ -133,7 +133,7 @@ export const StartPage: React.FC<StartPageProps> = ({
 
   return (
     <div
-      className="absolute inset-0 z-[500] overflow-hidden flex flex-col items-center justify-center bg-[var(--bg-void)]"
+      className="absolute inset-0 z-[500] overflow-y-auto flex flex-col items-center justify-start bg-[var(--bg-void)]"
       style={{
         paddingTop: 'max(0.5rem, env(safe-area-inset-top))',
         paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))',
@@ -175,12 +175,12 @@ export const StartPage: React.FC<StartPageProps> = ({
         SYS·v{APP_VERSION}
       </div>
 
-      <div className="relative z-10 flex flex-col items-center w-full max-w-[260px] px-2">
+      <div className="relative z-10 flex flex-col items-center w-full max-w-xs px-1 my-auto py-6">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55 }}
-          className="text-center mb-8 sm:mb-10"
+          className="text-center mb-5 sm:mb-8"
         >
           <div className="badge-tactical mb-5 mx-auto">
             <span className="data-blink text-[#00e5ff]" aria-hidden>
@@ -189,7 +189,7 @@ export const StartPage: React.FC<StartPageProps> = ({
             Neural Combat System
           </div>
 
-          <h1 className="title-hero logo-pulse text-glitch text-center" style={{ fontSize: 'clamp(2.6rem, 11vw, 5.2rem)' }}>
+          <h1 className="title-hero logo-pulse text-glitch text-center" style={{ fontSize: 'clamp(2rem, 11vw, 5.2rem)' }}>
             SPACE
             <br />
             <span style={{ color: 'var(--color-gold)' }}>HERO</span>
