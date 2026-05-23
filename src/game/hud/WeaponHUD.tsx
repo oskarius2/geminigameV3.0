@@ -66,7 +66,7 @@ export function WeaponHUD({
         aria-label={
           !secondary?.isUnlocked
             ? 'Weapon 2 locked'
-            : `Weapon 2, ${secondary.magazineLoaded} in magazine, ${secondary.ammoReserve} reserve`
+            : `Weapon 2, ${secondary.ammoLoaded} in magazine, ${secondary.ammoReserve} reserve`
         }
       >
         <span className="weapon-hud__label">WPN 2</span>
@@ -74,7 +74,7 @@ export function WeaponHUD({
           <span className="weapon-hud__ammo weapon-hud__ammo--locked">LOCKED</span>
         ) : (
           <span className="weapon-hud__ammo">
-            {secondary.magazineLoaded}/{secondary.ammoReserve}
+            {secondary.ammoLoaded}/{secondary.ammoReserve}
           </span>
         )}
         {secondaryDef && secondary?.isUnlocked && !compact && (

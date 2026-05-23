@@ -37,7 +37,7 @@
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
-  bottom: max(var(--hud-dock-bottom, 100px), calc(env(safe-area-inset-bottom) + 88px));
+  bottom: calc(var(--hud-dock-bottom, 100px) + env(safe-area-inset-bottom, 0px));
   z-index: 20;
   width: min(80vw, 280px);
   max-width: 280px;
@@ -121,7 +121,7 @@
 }
 
 .game-hud--landscape.game-hud--corners .game-hud__corner-bottom {
-  bottom: max(var(--hud-dock-bottom, 88px), calc(env(safe-area-inset-bottom) + 76px));
+  bottom: calc(var(--hud-dock-bottom, 88px) + env(safe-area-inset-bottom, 0px));
 }
 
 .game-hud--corners button,

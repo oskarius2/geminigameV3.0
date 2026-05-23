@@ -2,27 +2,27 @@ import { EnemyType, Entity, GameState } from '../types';
 
 /** Max simultaneous enemies per type at full level progress. */
 export const BASE_TYPE_CAPS: Partial<Record<EnemyType, number>> = {
-  [EnemyType.CHASER]: 8,
-  [EnemyType.FAST]: 10,
-  [EnemyType.SWARMER]: 8,
-  [EnemyType.RANGED]: 8,
-  [EnemyType.WRAITH]: 5,
-  [EnemyType.ELITE]: 5,
-  [EnemyType.SPLINTER]: 4,
-  [EnemyType.NOVA]: 4,
-  [EnemyType.SNIPER]: 3,
-  [EnemyType.PHALANX]: 3,
-  [EnemyType.TANK]: 2,
+  [EnemyType.CHASER]:      10,
+  [EnemyType.FAST]:        12,
+  [EnemyType.SWARMER]:     10,
+  [EnemyType.RANGED]:       8,
+  [EnemyType.WRAITH]:       6,
+  [EnemyType.ELITE]:        5,
+  [EnemyType.SPLINTER]:     5,
+  [EnemyType.NOVA]:         4,
+  [EnemyType.SNIPER]:       3,
+  [EnemyType.PHALANX]:      3,
+  [EnemyType.TANK]:         2,
   // New variants
-  [EnemyType.DASHER]: 8,
-  [EnemyType.PHANTOM]: 4,
-  [EnemyType.ZAPPER]: 6,
-  [EnemyType.STRIKER]: 5,
-  [EnemyType.SWARM_V2]: 10,
-  [EnemyType.TRACKER]: 3,
-  [EnemyType.FORTIFIED]: 2,
-  [EnemyType.SHIELDED]: 4,
-  [EnemyType.REGENERATING]: 3,
+  [EnemyType.DASHER]:      10,
+  [EnemyType.PHANTOM]:      5,
+  [EnemyType.ZAPPER]:       8,
+  [EnemyType.STRIKER]:      6,
+  [EnemyType.SWARM_V2]:    14,
+  [EnemyType.TRACKER]:      4,
+  [EnemyType.FORTIFIED]:    2,
+  [EnemyType.SHIELDED]:     5,
+  [EnemyType.REGENERATING]: 4,
 };
 
 /** Maps spawnEnemy switch index → EnemyType (must match Logic.ts). */
@@ -54,7 +54,8 @@ export const PICK_TO_TYPE: Record<number, EnemyType> = {
 export function getEffectiveTypeCap(type: EnemyType, levelProgress: number): number {
   const base = BASE_TYPE_CAPS[type];
   if (base === undefined) return 999;
-  const scale = 0.25 + 0.75 * Math.max(0, Math.min(1, levelProgress));
+  // Min 50% of cap from the start so waves feel populated immediately
+  const scale = 0.5 + 0.5 * Math.max(0, Math.min(1, levelProgress));
   return Math.max(1, Math.ceil(base * scale));
 }
 
@@ -80,32 +81,34 @@ export function isPickAtCap(
 function buildCandidatePicks(threatLevel: number, stage = 1): number[] {
   const t = threatLevel;
   if (stage <= 1) {
-    return [7, 7, 7, 7];
+    // Stage 1: Mostly chasers + a few fast ones for variety
+    return [7, 7, 7, 9, 9, 10];
   }
   if (stage === 2) {
-    return [7, 7, 6, 6, 9, 9];
+    // Stage 2: CHASER, RANGED, FAST, DASHER for more interesting mix
+    return [7, 7, 6, 6, 9, 9, 12, 12, 10];
   }
   return [
     9, 9,
     10, 10,
     7, 7,
-    12, 12,   // DASHER — available from the start
-    16, 16,   // SWARM_V2 — always present
-    ...(t >= 15 ? [6] : []),
-    ...(t >= 15 ? [14] : []),  // ZAPPER
-    ...(t >= 25 ? [2] : []),
-    ...(t >= 30 ? [19] : []),  // SHIELDED
-    ...(t >= 35 ? [3] : []),
-    ...(t >= 35 ? [13] : []),  // PHANTOM
-    ...(t >= 40 ? [15] : []),  // STRIKER
-    ...(t >= 45 ? [4] : []),
-    ...(t >= 50 ? [17] : []),  // TRACKER
-    ...(t >= 55 ? [5] : []),
-    ...(t >= 55 ? [20] : []),  // REGENERATING
-    ...(t >= 60 ? [18] : []),  // FORTIFIED
-    ...(t >= 65 ? [11] : []),
-    ...(t >= 75 ? [1] : []),
-    ...(t >= 88 ? [0] : []),
+    12, 12,   // DASHER
+    16, 16,   // SWARM_V2
+    ...(t >= 10 ? [6]  : []),  // RANGED (lower threshold)
+    ...(t >= 10 ? [14] : []),  // ZAPPER (lower threshold)
+    ...(t >= 20 ? [2]  : []),  // WRAITH
+    ...(t >= 25 ? [19] : []),  // SHIELDED
+    ...(t >= 30 ? [3]  : []),  // ELITE
+    ...(t >= 30 ? [13] : []),  // PHANTOM
+    ...(t >= 35 ? [15] : []),  // STRIKER
+    ...(t >= 40 ? [4]  : []),  // SPLINTER
+    ...(t >= 45 ? [17] : []),  // TRACKER
+    ...(t >= 50 ? [5]  : []),  // NOVA
+    ...(t >= 50 ? [20] : []),  // REGENERATING
+    ...(t >= 58 ? [18] : []),  // FORTIFIED
+    ...(t >= 62 ? [11] : []),  // SNIPER
+    ...(t >= 72 ? [1]  : []),  // PHALANX
+    ...(t >= 85 ? [0]  : []),  // CHASER (pick 0 variant)
   ];
 }
 

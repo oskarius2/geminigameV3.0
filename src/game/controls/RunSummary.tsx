@@ -68,7 +68,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 z-[100] overflow-hidden flex flex-col items-center justify-center p-6 overflow-y-auto"
+      className="absolute inset-0 z-[100] flex flex-col items-center justify-start overflow-y-auto p-3 sm:p-6 pt-6"
       style={{
         background: victory
           ? 'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(6,182,212,0.1) 0%, transparent 70%), #020617'
@@ -94,7 +94,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
       <p className="font-mono text-[11px] uppercase tracking-[0.38em] text-cyan-400/65 mb-6">{buildName}</p>
 
       <motion.div initial={{ scale: 0.96, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-      <TacticalFrame size="lg" glow gold={victory} className="w-full max-w-md p-6 mb-8 space-y-4">
+      <TacticalFrame size="lg" glow gold={victory} className="w-full max-w-md p-3 sm:p-6 mb-4 sm:mb-8 space-y-3 sm:space-y-4">
         <div className="text-center">
           <p className="text-4xl font-black text-white">{state.score.toLocaleString()}</p>
           <p className="text-white/40 text-[10px] uppercase font-bold tracking-widest">Score</p>
@@ -224,7 +224,7 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
       </TacticalFrame>
       </motion.div>
 
-      <motion.div className="flex flex-col gap-3 w-full max-w-sm px-4">
+      <motion.div className="flex flex-col gap-3 w-full max-w-sm px-2 sm:px-4 pb-6">
         <PrimaryButton variant="accent" onClick={onRestart} className="!w-full">
           <GameIconFromKey iconKey="RotateCcw" size={16} color="#7df9ff" />
           New Run

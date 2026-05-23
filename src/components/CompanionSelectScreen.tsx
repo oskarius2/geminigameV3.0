@@ -264,7 +264,7 @@ export function CompanionSelectScreen({ onConfirm, onBack }: CompanionSelectScre
             </p>
           )}
           <PrimaryButton
-            className="!w-auto min-w-[200px] px-8 sm:ml-auto"
+            className="w-full sm:w-auto sm:min-w-[200px] px-8 sm:ml-auto"
             onClick={() => onConfirm(selected)}
           >
             Launch with drone

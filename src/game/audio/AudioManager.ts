@@ -93,27 +93,27 @@ function createManaged(
 }
 
 const MUSIC: Record<MusicKey, ManagedSound> = {
-  menuTheme: createManaged(['/audio/music/menu-boombap.mp3'], {
+  menuTheme: createManaged(['/audio/music/menu-boombap.wav', '/audio/music/menu-boombap.mp3'], {
     loop: true,
     volume: 0.5,
   }),
-  battleStage1: createManaged(['/audio/music/battle-loop-stage1.mp3'], {
+  battleStage1: createManaged(['/audio/music/battle-loop-stage1.wav', '/audio/music/battle-loop-stage1.mp3'], {
     loop: true,
     volume: 0.4,
   }),
-  battleStage3: createManaged(['/audio/music/battle-loop-stage3.mp3'], {
+  battleStage3: createManaged(['/audio/music/battle-loop-stage3.wav', '/audio/music/battle-loop-stage3.mp3'], {
     loop: true,
     volume: 0.4,
   }),
-  battleStage5: createManaged(['/audio/music/battle-loop-stage5.mp3'], {
+  battleStage5: createManaged(['/audio/music/battle-loop-stage5.wav', '/audio/music/battle-loop-stage5.mp3'], {
     loop: true,
     volume: 0.4,
   }),
-  bossTheme: createManaged(['/audio/music/boss-theme.mp3'], {
+  bossTheme: createManaged(['/audio/music/boss-theme.wav', '/audio/music/boss-theme.mp3'], {
     loop: true,
     volume: 0.45,
   }),
-  victorySfx: createManaged(['/audio/music/victory-stab.mp3'], {
+  victorySfx: createManaged(['/audio/music/victory-stab.wav', '/audio/music/victory-stab.mp3'], {
     volume: 0.7,
   }),
 };
@@ -266,12 +266,23 @@ function playMusicKey(key: MusicKey): void {
   if (currentMusicKey === key) return;
   AudioManager.stopAllMusic();
   const track = MUSIC[key];
-  if (!canPlay(track)) {
+  if (track.failed) {
     currentMusicKey = null;
     return;
   }
-  playManaged(track, 'music');
+  // Record intent so the load-listener can verify it's still wanted
   currentMusicKey = key;
+  if (!track.loaded) {
+    // File still loading — play as soon as it's ready
+    track.howl.once('load', () => {
+      if (currentMusicKey === key && !audioSettings.isMuted) {
+        playManaged(track, 'music');
+      }
+    });
+    return;
+  }
+  if (effectiveMaster() <= 0) return;
+  playManaged(track, 'music');
 }
 
 export const AudioManager = {

@@ -225,7 +225,7 @@ import {
   getSfxVolume,
   resumeAudio,
 } from './game/audio/sfx';
-import { startMusic, stopMusic, duckMusic, loadMusicSettings, setMusicMuted, setMusicVolume } from './game/audio/music';
+import { startMusic, stopMusic, duckMusic, loadMusicSettings, setMusicMuted, setMusicVolume, getMusicVolume } from './game/audio/music';
 import { AudioManager } from './game/audio/AudioManager';
 import { useAudioManager } from './game/audio/useAudioManager';
 import {
@@ -479,7 +479,6 @@ export default function App() {
     return {
       CANNON_A: 'iron_sights',
       CANNON_B: 'backup_cannon',
-      CANNON_C: null,
       ULTIMATE: null,
       ARMOR: 'basic_hull',
       MOBILITY: 'basic_thrusters',
@@ -659,6 +658,7 @@ export default function App() {
     setSfxMutedState(localStorage.getItem('sfxMuted') === '1');
     setMusicMutedState(localStorage.getItem('musicMuted') === '1');
     setSfxVol(getSfxVolume());
+    setMusicVol(getMusicVolume());
     const applyViewport = () => {
       const w = window.innerWidth;
       const h = window.innerHeight;
@@ -2167,11 +2167,6 @@ export default function App() {
            size: 3,
            decay: 1.0
         });
-
-        if (next.activeWeaponSlot === 'CANNON_C') {
-          // Cannon particles are larger
-          next.screenshake = Math.min(next.screenshake + 1.0, 3.5);
-        }
 
         if (next.hasBackshot) {
           const backAngle = Math.atan2(-aimDir.y, -aimDir.x);
@@ -3794,11 +3789,15 @@ export default function App() {
             );
             const stackedTouch = hudVar === 'phone-narrow' || hudVar === 'compact';
             const safeCorner = compactHud || landscapeHud;
-            const touchBottomStyle: React.CSSProperties | undefined = stackedTouch
+            // stackedTouch (portrait/narrow): lift joystick above its own height + container offset.
+            // landscape (safeCorner but not stackedTouch): anchor to screen bottom with safe-area only.
+            const touchBottomStyle: React.CSSProperties = stackedTouch
               ? {
                   bottom: `max(${joystickSize + 12}px, calc(env(safe-area-inset-bottom) + ${joystickSize + 8}px))`,
                 }
-              : undefined;
+              : {
+                  bottom: `max(8px, env(safe-area-inset-bottom))`,
+                };
             const moveCornerClass =
               mobileLayout === 'LEFT_HANDED'
                 ? safeCorner
@@ -3815,11 +3814,9 @@ export default function App() {
                 : safeCorner
                   ? 'right-[max(0.5rem,env(safe-area-inset-right))]'
                   : 'bottom-6 right-6 md:bottom-10 md:right-10';
-            const moveCornerStyle =
-              safeCorner && touchBottomStyle ? touchBottomStyle : undefined;
-            const aimCornerStyle =
-              safeCorner && touchBottomStyle ? touchBottomStyle : undefined;
-            const actionStackClass = landscapeHud ? 'flex flex-col gap-2 mb-1' : 'flex gap-3 mb-2';
+            const moveCornerStyle = safeCorner ? touchBottomStyle : undefined;
+            const aimCornerStyle = safeCorner ? touchBottomStyle : undefined;
+            const actionStackClass = landscapeHud ? 'flex gap-1 mb-1' : 'flex gap-3 mb-2';
 
             return (
               <>
@@ -4067,6 +4064,7 @@ export default function App() {
             onMusicMuted={(m) => {
               setMusicMutedState(m);
               setMusicMuted(m);
+              AudioManager.setMuted(m);
               if (m) {
                 AudioManager.stopAllMusic();
                 stopMusic();

@@ -140,14 +140,14 @@ export function HangarScreen({
           {survivalMode ? (
             <PrimaryButton
               variant="accent"
-              className="!w-auto min-w-[200px] px-8"
+              className="w-full sm:w-auto sm:min-w-[200px] px-8"
               disabled={!selectedShip}
               onClick={() => selectedShip && onConfirmLaunch(selectedShip)}
             >
               Confirm and Launch
             </PrimaryButton>
           ) : (
-            <PrimaryButton variant="primary" className="!w-auto min-w-[160px] px-6" onClick={onBack}>
+            <PrimaryButton variant="primary" className="w-full sm:w-auto sm:min-w-[160px] px-6" onClick={onBack}>
               Done
             </PrimaryButton>
           )}

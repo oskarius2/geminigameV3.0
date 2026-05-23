@@ -56,5 +56,56 @@ export function tickSurvivalBossPattern(
       count: 5,
     });
     state.screenFlash = Math.max(state.screenFlash, 1);
+    return;
+  }
+
+  if (pattern === 'swarm_crown') {
+    if ((enemy.bossPatternTimer ?? 0) > 0) return;
+    enemy.bossPatternTimer = 40;
+    const baseAngle = Math.atan2(dy, dx);
+    // 4-shot spread arc of fast small projectiles
+    for (let i = 0; i < 4; i++) {
+      const offset = (i / 3 - 0.5) * 1.1;
+      fireAtPlayer(state, enemy, baseAngle + offset, {
+        speed: 5.5,
+        radius: 7,
+        color: '#86efac',
+        damage: (enemy.damage ?? 25) * 0.7,
+        spread: 0.04,
+        count: 1,
+      });
+    }
+    state.screenshake = Math.min(8, state.screenshake + 2);
+    return;
+  }
+
+  if (pattern === 'wraith_blink') {
+    if ((enemy.bossPatternTimer ?? 0) > 0) return;
+    enemy.bossPatternTimer = 60;
+    // Teleport to a random position in the arena close to the player
+    const arenaW = state.world.width;
+    const arenaH = state.world.height;
+    const margin = 120;
+    const newX = margin + Math.random() * (arenaW - margin * 2);
+    const newY = margin + Math.random() * (arenaH - margin * 2);
+    enemy.pos.x = newX;
+    enemy.pos.y = newY;
+    // Brief invulnerability flash
+    enemy.hitTimer = Math.max(enemy.hitTimer ?? 0, 18);
+    state.screenshake = Math.min(10, state.screenshake + 3);
+    // Fire a ring of ghost shots after blink
+    const ringCount = 8;
+    for (let i = 0; i < ringCount; i++) {
+      const a = (i / ringCount) * Math.PI * 2;
+      fireAtPlayer(state, enemy, a, {
+        speed: 3.5,
+        radius: 9,
+        color: '#e9d5ff',
+        damage: (enemy.damage ?? 30) * 0.6,
+        spread: 0,
+        count: 1,
+      });
+    }
+    return;
   }
 }
