@@ -1404,52 +1404,196 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
         ctx.stroke();
         break;
 
-      case EnemyType.BOSS:
-        // Huge menacing dark star (multi-layered)
-        ctx.beginPath();
-        for (let i = 0; i < 16; i++) {
-          const ang = (i * Math.PI * 2) / 16 + time * 0.5;
-          const r = i % 2 === 0 ? radius * 1.5 : radius * 0.9;
-          const px = Math.cos(ang) * r;
-          const py = Math.sin(ang) * r;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-        ctx.fillStyle = hitIntensity > 0 ? '#ffffff' : '#0f172a'; 
-        ctx.fill();
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = '#ef4444';
-        ctx.stroke();
+      case EnemyType.BOSS: {
+        const bossId = state.activeBossId ?? 'default';
+        type BossColorSet = { fill: string; stroke: string; accent: string; orb: string };
+        const bossColorMap: Record<string, BossColorSet> = {
+          salvage_hauler: { fill: '#0f172a', stroke: '#94a3b8', accent: '#fbbf24', orb: '#fbbf24' },
+          void_cardinal:  { fill: '#1e1b4b', stroke: '#6366f1', accent: '#a5b4fc', orb: '#818cf8' },
+          crimson_tyrant: { fill: '#450a0a', stroke: '#dc2626', accent: '#fca5a5', orb: '#ef4444' },
+          colossus:       { fill: '#1c1917', stroke: '#78716c', accent: '#f97316', orb: '#fb923c' },
+          hive_regent:    { fill: '#052e16', stroke: '#22c55e', accent: '#86efac', orb: '#4ade80' },
+          hive_queen:     { fill: '#052e16', stroke: '#16a34a', accent: '#86efac', orb: '#4ade80' },
+          wraith_lord:    { fill: '#3b0764', stroke: '#a855f7', accent: '#e9d5ff', orb: '#c084fc' },
+        };
+        const bc: BossColorSet = bossColorMap[bossId] ?? { fill: '#0f172a', stroke: '#ef4444', accent: '#fca5a5', orb: '#ff4400' };
+        const bFill   = hitIntensity > 0 ? '#ffffff' : bc.fill;
+        const bStroke = hitIntensity > 0 ? '#ffffff' : bc.stroke;
 
-        // Inner core
+        // ── Boss body shape (unique per boss) ──────────────────────
+        if (bossId === 'salvage_hauler') {
+          ctx.beginPath();
+          for (let i = 0; i < 16; i++) {
+            const ang = (i * Math.PI * 2) / 16 + time * 0.32;
+            const r = i % 2 === 0 ? radius * 1.35 : radius * 0.82;
+            if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+            else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+          }
+          ctx.closePath();
+          ctx.fillStyle = bFill; ctx.fill();
+          ctx.lineWidth = 5; ctx.strokeStyle = bStroke; ctx.stroke();
+          if (hitIntensity <= 0) {
+            for (let i = 0; i < 4; i++) {
+              const a = (i / 4) * Math.PI * 2 + time * 0.32;
+              ctx.save(); ctx.rotate(a);
+              ctx.fillStyle = bc.accent;
+              ctx.fillRect(radius * 1.35, -7, 16, 14);
+              ctx.restore();
+            }
+          }
+        } else if (bossId === 'void_cardinal') {
+          ctx.beginPath();
+          for (let i = 0; i < 32; i++) {
+            const ang = (i * Math.PI * 2) / 32 + time * 0.38;
+            const r = i % 2 === 0 ? radius * 1.55 : radius * 1.0;
+            if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+            else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+          }
+          ctx.closePath();
+          ctx.fillStyle = bFill; ctx.fill();
+          ctx.lineWidth = 4; ctx.strokeStyle = bStroke; ctx.stroke();
+          if (hitIntensity <= 0) {
+            for (let i = 0; i < 8; i++) {
+              const a = (i / 8) * Math.PI * 2 - time * 2.2;
+              ctx.beginPath();
+              ctx.arc(Math.cos(a) * radius * 2.4, Math.sin(a) * radius * 2.4, 7, 0, Math.PI * 2);
+              ctx.fillStyle = bc.orb; ctx.fill();
+            }
+          }
+        } else if (bossId === 'crimson_tyrant') {
+          ctx.beginPath();
+          for (let i = 0; i < 24; i++) {
+            const ang = (i * Math.PI * 2) / 24 + time * 0.42;
+            const r = i % 2 === 0 ? radius * 1.52 : radius * 0.96;
+            if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+            else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+          }
+          ctx.closePath();
+          ctx.fillStyle = bFill; ctx.fill();
+          ctx.lineWidth = 6; ctx.strokeStyle = bStroke; ctx.stroke();
+          if (hitIntensity <= 0) {
+            ([270, 30, 150] as const).forEach((deg) => {
+              const a = (deg * Math.PI) / 180;
+              ctx.save(); ctx.rotate(a + time * 0.42);
+              ctx.fillStyle = bc.accent;
+              ctx.fillRect(radius * 1.48, -5, 22, 10);
+              ctx.restore();
+            });
+          }
+        } else if (bossId === 'colossus') {
+          ctx.beginPath();
+          for (let i = 0; i < 16; i++) {
+            const ang = (i * Math.PI * 2) / 16 + time * 0.18;
+            const r = i % 2 === 0 ? radius * 1.72 : radius * 1.22;
+            if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+            else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+          }
+          ctx.closePath();
+          ctx.fillStyle = bFill; ctx.fill();
+          ctx.lineWidth = 9; ctx.strokeStyle = bStroke; ctx.stroke();
+        } else if (bossId === 'hive_queen' || bossId === 'hive_regent') {
+          ctx.beginPath();
+          for (let i = 0; i < 6; i++) {
+            const ang = (i / 6) * Math.PI * 2 - Math.PI / 6 + time * 0.28;
+            if (i === 0) ctx.moveTo(Math.cos(ang) * radius * 1.45, Math.sin(ang) * radius * 1.45);
+            else ctx.lineTo(Math.cos(ang) * radius * 1.45, Math.sin(ang) * radius * 1.45);
+          }
+          ctx.closePath();
+          ctx.fillStyle = bFill; ctx.fill();
+          ctx.lineWidth = 5; ctx.strokeStyle = bStroke; ctx.stroke();
+          if (hitIntensity <= 0) {
+            for (let i = 0; i < 6; i++) {
+              const a = (i / 6) * Math.PI * 2 + time * 1.15;
+              const ox = Math.cos(a) * radius * 2.0;
+              const oy = Math.sin(a) * radius * 2.0;
+              ctx.beginPath();
+              for (let h = 0; h < 6; h++) {
+                const ha = (h / 6) * Math.PI * 2;
+                const hx = ox + Math.cos(ha) * 9; const hy = oy + Math.sin(ha) * 9;
+                if (h === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+              }
+              ctx.closePath(); ctx.fillStyle = bc.orb; ctx.fill();
+            }
+          }
+        } else if (bossId === 'wraith_lord') {
+          ctx.globalAlpha = hitIntensity > 0 ? 1 : 0.82;
+          ctx.beginPath();
+          for (let i = 0; i < 20; i++) {
+            const base = (i * Math.PI * 2) / 20;
+            const jitter = (i % 3 === 0 ? 0.18 : -0.08) * Math.sin(time * 2 + i);
+            const ang = base + jitter + time * 0.32;
+            const r = i % 2 === 0 ? radius * 1.5 : radius * 0.7;
+            if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+            else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+          }
+          ctx.closePath();
+          ctx.fillStyle = bFill; ctx.fill();
+          ctx.lineWidth = 4; ctx.strokeStyle = bStroke; ctx.stroke();
+          ctx.globalAlpha = 1;
+          if (hitIntensity <= 0) {
+            for (let ring = 1; ring <= 2; ring++) {
+              ctx.beginPath();
+              ctx.arc(0, 0, radius * 1.5 + ring * 16, 0, Math.PI * 2);
+              ctx.strokeStyle = bc.accent;
+              ctx.globalAlpha = 0.14 / ring;
+              ctx.lineWidth = 2;
+              ctx.setLineDash([4, 10]);
+              ctx.stroke();
+              ctx.setLineDash([]);
+              ctx.globalAlpha = 1;
+            }
+          }
+        } else {
+          ctx.beginPath();
+          for (let i = 0; i < 16; i++) {
+            const ang = (i * Math.PI * 2) / 16 + time * 0.5;
+            const r = i % 2 === 0 ? radius * 1.5 : radius * 0.9;
+            if (i === 0) ctx.moveTo(Math.cos(ang) * r, Math.sin(ang) * r);
+            else ctx.lineTo(Math.cos(ang) * r, Math.sin(ang) * r);
+          }
+          ctx.closePath();
+          ctx.fillStyle = bFill; ctx.fill();
+          ctx.lineWidth = 6; ctx.strokeStyle = '#ef4444'; ctx.stroke();
+        }
+
+        // ── Inner core (shared, boss-themed) ───────────────────────
         ctx.beginPath();
         ctx.arc(0, 0, radius * 0.7, 0, Math.PI * 2);
         ctx.fillStyle = hitIntensity > 0 ? '#fff' : '#111827';
         ctx.fill();
-        
-        // Inner pulsing eye
-        ctx.beginPath();
-        const pulseR = radius * 0.4 + Math.sin(time * 5) * radius * 0.1;
-        ctx.arc(0, 0, pulseR, 0, Math.PI * 2);
-        ctx.fillStyle = '#ef4444';
-        ctx.fill();
 
-        // Orbiting defense crystals
-        for (let i = 0; i < 6; i++) {
-           const plateAng = (i * Math.PI * 2 / 6) - time * 1.5;
-           const px = Math.cos(plateAng) * radius * 2.2;
-           const py = Math.sin(plateAng) * radius * 2.2;
-           
-           ctx.beginPath();
-           ctx.moveTo(px + Math.cos(plateAng) * 15, py + Math.sin(plateAng) * 15);
-           ctx.lineTo(px + Math.cos(plateAng + Math.PI/2) * 8, py + Math.sin(plateAng + Math.PI/2) * 8);
-           ctx.lineTo(px + Math.cos(plateAng + Math.PI) * 15, py + Math.sin(plateAng + Math.PI) * 15);
-           ctx.lineTo(px + Math.cos(plateAng - Math.PI/2) * 8, py + Math.sin(plateAng - Math.PI/2) * 8);
-           ctx.closePath();
-           ctx.fillStyle = '#ff4400';
-           ctx.fill();
+        const eyeR = radius * 0.38 + Math.sin(time * 5) * radius * 0.08;
+        ctx.beginPath();
+        ctx.arc(0, 0, eyeR, 0, Math.PI * 2);
+        ctx.fillStyle = hitIntensity > 0 ? '#ffffff' : bc.stroke;
+        ctx.fill();
+        if (hitIntensity <= 0) {
+          ctx.beginPath();
+          ctx.arc(-eyeR * 0.28, -eyeR * 0.28, eyeR * 0.32, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(255,255,255,0.32)';
+          ctx.fill();
+        }
+
+        // ── Orbiting crystals (color-coded) ────────────────────────
+        const crystalCount = bossId === 'colossus' ? 8 : bossId === 'wraith_lord' ? 4 : 6;
+        const crystalOrbit = radius * (bossId === 'colossus' ? 2.6 : 2.2);
+        const crystalSpeed = bossId === 'void_cardinal' ? 2.2 : bossId === 'wraith_lord' ? 0.75 : 1.5;
+        const cSize = bossId === 'colossus' ? 18 : 13;
+        for (let i = 0; i < crystalCount; i++) {
+          const plateAng = (i * Math.PI * 2 / crystalCount) - time * crystalSpeed;
+          const px = Math.cos(plateAng) * crystalOrbit;
+          const py = Math.sin(plateAng) * crystalOrbit;
+          ctx.beginPath();
+          ctx.moveTo(px + Math.cos(plateAng) * cSize, py + Math.sin(plateAng) * cSize);
+          ctx.lineTo(px + Math.cos(plateAng + Math.PI / 2) * (cSize * 0.52), py + Math.sin(plateAng + Math.PI / 2) * (cSize * 0.52));
+          ctx.lineTo(px + Math.cos(plateAng + Math.PI) * cSize, py + Math.sin(plateAng + Math.PI) * cSize);
+          ctx.lineTo(px + Math.cos(plateAng - Math.PI / 2) * (cSize * 0.52), py + Math.sin(plateAng - Math.PI / 2) * (cSize * 0.52));
+          ctx.closePath();
+          ctx.fillStyle = hitIntensity > 0 ? '#ffffff' : bc.orb;
+          ctx.fill();
         }
         break;
+      }
 
       case EnemyType.ELITE:
         // Golden Spike Octagon

@@ -2,7 +2,6 @@ import { EnemyType, GameState, Particle } from '../types';
 import { Vector2 } from '../utils/vector';
 import { playSfx } from '../audio/sfx';
 import type { RailsBossId } from './bosses';
-import { Vector2 } from '../utils/vector';
 import type { RailsBossDeathState, RailsRunState } from './types';
 
 export interface BossDeathDef {
