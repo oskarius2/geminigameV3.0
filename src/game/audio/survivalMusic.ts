@@ -29,11 +29,12 @@ const BOSS_THEME_BY_ID: Record<string, BossMusicTheme> = {
   wraith_lord: 'void_whisper',
 };
 
+// Classic boom-bap tempos — stays in the 90s hip-hop pocket.
 const BPM_BY_TIER: Record<ThreatTier, number> = {
-  calm: 100,
-  pressure: 120,
-  danger: 140,
-  critical: 160,
+  calm: 92,
+  pressure: 98,
+  danger: 106,
+  critical: 114,
 };
 
 const STEM_TARGETS: Record<ThreatTier, { pad: number; drums: number; bass: number; melody: number }> = {
@@ -52,7 +53,7 @@ const STAGE_LAYER_GAIN: Record<number, number> = {
 };
 
 /** Master output before music bus — keeps procedural stems from clipping. */
-const MUSIC_MASTER_GAIN = 0.12;
+const MUSIC_MASTER_GAIN = 0.09;
 /** Stereo pad carriers (Hz): left warm, right air — avoids harsh 300–1000 Hz squares. */
 const PAD_FREQ_LEFT = 100;
 const PAD_FREQ_RIGHT = 200;
@@ -69,16 +70,19 @@ let padOscs: OscillatorNode[] = [];
 let bassOsc: OscillatorNode | null = null;
 let melodyOsc: OscillatorNode | null = null;
 let drumTimer: ReturnType<typeof setInterval> | null = null;
+let hihatTimer: ReturnType<typeof setInterval> | null = null;
 let melodyTimer: ReturnType<typeof setInterval> | null = null;
 let currentTier: ThreatTier = 'calm';
-let currentBpm = 100;
-let stageBpmBase = 85;
-let stageBpmMax = 150;
+let currentBpm = 92;
+let stageBpmBase = 88;
+let stageBpmMax = 120;
 let bossTheme: BossMusicTheme | null = null;
 let stageLayerGain = 0.35;
 let bossIntensity = 1;
 let lastBossIntensitySample = -1;
 let lastThreatMusicSample = -1;
+/** Beat position within a 4/4 bar (0 = downbeat). */
+let drumBeat = 0;
 
 /** Game threat scale (computeThreatLevel clamps to 0–100). */
 export const THREAT_MUSIC_MAX = 100;
@@ -189,34 +193,191 @@ function crossfadeStems(tier: ThreatTier, fadeSec = 2.5): void {
   });
 }
 
+function tickHiHat(): void {
+  const ac = getAudioContext();
+  if (!ac || !stemGains.drums) return;
+  const drumsVol = stemGains.drums.gain.value;
+  if (drumsVol < 0.03) return;
+  // 8th-note hi-hats — every other 8th is slightly quieter (swing feel)
+  const isWeakEighth = (Date.now() % 2) === 1;
+  const gain = isWeakEighth ? 0.028 : 0.042;
+  // Occasional open hat on weak 8ths in higher tiers
+  if (isWeakEighth && (currentTier === 'danger' || currentTier === 'critical') && Math.random() > 0.7) {
+    playOpenHiHat(ac, stemGains.drums!, gain * 0.9);
+  } else {
+    playClosedHiHat(ac, stemGains.drums!, gain);
+  }
+}
+
 function setBpm(bpm: number): void {
   currentBpm = bpm;
+  drumBeat = 0;
   if (drumTimer) clearInterval(drumTimer);
+  if (hihatTimer) clearInterval(hihatTimer);
   if (melodyTimer) clearInterval(melodyTimer);
   const beatMs = (60 / bpm) * 1000;
+  const eighthMs = beatMs * 0.5;
   drumTimer = setInterval(() => tickDrums(), beatMs);
+  hihatTimer = setInterval(() => tickHiHat(), eighthMs);
   melodyTimer = setInterval(() => tickMelody(), beatMs * 2);
 }
 
-function tickDrums(): void {
-  const ac = getAudioContext();
-  if (!ac || !stemGains.drums || stemGains.drums.gain.value < 0.05) return;
-  const len = 0.04 + (bossTheme === 'titan_strike' ? 0.02 : 0);
-  const buf = ac.createBuffer(1, Math.floor(ac.sampleRate * len), ac.sampleRate);
-  const d = buf.getChannelData(0);
-  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+/** 808-style kick: sine with fast pitch drop, punchy attack. */
+function play808Kick(ac: AudioContext, dest: GainNode, gain: number): void {
+  const now = ac.currentTime;
+  const startPitch = bossTheme === 'titan_strike' ? 180 : 150;
+  const endPitch = bossTheme === 'void_whisper' ? 35 : 42;
+  const decay = 0.45;
+
+  const osc = ac.createOscillator();
+  const g = ac.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(startPitch, now);
+  osc.frequency.exponentialRampToValueAtTime(endPitch, now + decay);
+  g.gain.setValueAtTime(0, now);
+  g.gain.linearRampToValueAtTime(gain, now + 0.003);
+  g.gain.exponentialRampToValueAtTime(0.001, now + decay);
+  osc.connect(g);
+  g.connect(dest);
+  osc.start(now);
+  osc.stop(now + decay + 0.02);
+}
+
+/** Boom-bap snare: layered noise + body tone, crisp attack. */
+function playSnare(ac: AudioContext, dest: GainNode, gain: number): void {
+  const now = ac.currentTime;
+  const decay = 0.18;
+
+  // Noise body
+  const len = Math.floor(ac.sampleRate * decay);
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 1.8);
+  }
   const src = ac.createBufferSource();
   src.buffer = buf;
+  const bp = ac.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1800;
+  bp.Q.value = 0.6;
+  const noiseG = ac.createGain();
+  noiseG.gain.value = gain * 0.75;
+  src.connect(bp);
+  bp.connect(noiseG);
+  noiseG.connect(dest);
+  src.start(now);
+  src.stop(now + decay);
+
+  // Snare body tone
+  const toneOsc = ac.createOscillator();
+  const toneG = ac.createGain();
+  toneOsc.type = 'triangle';
+  toneOsc.frequency.value = 185;
+  toneG.gain.setValueAtTime(gain * 0.45, now);
+  toneG.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+  toneOsc.connect(toneG);
+  toneG.connect(dest);
+  toneOsc.start(now);
+  toneOsc.stop(now + 0.08);
+}
+
+/** Closed hi-hat: very short highpass noise burst. */
+function playClosedHiHat(ac: AudioContext, dest: GainNode, gain: number): void {
+  const now = ac.currentTime;
+  const len = Math.floor(ac.sampleRate * 0.032);
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  }
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  const hp = ac.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 9000;
   const g = ac.createGain();
-  g.gain.value = currentTier === 'critical' ? 0.08 : 0.05;
-  const f = ac.createBiquadFilter();
-  f.type = 'highpass';
-  f.frequency.value = bossTheme === 'void_whisper' ? 400 : 120;
-  src.connect(f);
-  f.connect(g);
-  g.connect(stemGains.drums!);
-  src.start();
-  src.stop(ac.currentTime + len);
+  g.gain.value = gain;
+  src.connect(hp);
+  hp.connect(g);
+  g.connect(dest);
+  src.start(now);
+  src.stop(now + 0.04);
+}
+
+/** Open hi-hat: longer, slightly filtered. */
+function playOpenHiHat(ac: AudioContext, dest: GainNode, gain: number): void {
+  const now = ac.currentTime;
+  const decay = 0.22;
+  const len = Math.floor(ac.sampleRate * decay);
+  const buf = ac.createBuffer(1, len, ac.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    data[i] = (Math.random() * 2 - 1) * (1 - i / len) * 0.9;
+  }
+  const src = ac.createBufferSource();
+  src.buffer = buf;
+  const hp = ac.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 7000;
+  const g = ac.createGain();
+  g.gain.setValueAtTime(gain, now);
+  g.gain.exponentialRampToValueAtTime(0.001, now + decay);
+  src.connect(hp);
+  hp.connect(g);
+  g.connect(dest);
+  src.start(now);
+  src.stop(now + decay);
+}
+
+/**
+ * Boom-bap 4/4 sequencer:
+ *   Beat 1 → 808 kick
+ *   Beat 2 → snare
+ *   Beat 3 → 808 kick (with occasional ghost)
+ *   Beat 4 → snare
+ * Called once per quarter-note by setInterval.
+ */
+function tickDrums(): void {
+  const ac = getAudioContext();
+  if (!ac || !stemGains.drums) return;
+  const drumsVol = stemGains.drums.gain.value;
+  if (drumsVol < 0.03) {
+    drumBeat = (drumBeat + 1) % 4;
+    return;
+  }
+
+  const beat = drumBeat % 4;
+  const kickGain = (currentTier === 'critical' ? 0.11 : 0.085) * bossIntensity;
+  const snareGain = (currentTier === 'critical' ? 0.095 : 0.07) * bossIntensity;
+
+  if (beat === 0) {
+    // Downbeat kick
+    play808Kick(ac, stemGains.drums!, kickGain);
+  } else if (beat === 1) {
+    // Snare on 2
+    playSnare(ac, stemGains.drums!, snareGain);
+  } else if (beat === 2) {
+    // Off-beat kick — sometimes doubled for pressure tiers
+    play808Kick(ac, stemGains.drums!, kickGain * 0.85);
+    if (currentTier === 'danger' || currentTier === 'critical') {
+      // Ghost kick at +half-beat
+      const beatMs = (60 / currentBpm) * 1000;
+      window.setTimeout(() => {
+        const ac2 = getAudioContext();
+        if (ac2 && stemGains.drums) play808Kick(ac2, stemGains.drums, kickGain * 0.4);
+      }, beatMs * 0.5);
+    }
+  } else {
+    // Snare on 4
+    playSnare(ac, stemGains.drums!, snareGain);
+    // Open hat on final beat of bar for "breathing" feel
+    if (Math.random() > 0.55) {
+      playOpenHiHat(ac, stemGains.drums!, snareGain * 0.35);
+    }
+  }
+
+  drumBeat = (drumBeat + 1) % 4;
 }
 
 function tickMelody(): void {
@@ -363,9 +524,12 @@ export function stopSurvivalMusic(): void {
   running = false;
   lastBossIntensitySample = -1;
   lastThreatMusicSample = -1;
+  drumBeat = 0;
   if (drumTimer) clearInterval(drumTimer);
+  if (hihatTimer) clearInterval(hihatTimer);
   if (melodyTimer) clearInterval(melodyTimer);
   drumTimer = null;
+  hihatTimer = null;
   melodyTimer = null;
   [...padOscs, bassOsc, melodyOsc].forEach((o) => {
     if (!o) return;

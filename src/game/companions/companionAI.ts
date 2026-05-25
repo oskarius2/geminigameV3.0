@@ -23,6 +23,8 @@ import {
 import { shouldTriggerCompanionAbility } from './companionAbilities';
 import {
   applyGunnerCombatVolley,
+  applyGuardianCombat,
+  applyHealerCombat,
   applyScoutCombat,
 } from './companionCombat';
 import {
@@ -209,6 +211,7 @@ function createRuntimeDefaults(
     orbitRadiusOffset: 0,
     facingAngle: 0,
     hitFlashTimer: 0,
+    timeSinceLastHit: 10,
     abilityPulseTimer: 0,
     attackPulseTimer: 0,
     levelUpPulseTimer: 0,
@@ -226,6 +229,7 @@ function patchRuntimeDefaults(rt: CompanionRuntime): void {
   if (rt.orbitRadiusOffset === undefined) rt.orbitRadiusOffset = 0;
   if (rt.facingAngle === undefined) rt.facingAngle = 0;
   if (rt.hitFlashTimer === undefined) rt.hitFlashTimer = 0;
+  if (rt.timeSinceLastHit === undefined) rt.timeSinceLastHit = 10;
   if (rt.abilityPulseTimer === undefined) rt.abilityPulseTimer = 0;
   if (rt.attackPulseTimer === undefined) rt.attackPulseTimer = 0;
   if (rt.levelUpPulseTimer === undefined) rt.levelUpPulseTimer = 0;
@@ -440,6 +444,36 @@ function applyCompanionCombat(
     applyScoutCombat(instance, runtime, state, dtSec);
     applyScoutMarkPulse(instance, runtime, state, dtSec);
   }
+  if (instance.type === CompanionType.GUARDIAN) {
+    applyGuardianCombat(instance, runtime, state, dtSec);
+  }
+  if (instance.type === CompanionType.HEALER) {
+    applyHealerCombat(instance, runtime, state, dtSec);
+  }
+}
+
+/** HP regen per second when out of combat (not hit recently, no enemies within 220). */
+const COMPANION_OUT_OF_COMBAT_REGEN_PCT = 0.04;
+const COMPANION_HIT_REGEN_LOCKOUT_SEC = 3.5;
+
+function applyCompanionRegen(
+  runtime: CompanionRuntime,
+  instance: CompanionInstance,
+  state: CompanionGameState,
+  dtSec: number,
+): void {
+  if (runtime.health <= 0) return;
+  if (runtime.health >= runtime.maxHealth) return;
+  /** Recent hit → no regen. */
+  if ((runtime.timeSinceLastHit ?? 0) < COMPANION_HIT_REGEN_LOCKOUT_SEC) return;
+  /** Enemies near companion suppress regen. */
+  const inCombat = state.enemies.some(
+    (e) => e.health > 0 && e.pos.distanceTo(runtime.pos) <= 220,
+  );
+  if (inCombat) return;
+  const regen = runtime.maxHealth * COMPANION_OUT_OF_COMBAT_REGEN_PCT * dtSec;
+  runtime.health = Math.min(runtime.maxHealth, runtime.health + regen);
+  instance.health = runtime.health;
 }
 
 export function updateCompanionAILogic(state: CompanionGameState, dtSec: number): void {
@@ -471,6 +505,7 @@ export function updateCompanionAILogic(state: CompanionGameState, dtSec: number)
   applyCompanionPassivesLogic(state, instance, dtSec);
 
   applyCompanionCombat(instance, runtime, state, dtSec);
+  applyCompanionRegen(runtime, instance, state, dtSec);
   syncRuntimeFromInstance(runtime, instance);
   state.companionRuntime = runtime;
 }

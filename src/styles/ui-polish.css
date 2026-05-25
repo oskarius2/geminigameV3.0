@@ -3,6 +3,10 @@
  * Glow, borders, rarity badges, toasts — uses design-tokens + premium-ui
  */
 
+@utility border-hud-accent {
+  border-color: var(--hud-accent);
+}
+
 /* --- Premium game icons (SVG) --- */
 .game-icon {
   display: inline-flex;
@@ -159,38 +163,39 @@
   }
 }
 
-/* --- Achievement unlock panel --- */
+/* --- Achievement unlock panel (compact) --- */
 .ui-achievement-panel {
-  border-radius: 14px;
+  border-radius: 10px;
   border: 1px solid var(--ui-border-purple);
   background: linear-gradient(165deg, var(--ui-bg-deep) 0%, var(--ui-bg-deepest) 100%);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   box-shadow: var(--ui-glow-purple-intense), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  padding: 16px;
+  padding: 8px 10px;
   animation: ui-achievement-in 0.3s ease-out forwards;
 }
 
 .ui-achievement-header {
   font-family: var(--font-display);
-  font-size: 11px;
+  font-size: 9px;
   font-weight: 800;
-  letter-spacing: 0.2em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   text-align: center;
   color: var(--ui-accent-purple);
   text-shadow: var(--ui-text-neon);
-  margin-bottom: 12px;
-  padding-bottom: 10px;
+  margin-bottom: 6px;
+  padding-bottom: 5px;
   border-bottom: 1px solid rgba(167, 139, 250, 0.2);
 }
 
 .ui-achievement-card {
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 12px 0;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
   border-bottom: 1px solid rgba(167, 139, 250, 0.12);
+  min-height: 48px;
 }
 
 .ui-achievement-card:last-child {
@@ -204,41 +209,63 @@
 
 .ui-achievement-icon {
   flex-shrink: 0;
-  width: 48px;
-  height: 48px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 6px;
   border: 1px solid rgba(167, 139, 250, 0.35);
   background: rgba(30, 27, 75, 0.6);
   box-shadow: var(--ui-glow-purple);
 }
 
+.ui-achievement-icon .game-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.ui-achievement-icon .game-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
 .ui-achievement-title {
   font-family: var(--font-display);
-  font-size: 18px;
+  font-size: 12px;
   font-weight: 600;
-  line-height: 1.2;
+  line-height: 1.15;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
 }
 
 .ui-achievement-desc {
-  font-size: 14px;
-  line-height: 1.5;
+  font-size: 10px;
+  line-height: 1.3;
   color: var(--ui-desc-muted);
-  margin-top: 4px;
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .ui-achievement-kicker {
   font-family: var(--primitive-font-mono);
-  font-size: 10px;
-  letter-spacing: 0.18em;
+  font-size: 8px;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
   color: var(--ui-accent-purple-dim);
   text-shadow: var(--ui-text-neon);
+}
+
+/* Shrink rarity badge inside compact card */
+.ui-achievement-card .ui-rarity-badge {
+  margin-top: 2px;
+  padding: 1px 5px;
+  font-size: 8px;
+  letter-spacing: 0.08em;
 }
 
 /* --- Rarity badges --- */
@@ -409,8 +436,30 @@
 }
 
 .weapon-hud--compact {
-  padding: 6px 8px;
-  gap: 6px;
+  padding: 4px 6px;
+  gap: 4px;
+}
+
+.weapon-hud--compact .weapon-hud__slot {
+  min-width: 52px;
+  padding: 4px 6px;
+}
+
+.weapon-hud--compact .weapon-hud__label {
+  font-size: 7px;
+  margin-bottom: 1px;
+}
+
+.weapon-hud--compact .weapon-hud__ammo {
+  font-size: 12px;
+}
+
+.weapon-hud--compact .weapon-hud__reload-track {
+  height: 4px;
+}
+
+.weapon-hud--compact .weapon-hud__reload-label {
+  font-size: 7px;
 }
 
 .weapon-hud__slot {
@@ -525,61 +574,97 @@
 
 /* --- Z-index: HUD ~50, vignette 8, achievements 170, artifact toast 175, modals 200+ --- */
 
-/* --- Achievement stack — right column, below score (never center) --- */
+/* --- Achievement stack — bottom-left (desktop/tablet) / bottom-center (mobile)
+       Compact, FIFO, max 3 visible. Never overlaps right-side score/weapon. --- */
 .ui-achievement-anchor {
   position: absolute;
   z-index: 170;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
-  gap: 6px;
-  width: min(16rem, calc(100vw - 11rem));
-  max-width: 280px;
-  max-height: min(42vh, 320px);
-  padding-right: max(0.75rem, env(safe-area-inset-right));
-  padding-left: 0.25rem;
-  top: max(10.5rem, calc(env(safe-area-inset-top) + 9.5rem));
-  right: 0;
-  left: auto;
+  align-items: flex-start;
+  gap: 4px;
+  width: 220px;
+  max-width: 220px;
+  max-height: min(40vh, 220px);
+  padding: 0;
+  bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + 1rem));
+  left: max(1rem, env(safe-area-inset-left));
+  right: auto;
+  top: auto;
   transform: none;
   pointer-events: none;
 }
 
 .ui-achievement-anchor .ui-achievement-panel {
-  max-height: min(38vh, 280px);
+  max-height: min(34vh, 200px);
   overflow-y: auto;
   overflow-x: hidden;
   scrollbar-width: thin;
 }
 
+/* Mobile: centered, above artifact-acquire toast, clear of move/aim joysticks */
 @media (max-width: 767px) {
   .ui-achievement-anchor {
-    width: min(9.5rem, calc(100vw - 10.5rem));
-    max-width: 152px;
-    top: max(11rem, calc(env(safe-area-inset-top) + 10rem));
+    width: min(160px, calc(100vw - 6rem));
+    max-width: 180px;
+    bottom: max(15rem, calc(env(safe-area-inset-bottom) + 13rem));
+    left: 50%;
+    transform: translateX(-50%);
+  }
+
+  .ui-achievement-panel {
+    padding: 6px 8px;
   }
 
   .ui-achievement-header {
-    font-size: 9px;
-    margin-bottom: 8px;
-    padding-bottom: 6px;
+    font-size: 8px;
+    margin-bottom: 4px;
+    padding-bottom: 3px;
+  }
+
+  .ui-achievement-card {
+    gap: 6px;
+    padding: 4px 0;
+    min-height: 40px;
   }
 
   .ui-achievement-title {
-    font-size: 14px;
+    font-size: 11px;
+  }
+
+  .ui-achievement-desc {
+    font-size: 9px;
   }
 
   .ui-achievement-icon {
-    width: 36px;
-    height: 36px;
+    width: 24px;
+    height: 24px;
+  }
+
+  .ui-achievement-icon .game-icon,
+  .ui-achievement-icon .game-icon svg {
+    width: 14px;
+    height: 14px;
   }
 }
 
-@media (min-width: 768px) {
+/* Tablet: still bottom-left but tighter padding */
+@media (min-width: 768px) and (max-width: 1023px) {
   .ui-achievement-anchor {
-    top: max(11rem, calc(env(safe-area-inset-top) + 10rem));
-    padding-right: max(1.25rem, env(safe-area-inset-right));
-    width: min(17rem, 28vw);
+    width: 200px;
+    max-width: 200px;
+    bottom: max(1rem, calc(env(safe-area-inset-bottom) + 0.75rem));
+    left: max(0.75rem, env(safe-area-inset-left));
+  }
+}
+
+/* Desktop: generous spacing, plenty of room for stack */
+@media (min-width: 1024px) {
+  .ui-achievement-anchor {
+    width: 240px;
+    max-width: 240px;
+    bottom: max(1.5rem, calc(env(safe-area-inset-bottom) + 1.25rem));
+    left: max(1.25rem, env(safe-area-inset-left));
   }
 }
 
@@ -638,16 +723,18 @@
   }
 }
 
-/* --- Achievement collapsed badge --- */
+/* --- Achievement collapsed badge (compact, bottom-left aligned) --- */
 .ui-achievement-badge-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-left: auto;
+  gap: 6px;
+  margin-left: 0;
+  margin-right: auto;
   max-width: 100%;
-  padding: 10px 16px;
-  min-height: 44px;
-  border-radius: 12px;
+  padding: 6px 10px;
+  min-height: 32px;
+  font-size: 11px;
+  border-radius: 8px;
   border: 1px solid rgba(251, 191, 36, 0.4);
   background: linear-gradient(165deg, var(--ui-bg-deep) 0%, rgba(0, 0, 0, 0.85) 100%);
   backdrop-filter: blur(8px);
@@ -660,6 +747,15 @@
 .ui-achievement-badge-btn:hover {
   border-color: rgba(251, 191, 36, 0.65);
   box-shadow: var(--primitive-glow-gold-intense, 0 0 28px rgba(251, 191, 36, 0.35));
+}
+
+@media (max-width: 767px) {
+  .ui-achievement-badge-btn {
+    padding: 5px 8px;
+    min-height: 28px;
+    font-size: 10px;
+    gap: 5px;
+  }
 }
 
 @keyframes ui-toast-in {

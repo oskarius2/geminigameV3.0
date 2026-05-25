@@ -1,14 +1,15 @@
-import { GameState, Entity, EntityType, Particle, ItemType, EnemyType, Obstacle, Hazard, Trait, RandomEvent, ShipId } from './types';
+import { GameState, Entity, EntityType, Particle, ItemType, EnemyType, Obstacle, Hazard, MovingHazard, Trait, RandomEvent, ShipId } from './types';
 import { Vector2 } from './utils/vector';
+import { COLORS, SIZES, PHYSICS } from '../config/gameTheme';
 import { hasTimeSlowEffect } from './buffs/applyBuff';
 import {
   computeEnemyVelocity,
+  getEnemyAggroPos,
   runEnemyAttacks,
   getSeparationForce,
   finalizeEnemyMovement,
 } from './ai/enemyBehaviors';
 import { getAugmentTier, getTierModifiers } from './balance/augmentTiers';
-import { getThreatMult } from './balance/threat';
 import { getStageQuota } from './balance/spawnCurve';
 import { applyShipStats, getShipDef } from './ships/shipDefs';
 import { createInitialWeaponState } from './weapons/weaponState';
@@ -207,6 +208,7 @@ export const INITIAL_STATE = (
     player: {
       id: 'player',
       type: EntityType.PLAYER,
+      active: true,
       pos: new Vector2(worldWidth / 2, worldHeight / 2),
       radius: 15,
       health: 450,
@@ -221,15 +223,18 @@ export const INITIAL_STATE = (
     particles: [],
     obstacles: generateObstaclesForStage(1, worldWidth, worldHeight),
     hazards: [],
+    movingHazards: [],
+    movingHazardSpawnTimer: 8,
     score: 0,
     level: 1,
     experience: 0,
     nextLevelExp: 1500,
     isGameOver: false,
     isPaused: false,
-    wave: 1,
+    isPlayerDashing: false,
+    wave: 0,
     stage: 1,
-    enemiesToKill: 50,
+    enemiesToKill: 40,
     bossActive: false,
     activeBossId: null,
     bossArenaTransition: 0,
@@ -250,6 +255,7 @@ export const INITIAL_STATE = (
     isDashing: false,
     dashDirection: new Vector2(0, 0),
     dashDuration: 0,
+    dashCooldownRemaining: 0,
     buffs: {
       shield: 0,
       overdrive: 0,
@@ -362,6 +368,7 @@ export const INITIAL_STATE = (
     collectedShipLoot: [],
     miniBossKillsThisRun: 0,
     runBossesDefeated: 0,
+    activeEnemyCount: 0,
     shopPurchasedIds: [],
     shopRunFlags: {},
     shopScrapSpent: 0,
@@ -729,25 +736,19 @@ export function spawnEnemyFromWave(
   const tier = getAugmentTier(state.passives.length);
   const tierMods = getTierModifiers(tier);
   const stage = state.stage;
-  const threatMult = getThreatMult(state);
 
   let pos = pickSpawnPosition(state, posOverride);
 
-  const skillFactor = Math.sqrt(state.score / 3500 + 1);
   const powerFactor = state.threatLevel / 100;
 
-  // Time-based ramp: +50% damage/health after 5 min, +100% after 10 min, caps at +150% at ~15 min
-  const timeRamp = 1 + Math.min(1.5, state.survivalTime / 600);
+  // Gradual time ramp: +50% over 10 min, caps at +60%
+  const timeRamp = 1 + Math.min(0.6, state.survivalTime / 1200);
 
-  const dynamicHealthFactor = 0.7 + powerFactor * 2.0;
-  const healthScale =
-    tierMods.enemyHpMult * skillFactor * dynamicHealthFactor * timeRamp * threatMult;
+  const dynamicHealthFactor = 0.7 + powerFactor * 0.5;
+  const healthScale = tierMods.enemyHpMult * dynamicHealthFactor * timeRamp;
 
-  const dynamicSpeedFactor = 0.8 + powerFactor * 1.0;
   const speedScale =
-    tierMods.enemySpeedMult *
-    Math.min(2.5, skillFactor * dynamicSpeedFactor) *
-    Math.min(1.5, 1 + state.survivalTime / 1200);
+    tierMods.enemySpeedMult * (1 + Math.min(0.4, state.survivalTime / 1800));
 
   const isBoss =
     state.bossActive &&
@@ -763,7 +764,6 @@ export function spawnEnemyFromWave(
   let damageMult = 1;
 
   if (isBoss) {
-    // Boss spawn (unchanged from original)
     const boss =
       BOSS_DEFINITIONS.find((b) => b.id === state.activeBossId) ?? pickBossForStage(stage);
     if (state.inBossArena && state.activeBossId) {
@@ -776,9 +776,13 @@ export function spawnEnemyFromWave(
       );
     }
     radius = 100 + stage * 12;
-    health = (6000 * Math.pow(1.52, stage - 1)) * dynamicHealthFactor * boss.hpMult;
+    // 3× baseline HP, exponential 1.55 per stage (not 1.4), multiplied by boss hpMult.
+    health = (24000 * Math.pow(1.55, stage - 1)) * boss.hpMult;
     speed = (0.8 + stage * 0.1) * speedScale * boss.speedMult;
     color = '#991b1b';
+    // Bosses resist 35% of incoming damage — prevents augment stacking from one-shotting.
+    damageResist = 0.35;
+    damageMult = boss.damageMult;
     finalEnemyType = EnemyType.BOSS;
   } else {
     // Enemy type configuration — SIMPLIFIED via EnemyType directly
@@ -937,7 +941,7 @@ export function spawnEnemyFromWave(
   }
 
   const baseDamage = Math.floor(
-    (15 + tier * 2) * threatMult * timeRamp * (isBoss ? 2 : 1) * damageMult
+    (15 + tier * 2) * timeRamp * (isBoss ? 2 : 1) * damageMult
   );
   const difficulty = getDifficultyForStage(stage);
   const baseHealth = health;
@@ -951,6 +955,7 @@ export function spawnEnemyFromWave(
   const entity: Entity = {
     id: Math.random().toString(36).substr(2, 9),
     type: EntityType.ENEMY,
+    active: true,
     pos,
     radius,
     health: scaledHealth,
@@ -973,9 +978,39 @@ export function spawnEnemyFromWave(
   if (isBoss && state.activeBossId) {
     entity.bossPatternId = getBossAttackPattern(state.activeBossId);
     entity.bossPatternTimer = 30;
+    entity.bossEngageTimer = 0;
+    entity.bossEnrageAnnounced = false;
   }
 
   return entity;
+}
+
+/**
+ * Object-pool push: reuse the first inactive slot instead of growing the array.
+ * Call this instead of `state.enemies.push(entity)` everywhere in the survival
+ * game loop to eliminate array-growth allocations on the hot path.
+ *
+ * Increments `state.activeEnemyCount` so spawn-cap checks stay O(1).
+ */
+export function pooledEnemyPush(state: GameState, entity: Entity): void {
+  entity.active = true;
+  const freeIdx = state.enemies.findIndex(e => !e.active);
+  if (freeIdx >= 0) {
+    state.enemies[freeIdx] = entity; // reuse dead slot — no array growth
+  } else {
+    state.enemies.push(entity); // pool not large enough yet, grow once
+  }
+  state.activeEnemyCount++;
+}
+
+/**
+ * Deactivate a live enemy (pool it). Prefer this over splicing or filtering.
+ * Decrements `state.activeEnemyCount`.
+ */
+export function deactivateEnemy(state: GameState, enemy: Entity): void {
+  if (enemy.active === false) return;
+  enemy.active = false;
+  state.activeEnemyCount = Math.max(0, state.activeEnemyCount - 1);
 }
 
 /**
@@ -1002,6 +1037,7 @@ export function spawnXpOrb(pos: Vector2, amount = 25): Entity {
   return {
     id: Math.random().toString(36).slice(2, 9),
     type: EntityType.ITEM,
+    active: true,
     pos: pos.clone(),
     radius: 10,
     health: 1,
@@ -1021,6 +1057,7 @@ export function spawnItem(pos: Vector2): Entity | null {
   return {
     id: Math.random().toString(36).substr(2, 9),
     type: EntityType.ITEM,
+    active: true,
     pos: pos.clone(),
     radius: 12,
     health: 1,
@@ -1067,9 +1104,10 @@ export function resolveObstacleCollision(entity: Entity, obstacles: Obstacle[]) 
     if (obs.type === 'CIRCLE') {
       const dx = entity.pos.x - obs.pos.x;
       const dy = entity.pos.y - obs.pos.y;
-      const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+      const distSq = dx * dx + dy * dy;
       const minRadius = entity.radius + obs.size.x;
-      if (dist < minRadius) {
+      if (distSq < minRadius * minRadius) {
+        const dist = distSq > 0 ? Math.sqrt(distSq) : 0.001;
         const overlap = minRadius - dist;
         const pushX = (dx / dist) * overlap;
         const pushY = (dy / dist) * overlap;
@@ -1088,7 +1126,7 @@ export function resolveObstacleCollision(entity: Entity, obstacles: Obstacle[]) 
       const distSq = dx * dx + dy * dy;
       
       if (distSq < entity.radius * entity.radius) {
-        const dist = Math.sqrt(distSq) || 0.001;
+        const dist = distSq > 0 ? Math.sqrt(distSq) : 0.001;
         const overlap = entity.radius - dist;
         entity.pos.x += (dx / dist) * overlap;
         entity.pos.y += (dy / dist) * overlap;
@@ -1173,6 +1211,98 @@ export function updateHazards(state: GameState, dt: number) {
   });
 }
 
+// ============================================================================
+// MOVING HAZARD UPDATES
+// ============================================================================
+
+/**
+ * Advance all moving hazards by one frame: movement pattern, rotation,
+ * hit-flash countdown, and out-of-bounds culling.
+ *
+ * Collision detection (player/projectile) is handled in App.tsx so it can
+ * integrate with the projectile pipeline and scoring.
+ */
+export function updateMovingHazards(state: GameState, dt: number): void {
+  const { world } = state;
+  const worldW = world.width;
+  const worldH = world.height;
+  const OUT_MARGIN = 200;
+
+  state.movingHazards = state.movingHazards.filter(h => {
+    if (h.health <= 0) return false;
+
+    h.patternPhase += dt * 0.04;
+    h.rotation += h.rotationSpeed * dt;
+    if (h.hitFlash > 0) h.hitFlash -= dt;
+
+    switch (h.pattern) {
+      case 'linear': {
+        h.pos.x += h.velocity.x * dt;
+        h.pos.y += h.velocity.y * dt;
+        // Cull once fully off-map
+        if (
+          h.pos.x < -OUT_MARGIN || h.pos.x > worldW + OUT_MARGIN ||
+          h.pos.y < -OUT_MARGIN || h.pos.y > worldH + OUT_MARGIN
+        ) {
+          return false;
+        }
+        break;
+      }
+      case 'bounce': {
+        h.pos.x += h.velocity.x * dt;
+        h.pos.y += h.velocity.y * dt;
+        if (h.pos.x - h.radius < 0) {
+          h.pos.x = h.radius;
+          h.velocity.x = Math.abs(h.velocity.x);
+        } else if (h.pos.x + h.radius > worldW) {
+          h.pos.x = worldW - h.radius;
+          h.velocity.x = -Math.abs(h.velocity.x);
+        }
+        if (h.pos.y - h.radius < 0) {
+          h.pos.y = h.radius;
+          h.velocity.y = Math.abs(h.velocity.y);
+        } else if (h.pos.y + h.radius > worldH) {
+          h.pos.y = worldH - h.radius;
+          h.velocity.y = -Math.abs(h.velocity.y);
+        }
+        break;
+      }
+      case 'sine': {
+        // Base linear motion + perpendicular sine displacement
+        const speed = Math.sqrt(h.velocity.x * h.velocity.x + h.velocity.y * h.velocity.y);
+        const nx = h.velocity.x / (speed || 1);
+        const ny = h.velocity.y / (speed || 1);
+        // Perpendicular normal
+        const px = -ny;
+        const py = nx;
+        const sineOffset = Math.sin(h.patternPhase * 3) * h.sineAmplitude * 0.012 * dt;
+        h.pos.x += h.velocity.x * dt + px * sineOffset;
+        h.pos.y += h.velocity.y * dt + py * sineOffset;
+        if (
+          h.pos.x < -OUT_MARGIN || h.pos.x > worldW + OUT_MARGIN ||
+          h.pos.y < -OUT_MARGIN || h.pos.y > worldH + OUT_MARGIN
+        ) {
+          return false;
+        }
+        break;
+      }
+      case 'orbital': {
+        // Orbit around anchorPos at constant angular speed
+        const orbitSpeed = (Math.sqrt(h.velocity.x * h.velocity.x + h.velocity.y * h.velocity.y) / 150) * dt;
+        h.patternPhase += orbitSpeed;
+        const orbitRadius = Math.sqrt(
+          (h.pos.x - h.anchorPos.x) ** 2 + (h.pos.y - h.anchorPos.y) ** 2,
+        );
+        h.pos.x = h.anchorPos.x + Math.cos(h.patternPhase) * orbitRadius;
+        h.pos.y = h.anchorPos.y + Math.sin(h.patternPhase) * orbitRadius;
+        break;
+      }
+    }
+
+    return true;
+  });
+}
+
 export function updateEnemies(state: GameState, dt: number = 1) {
   const { enemies, player } = state;
   const playerPos = player.pos;
@@ -1190,13 +1320,17 @@ export function updateEnemies(state: GameState, dt: number = 1) {
     grid[key].push(i);
   }
 
-  for (let i = 0; i < enemies.length; i++) {
+    for (let i = 0; i < enemies.length; i++) {
     const enemy = enemies[i];
-    const dx = playerPos.x - enemy.pos.x;
-    const dy = playerPos.y - enemy.pos.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
+    /** Taunt: while companion holds aggro, swap target so chase + ranged AI both
+     *  point at the companion. Bosses/minibosses are immune (handled by helper). */
+    const aggroPos = getEnemyAggroPos(state, enemy);
+    const dx = aggroPos.x - enemy.pos.x;
+    const dy = aggroPos.y - enemy.pos.y;
+    const distSq = dx * dx + dy * dy;
 
-    if (dist <= 0.1) continue;
+    if (distSq <= 0.01) continue;
+    const dist = Math.sqrt(distSq);
 
     let { vx, vy } = computeEnemyVelocity(enemy, state, enemyDt, dist, dx, dy);
     const sep = getSeparationForce(enemy, enemies, grid, gridSize, i, enemy.enemyType, state);
@@ -1226,12 +1360,13 @@ export function updateEnemies(state: GameState, dt: number = 1) {
 export function activateUltimate(state: GameState): void {
   if (state.ultimateCharge < 100) return;
   
-  // Kill non-boss enemies
-  state.enemies = state.enemies.filter(e => {
-    if (e.enemyType === EnemyType.BOSS) return true;
+  // Deactivate non-boss enemies (pool them instead of filtering)
+  for (const e of state.enemies) {
+    if (e.active === false || e.enemyType === EnemyType.BOSS) continue;
     e.health = -1;
-    return false;
-  });
+    e.active = false;
+    state.activeEnemyCount = Math.max(0, state.activeEnemyCount - 1);
+  }
   
   // Clear bullets
   state.projectiles = [];

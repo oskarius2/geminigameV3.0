@@ -43,7 +43,7 @@ export const RailsVictoryScreen: React.FC<RailsVictoryScreenProps> = ({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 z-[110] flex flex-col items-center justify-center p-6"
+      className="absolute inset-0 z-40 flex flex-col items-center justify-center p-6"
       style={{ background: '#282c34' }}
     >
       <motion.div

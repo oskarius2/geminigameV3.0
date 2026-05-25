@@ -85,8 +85,8 @@ function CompanionCard({
       } ${!unlocked ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
       style={{
         borderTopColor: color,
-        ringColor: selected ? color : undefined,
-      }}
+        '--tw-ring-color': selected ? color : undefined,
+      } as React.CSSProperties}
     >
       <Panel
         className={`h-full p-4 flex flex-col gap-3 rounded-2xl ${
@@ -199,7 +199,7 @@ export function CompanionSelectScreen({ onConfirm, onBack }: CompanionSelectScre
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 z-[600] flex flex-col overflow-hidden pointer-events-auto"
+      className="absolute inset-0 z-50 flex flex-col overflow-hidden pointer-events-auto"
       style={{
         background:
           'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(139,92,246,0.1) 0%, transparent 65%), #020617',

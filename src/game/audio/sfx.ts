@@ -8,7 +8,16 @@ import {
   resumeAudioContext,
   setChannelMuted,
 } from './audioEngine';
-import { playGunshot, playNoiseBurst, playTone, playToneSequence } from './sfxPresets';
+import {
+  play808Kick,
+  playBoomBapSnare,
+  playGunshot,
+  playHiHat,
+  playNoiseBurst,
+  playTone,
+  playToneSequence,
+  playVinylCrackle,
+} from './sfxPresets';
 
 export type SfxEvent =
   | 'augment'
@@ -132,19 +141,24 @@ export interface MainWeaponSfxOptions {
   baseFreq?: number;
 }
 
-/** Player main weapon — bass boom with fast attack and smooth decay (no square beep). */
+/** Player main weapon — boom-bap snare punch: gunshot body + noise transient + hi-hat tick. */
 export function fireMainWeapon(options?: MainWeaponSfxOptions): void {
   if (isSfxMuted()) return;
   const scale = options?.gainScale ?? 1;
   const pm = options?.pitchMul ?? 1;
-  const peak = Math.min(0.25, 0.2 * scale);
+  const peak = Math.min(0.22, 0.18 * scale);
+  // Low boom (the "boom" in boom-bap)
   playGunshot({
     freq: options?.baseFreq ?? 300,
     gain: peak,
     pan: options?.pan,
     pitchMul: pm,
-    duration: 0.1,
+    duration: 0.09,
   });
+  // Transient noise punch (the "bap")
+  playNoiseBurst(0.05, peak * 0.35, options?.pan, 0);
+  // Crisp hi-hat tick adds rhythm feel
+  playHiHat({ gain: peak * 0.28, pan: options?.pan, open: false });
 }
 
 export function resumeAudio(): void {
@@ -200,7 +214,9 @@ export function playSfx(event: SfxEvent, options?: SfxPlayOptions): void {
       break;
     case 'playerHit':
     case 'hit':
-      t(280 * pm, 0.06, 'square', 0.035);
+      // Crisp impact: short square bark + noise transient
+      t(380 * pm, 0.04, 'square', 0.04);
+      playNoiseBurst(0.04, 0.025 * scale, pan, 0);
       break;
     case 'playerDeath':
     case 'gameOver':
@@ -214,8 +230,9 @@ export function playSfx(event: SfxEvent, options?: SfxPlayOptions): void {
       );
       break;
     case 'enemySpawn':
-      t(880, 0.05, 'triangle', 0.04);
-      setTimeout(() => playTone({ freq: 440, duration: 0.12, type: 'sine', gain: 0.03 * scale, pan }), 60);
+      // Subtle whoosh + low rumble
+      playTone({ freq: 600, freqEnd: 200, duration: 0.14, type: 'sine', gain: 0.032 * scale, pan });
+      playNoiseBurst(0.1, 0.018 * scale, pan, 30);
       break;
     case 'enemyFire':
       t(640, 0.06, 'square', 0.025);
@@ -224,13 +241,15 @@ export function playSfx(event: SfxEvent, options?: SfxPlayOptions): void {
       t(320, 0.05, 'square', 0.028);
       break;
     case 'enemyDeath':
-      playNoiseBurst(0.12, 0.05 * scale, pan);
-      setTimeout(() => t(660, 0.08, 'triangle', 0.04), 80);
+      // Satisfying: noise pop + fast downward pitch sweep
+      playNoiseBurst(0.08, 0.055 * scale, pan);
+      playTone({ freq: 500, freqEnd: 80, duration: 0.12, type: 'triangle', gain: 0.038 * scale, pan });
       break;
     case 'enemyDeathHeavy':
-      playNoiseBurst(0.25, 0.09 * scale, pan);
-      setTimeout(() => t(110, 0.2, 'sawtooth', 0.08), 100);
-      setTimeout(() => t(880, 0.1, 'triangle', 0.05), 200);
+      // Heavy: 808-style thud + noise burst + ring
+      play808Kick({ startHz: 120, endHz: 30, gain: 0.12 * scale, pan, decay: 0.3 });
+      playNoiseBurst(0.18, 0.07 * scale, pan);
+      setTimeout(() => t(660, 0.12, 'triangle', 0.04), 120);
       break;
     case 'companionTaunt':
       t(55, 0.35, 'sawtooth', 0.1);
@@ -272,9 +291,14 @@ export function playSfx(event: SfxEvent, options?: SfxPlayOptions): void {
       t(330 + Math.random() * 80, 0.15, 'sine', 0.03);
       break;
     case 'bossSpawn':
-      t(110, 0.5, 'sawtooth', 0.12);
-      setTimeout(() => t(880, 0.2, 'sawtooth', 0.1), 200);
-      setTimeout(() => t(1320, 0.25, 'triangle', 0.08), 400);
+      // Dramatic entrance: 808 kick + sawtooth sweep + vinyl scratch feel
+      play808Kick({ startHz: 200, endHz: 38, gain: 0.2 * scale, pan, decay: 0.55 });
+      setTimeout(() => {
+        t(110, 0.45, 'sawtooth', 0.1);
+        playNoiseBurst(0.12, 0.06 * scale, pan);
+      }, 80);
+      setTimeout(() => t(880, 0.2, 'sawtooth', 0.09), 280);
+      setTimeout(() => t(1320, 0.28, 'triangle', 0.07), 480);
       break;
     case 'bossTellCharge':
       playTone({ freq: 80, freqEnd: 160, duration: 1.2, type: 'sawtooth', gain: 0.07 * scale, pan });
@@ -300,12 +324,18 @@ export function playSfx(event: SfxEvent, options?: SfxPlayOptions): void {
       setTimeout(() => t(55, 0.4, 'square', 0.09), 120);
       break;
     case 'bossDeath':
-      playNoiseBurst(0.4, 0.12 * scale);
+      // Massive: 808 kick + layered noise + descending fanfare
+      play808Kick({ startHz: 220, endHz: 28, gain: 0.22 * scale, decay: 0.65 });
+      playNoiseBurst(0.35, 0.11 * scale);
+      setTimeout(() => {
+        playNoiseBurst(0.2, 0.08 * scale, 0.5);
+        playNoiseBurst(0.2, 0.08 * scale, -0.5);
+      }, 120);
       playToneSequence(
         [
           { freq: 110, dur: 0.3, type: 'sawtooth', gain: 0.1 * scale },
-          { freq: 880, dur: 0.2, gain: 0.08 * scale, gap: 0.15 },
-          { freq: 1320, dur: 0.35, gain: 0.07 * scale, gap: 0.12 },
+          { freq: 880, dur: 0.22, gain: 0.08 * scale, gap: 0.18 },
+          { freq: 1320, dur: 0.38, gain: 0.07 * scale, gap: 0.14 },
         ],
         pan
       );
@@ -328,13 +358,19 @@ export function playSfx(event: SfxEvent, options?: SfxPlayOptions): void {
       setTimeout(() => t(900, 0.08, 'square', 0.03), 40);
       break;
     case 'exclusive':
+      // Legendary drop — gold record scratch + harmonics
       t(880, 0.12, 'sawtooth', 0.1 * scale);
       setTimeout(() => t(1320, 0.15, 'sawtooth', 0.09 * scale), 80);
       setTimeout(() => t(1760, 0.2, 'square', 0.07 * scale), 160);
+      setTimeout(() => playVinylCrackle(pan), 0);
+      setTimeout(() => playVinylCrackle(pan), 200);
       break;
     case 'augment':
-      t(520, 0.08, 'triangle', 0.06 * scale);
-      setTimeout(() => t(780, 0.1, 'triangle', 0.05 * scale), 60);
+      // Satisfying "ding" + harmonic resonance + vinyl crackle
+      t(523, 0.12, 'triangle', 0.065 * scale);
+      setTimeout(() => t(784, 0.12, 'triangle', 0.055 * scale), 65);
+      setTimeout(() => t(1047, 0.15, 'sine', 0.04 * scale), 130);
+      setTimeout(() => playVinylCrackle(pan), 20);
       break;
     case 'boss':
       t(110, 0.4, 'sawtooth', 0.12 * scale);
@@ -346,17 +382,22 @@ export function playSfx(event: SfxEvent, options?: SfxPlayOptions): void {
       playArtifactAcquireSfx(BuffRarity.RARE);
       break;
     case 'crit':
-      t(520, 0.06, 'sawtooth', 0.06 * scale);
-      setTimeout(() => t(780, 0.08, 'square', 0.05 * scale), 40);
+      // Snappy attack + bright hi-hat accent
+      t(520, 0.06, 'sawtooth', 0.065 * scale);
+      setTimeout(() => t(780, 0.08, 'square', 0.055 * scale), 40);
+      playHiHat({ gain: 0.055 * scale, pan });
       break;
     case 'shield':
       t(320, 0.08, 'sine', 0.05 * scale);
       setTimeout(() => t(480, 0.1, 'triangle', 0.04 * scale), 50);
       break;
     case 'levelUp':
-      t(440, 0.1, 'triangle', 0.06 * scale);
-      setTimeout(() => t(660, 0.12, 'triangle', 0.05 * scale), 80);
-      setTimeout(() => t(880, 0.15, 'triangle', 0.05 * scale), 160);
+      // Harmonic series + vinyl crackle = earned feeling
+      t(440, 0.12, 'triangle', 0.065 * scale);
+      setTimeout(() => t(660, 0.12, 'triangle', 0.055 * scale), 80);
+      setTimeout(() => t(880, 0.16, 'sine', 0.05 * scale), 160);
+      setTimeout(() => t(1320, 0.18, 'sine', 0.035 * scale), 240);
+      setTimeout(() => playVinylCrackle(), 40);
       break;
     case 'cardFlip':
       t(300, 0.05, 'square', 0.03 * scale);

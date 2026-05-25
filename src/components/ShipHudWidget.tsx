@@ -23,7 +23,7 @@ export function ShipHudWidget({
   wave = 1,
   isPaused = false,
   hudVariant = 'full',
-}: ShipHudWidgetProps): JSX.Element | null {
+}: ShipHudWidgetProps): React.JSX.Element | null {
   if (isPaused) return null;
 
   const phoneNarrow = hudVariant === 'phone-narrow';

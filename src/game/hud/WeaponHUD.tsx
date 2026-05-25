@@ -48,10 +48,12 @@ export function WeaponHUD({
         className={slotClass('CANNON_A', false, false)}
         onClick={() => onSwitch?.('CANNON_A')}
         aria-pressed={activeWeaponSlot === 'CANNON_A'}
-        aria-label="Weapon 1, unlimited"
+        aria-label={`Weapon 1, ${primary?.ammoLoaded ?? 0} in magazine`}
       >
         <span className="weapon-hud__label">WPN 1</span>
-        <span className="weapon-hud__ammo">∞</span>
+        <span className="weapon-hud__ammo">
+          {primary ? `${primary.ammoLoaded}/${primaryDef?.magazineSize ?? '?'}` : '—'}
+        </span>
         {primaryDef && !compact && (
           <span className="weapon-hud__sub">{primaryDef.name}</span>
         )}
@@ -66,7 +68,7 @@ export function WeaponHUD({
         aria-label={
           !secondary?.isUnlocked
             ? 'Weapon 2 locked'
-            : `Weapon 2, ${secondary.magazineLoaded} in magazine, ${secondary.ammoReserve} reserve`
+            : `Weapon 2, ${secondary.ammoLoaded} in magazine, ${secondary.ammoReserve} reserve`
         }
       >
         <span className="weapon-hud__label">WPN 2</span>
@@ -74,7 +76,7 @@ export function WeaponHUD({
           <span className="weapon-hud__ammo weapon-hud__ammo--locked">LOCKED</span>
         ) : (
           <span className="weapon-hud__ammo">
-            {secondary.magazineLoaded}/{secondary.ammoReserve}
+            {secondary.ammoLoaded}/{secondary.ammoReserve}
           </span>
         )}
         {secondaryDef && secondary?.isUnlocked && !compact && (

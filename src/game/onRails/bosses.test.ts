@@ -24,6 +24,7 @@ describe('rails bosses', () => {
     const boss = {
       id: 'b',
       type: EntityType.ENEMY,
+      active: true,
       pos: new Vector2(0, 0),
       radius: 80,
       speed: 0,

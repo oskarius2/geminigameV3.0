@@ -140,6 +140,7 @@ function spawnVoidDrone(state: GameState, boss: Entity): void {
   state.enemies.push({
     id: `vd_${boss.id}_${Math.random().toString(36).slice(2, 7)}`,
     type: EntityType.ENEMY,
+    active: true,
     pos: boss.pos.add(offset),
     radius: 11,
     health: hp,
@@ -415,7 +416,7 @@ function tickPlasmaSplitter(
   markFired(enemy);
   const spread = 0.55;
   for (let i = 0; i < PLASMA_CLUSTER_COUNT; i++) {
-    const offset = PLASMA_CLUSTER_COUNT === 1 ? 0 : ((i / (PLASMA_CLUSTER_COUNT - 1)) - 0.5) * spread;
+    const offset = PLASMA_CLUSTER_COUNT <= 1 ? 0 : ((i / (PLASMA_CLUSTER_COUNT - 1)) - 0.5) * spread;
     pushPlasmaBolt(state, enemy, angleToPlayer, offset, slow);
   }
 }
@@ -456,6 +457,7 @@ function spawnSwarmPackmate(state: GameState, boss: Entity): void {
   state.enemies.push({
     id: `so_${boss.id}_${Math.random().toString(36).slice(2, 7)}`,
     type: EntityType.ENEMY,
+    active: true,
     pos: boss.pos.add(offset),
     radius: 10,
     health: hp,

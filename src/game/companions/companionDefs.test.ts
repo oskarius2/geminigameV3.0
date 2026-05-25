@@ -79,7 +79,8 @@ describe('companionDefs', () => {
     const fired = useCompanionAbility(instance, playerStats);
     expect(fired).toBe(true);
     expect(playerStats.tauntActive).toBe(1);
-    expect(instance.abilityCooldownRemaining).toBe(12);
+    expect(instance.tauntTimer).toBeGreaterThan(0);
+    expect(instance.abilityCooldownRemaining).toBe(11);
     expect(useCompanionAbility(instance, playerStats)).toBe(false);
   });
 });

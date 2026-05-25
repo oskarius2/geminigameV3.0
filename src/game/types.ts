@@ -76,6 +76,14 @@ export interface Entity {
   velocity: Vector2;
   aimDir?: Vector2;
   color: string;
+  /**
+   * Object-pool flag. true = enemy is alive and should be processed/rendered.
+   * false = enemy is dead and its slot is available for reuse — skip all loops.
+   * Always set to true when spawning, set to false instead of array.filter().
+   */
+  active: boolean;
+  /** Base speed before buffs/multipliers (used for chrono_glitch speed restore). */
+  baseSpeed?: number;
   damage?: number;
   ownerId?: string;
   itemType?: ItemType;
@@ -116,6 +124,16 @@ export interface Entity {
   /** Survival stage boss pattern (void cardinal, crimson tyrant, etc.). */
   bossPatternId?: string;
   bossPatternTimer?: number;
+  /** True once phase-2 screenshake/speed-up has fired. */
+  bossPhaseAnnounced?: boolean;
+  /**
+   * Seconds since this boss became active. Drives the soft-enrage system —
+   * after 180s the boss starts dealing more damage and attacking faster to
+   * prevent low-DPS stalemates against the 24k HP / 35% resist HP pool.
+   */
+  bossEngageTimer?: number;
+  /** True once the 180s soft-enrage warning banner has fired for this boss. */
+  bossEnrageAnnounced?: boolean;
   /** Survival mini-boss archetype id (e.g. shockwave_sentinel). */
   miniBossId?: string;
   /** Unscaled HP/damage before stage difficulty multipliers. */
@@ -141,6 +159,8 @@ export interface Particle {
   color: string;
   size: number;
   particleType?: 'dot' | 'spark' | 'ring' | 'cross' | 'flash' | 'streak';
+  /** Optional decay multiplier — how fast the particle fades (higher = faster). */
+  decay?: number;
 }
 
 export interface Obstacle {
@@ -162,6 +182,39 @@ export interface Hazard {
   timer: number;
   damage: number;
   color: string;
+}
+
+export type MovingHazardKind = 'COMET' | 'ASTEROID' | 'DEBRIS';
+export type MovingHazardPattern = 'linear' | 'bounce' | 'sine' | 'orbital';
+
+/** A dynamic, destructible hazard that moves around the map and can be shot. */
+export interface MovingHazard {
+  id: string;
+  kind: MovingHazardKind;
+  pos: Vector2;
+  /** Base velocity (pixels/frame). Sine/orbital add offset on top. */
+  velocity: Vector2;
+  radius: number;
+  health: number;
+  maxHealth: number;
+  /** Flat damage dealt on player contact. */
+  damage: number;
+  pattern: MovingHazardPattern;
+  /** Accumulated angle/time used by sine and orbital patterns. */
+  patternPhase: number;
+  /** Anchor world position — orbital pivot or sine midline origin. */
+  anchorPos: Vector2;
+  sineAmplitude: number;
+  color: string;
+  trailColor: string;
+  rotation: number;
+  rotationSpeed: number;
+  /** Frames remaining for white hit-flash rendering. */
+  hitFlash: number;
+  /** Score awarded when destroyed by player. */
+  scoreValue: number;
+  /** Pixels/s of knockback force applied to player on contact. */
+  knockbackForce: number;
 }
 
 export enum BuffRarity {
@@ -239,6 +292,9 @@ export interface GameState {
   particles: Particle[];
   obstacles: Obstacle[];
   hazards: Hazard[];
+  movingHazards: MovingHazard[];
+  /** Seconds until the next moving-hazard spawn attempt. */
+  movingHazardSpawnTimer: number;
   score: number;
   level: number;
   experience: number;
@@ -251,6 +307,8 @@ export interface GameState {
   runStartTime: number;
   isGameOver: boolean;
   isPaused: boolean;
+  /** True while the player is in a mobility dash — used by companion AI. */
+  isPlayerDashing: boolean;
   wave: number;
   stage: number;
   enemiesToKill: number;
@@ -270,6 +328,12 @@ export interface GameState {
   lastBossDefeatedId: string | null;
   /** Frames remaining for post-boss victory banner (60fps ticks). */
   bossVictoryBannerTimer: number;
+  /**
+   * Seconds remaining for the "BOSS ENRAGED!" warning banner. Set when the
+   * active boss crosses the 180s engage threshold. Drives a brief on-screen
+   * popup so the player understands why the boss is suddenly hitting harder.
+   */
+  bossEnrageWarningTimer?: number;
   pendingArenaRestore: boolean;
   stageTransition: number;
   spawnRampTimer: number;
@@ -281,6 +345,8 @@ export interface GameState {
   isDashing: boolean;
   dashDirection: Vector2;
   dashDuration: number;
+  /** Frames remaining before next dash is allowed (dt-normalized). 0 = ready. */
+  dashCooldownRemaining: number;
   buffs: {
     shield: number;
     overdrive: number;
@@ -380,7 +446,7 @@ export interface GameState {
   /** NORMAL survival — wave composition spawn controller. */
   stageEnteredAt: number;
   waveSpawnQueue: EnemyType[];
-  waveMiniBossQueue: string[];
+  waveMiniBossQueue: import('./bosses/miniBossDefs').MiniBossId[];
   waveSpawnCooldown: number;
   activeWaveIndex: number;
   /** Mini-boss defeat HUD popup timer (seconds). */
@@ -428,6 +494,12 @@ export interface GameState {
   miniBossKillsThisRun: number;
   /** Survival stage bosses defeated this run (gates artifact power tiers). */
   runBossesDefeated: number;
+  /**
+   * Number of enemies in the pool that are currently active (alive).
+   * Maintained alongside enemies[] to avoid O(n) length scans on the hot path.
+   * Increment on spawn, decrement on deactivation.
+   */
+  activeEnemyCount: number;
 
   /** Stage difficulty — artifact drop chance (0–1). */
   artifactDropRate?: number;

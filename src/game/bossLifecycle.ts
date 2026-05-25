@@ -1,4 +1,5 @@
 import { EnemyType, Entity, GameState } from './types';
+import { deactivateEnemy } from './Logic';
 
 /** Snapshot for dev-only boss transition debugging. */
 export interface BossLifecycleSnapshot {
@@ -67,9 +68,9 @@ export function applyBossDefeatState(state: GameState): void {
   state.pendingArenaRestore = true;
   state.stageTransition = 90;
   state.runBossesDefeated = (state.runBossesDefeated ?? 0) + 1;
-  state.enemies = state.enemies.filter(
-    (e) => !(e.enemyType === EnemyType.BOSS && e.health <= 0)
-  );
+  for (const e of state.enemies) {
+    if (e.active !== false && e.enemyType === EnemyType.BOSS && e.health <= 0) deactivateEnemy(state, e);
+  }
 }
 
 export function logBossLifecycle(state: GameState, tag: string): void {

@@ -46,11 +46,11 @@ export const DIFFICULTY_PROGRESSION: DifficultyStage[] = [
     stage: 3,
     enemyCountMin: 10,
     enemyCountMax: 15,
-    spawnIntervalMs: 1000,
-    enemyDamageMultiplier: 1.3,
-    enemyHealthMultiplier: 1.4,
-    miniBossDamage: 50,
-    miniBossHealth: 220,
+    spawnIntervalMs: 1200,
+    enemyDamageMultiplier: 1.15,
+    enemyHealthMultiplier: 1.25,
+    miniBossDamage: 45,
+    miniBossHealth: 200,
     artifactDropRate: 0.1,
     availableArtifactPool: ['defense', 'companion_mid', 'offense_basic', 'offense_crit'],
     threatBPMBase: 95,
@@ -58,13 +58,13 @@ export const DIFFICULTY_PROGRESSION: DifficultyStage[] = [
   },
   {
     stage: 4,
-    enemyCountMin: 18,
-    enemyCountMax: 30,
-    spawnIntervalMs: 600,
-    enemyDamageMultiplier: 1.7,
-    enemyHealthMultiplier: 2.0,
-    miniBossDamage: 70,
-    miniBossHealth: 320,
+    enemyCountMin: 14,
+    enemyCountMax: 22,
+    spawnIntervalMs: 900,
+    enemyDamageMultiplier: 1.35,
+    enemyHealthMultiplier: 1.55,
+    miniBossDamage: 60,
+    miniBossHealth: 280,
     artifactDropRate: 0.08,
     availableArtifactPool: ['offense_crit', 'companion_advanced', 'synergy', 'legendary_basic'],
     threatBPMBase: 105,
@@ -72,13 +72,13 @@ export const DIFFICULTY_PROGRESSION: DifficultyStage[] = [
   },
   {
     stage: 5,
-    enemyCountMin: 35,
-    enemyCountMax: 40,
-    spawnIntervalMs: 400,
-    enemyDamageMultiplier: 2.2,
-    enemyHealthMultiplier: 3.0,
-    miniBossDamage: 100,
-    miniBossHealth: 450,
+    enemyCountMin: 18,
+    enemyCountMax: 30,
+    spawnIntervalMs: 700,
+    enemyDamageMultiplier: 1.6,
+    enemyHealthMultiplier: 1.9,
+    miniBossDamage: 80,
+    miniBossHealth: 380,
     artifactDropRate: 0.08,
     availableArtifactPool: ['synergy', 'legendary_basic', 'legendary_advanced', 'corrupted'],
     threatBPMBase: 115,
@@ -92,7 +92,7 @@ export function getDifficultyForStage(stage: number): DifficultyStage {
   }
 
   const baseEndgame = DIFFICULTY_PROGRESSION[DIFFICULTY_PROGRESSION.length - 1];
-  const endlessMultiplier = 1 + (stage - 5) * 0.2;
+  const endlessMultiplier = Math.min(1.6, 1 + (stage - 5) * 0.08);
 
   return {
     ...baseEndgame,

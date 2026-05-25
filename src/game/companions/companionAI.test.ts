@@ -24,6 +24,7 @@ function mockEnemy(id: string, x: number, y: number, opts: Partial<Entity> = {})
   return {
     id,
     type: EntityType.ENEMY,
+    active: true,
     pos: new Vector2(x, y),
     radius: 20,
     health: 100,
@@ -42,6 +43,7 @@ function mockState(partial: Partial<GameState> = {}): GameState {
     player: {
       id: 'player',
       type: EntityType.PLAYER,
+      active: true,
       pos: new Vector2(0, 0),
       radius: 20,
       health: 50,
@@ -127,6 +129,7 @@ describe('companionAI', () => {
       visualTime: 0,
       playerHitBurstTimer: 0,
       playerHitsInBurst: 0,
+      timeSinceLastHit: 10,
     },
     });
     const instance = createCompanionInstance('guardian', 1);
@@ -184,6 +187,7 @@ describe('companionAI', () => {
       player: {
         id: 'player',
         type: EntityType.PLAYER,
+        active: true,
         pos: new Vector2(600, 0),
         radius: 20,
         health: 100,
@@ -218,6 +222,7 @@ describe('companionAI', () => {
       player: {
         id: 'player',
         type: EntityType.PLAYER,
+        active: true,
         pos: new Vector2(800, 0),
         radius: 20,
         health: 100,

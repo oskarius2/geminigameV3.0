@@ -34,7 +34,7 @@ export function AchievementStack({
           >
             <UnlockToastStack toasts={toasts} onDismiss={onDismiss} />
             <p
-              className="text-right text-[9px] font-mono uppercase tracking-wider mt-2 pointer-events-none"
+              className="text-left text-[8px] font-mono uppercase tracking-wider mt-1 pointer-events-none"
               style={{ color: 'rgba(167, 139, 250, 0.45)' }}
             >
               H or Esc to hide
@@ -52,11 +52,11 @@ export function AchievementStack({
             className="ui-achievement-badge-btn"
             aria-label={`Show ${count} achievement notifications`}
           >
-            <GameIcon name="ui.trophy" size={20} color="#fbbf24" glow className="shrink-0" />
-            <span className="text-sm font-bold tabular-nums" style={{ textShadow: 'var(--ui-text-gold-neon)' }}>
-              Achievements: {count} unlocked
+            <GameIcon name="ui.trophy" size={14} color="#fbbf24" glow className="shrink-0" />
+            <span className="text-[11px] font-bold tabular-nums" style={{ textShadow: 'var(--ui-text-gold-neon)' }}>
+              {count} unlocked
             </span>
-            <span className="text-[10px] font-mono hidden min-[400px]:inline" style={{ color: 'rgba(167, 139, 250, 0.5)' }}>
+            <span className="text-[9px] font-mono hidden min-[400px]:inline" style={{ color: 'rgba(167, 139, 250, 0.5)' }}>
               (H)
             </span>
           </motion.button>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { ItemType } from '../types';
 import { INITIAL_STATE } from '../Logic';
 import { AMMO_PICKUP_AMOUNT } from './ammoConfig';
+import { getWeaponDef } from './weaponDefs';
 import {
   checkAmmoDropOnKill,
   collectAmmoPickup,
@@ -39,13 +40,12 @@ function stateWithSecondary(
 }
 
 describe('ammo system', () => {
-  it('primary unlimited — does not consume ammo', () => {
+  it('primary consumes ammo from magazine and auto-reloads', () => {
     const state = INITIAL_STATE(800, 600);
     const before = getActiveWeaponSlot(state.weaponState)!.ammoLoaded;
     const fired = tryConsumeAmmoForShot(state);
     expect(fired.didFire).toBe(true);
-    expect(getActiveWeaponSlot(fired.state.weaponState)!.ammoLoaded).toBe(before);
-    expect(isReloading(fired.state.weaponState)).toBe(false);
+    expect(getActiveWeaponSlot(fired.state.weaponState)!.ammoLoaded).toBe(before - 1);
   });
 
   it('secondary consumes ammo and starts reload when magazine empties', () => {
@@ -69,12 +69,13 @@ describe('ammo system', () => {
     let ws = unlockSecondarySlot(createInitialWeaponState());
     ws.activeSlot = 1;
     const sec = ws.slots[1]!;
+    const magSize = getWeaponDef(sec.weaponId).magazineSize;
     ws.slots = [ws.slots[0], { ...sec, ammoLoaded: 0, ammoReserve: 20 }];
     ws = startReload(ws, sec.weaponId);
-    ws = updateReload(ws, 600);
+    ws = updateReload(ws, 1100);
     expect(isReloading(ws)).toBe(false);
-    expect(getActiveWeaponSlot(ws)!.ammoLoaded).toBe(15);
-    expect(getActiveWeaponSlot(ws)!.ammoReserve).toBe(5);
+    expect(getActiveWeaponSlot(ws)!.ammoLoaded).toBe(magSize);
+    expect(getActiveWeaponSlot(ws)!.ammoReserve).toBe(20 - magSize);
   });
 
   it('weapon switch completes after 250ms', () => {

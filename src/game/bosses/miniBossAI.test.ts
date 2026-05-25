@@ -10,6 +10,7 @@ describe('miniBossAI crash guards', () => {
     const grunt = {
       id: 'grunt_1',
       type: EntityType.ENEMY,
+      active: true,
       pos: new Vector2(100, 100),
       radius: 12,
       health: 50,

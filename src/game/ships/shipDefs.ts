@@ -18,15 +18,20 @@ export interface ShipDef {
   };
   startingArtifact?: string;
   color: string;
+  /**
+   * When true, DASH is unavailable for this ship until the global DASH unlock
+   * milestone is reached (3 bosses defeated across all runs).
+   */
+  dashDisabled?: boolean;
 }
 
 export const SHIP_DEFINITIONS: Record<ShipId, ShipDef> = {
   interceptor: {
     id: 'interceptor',
     name: 'Swift Falcon',
-    description: 'A nimble craft designed for quick strikes and evasive maneuvers.',
+    description: 'A nimble craft designed for quick strikes and evasive maneuvers. Mastery unlocks DASH after 3 boss kills.',
     baseHP: 200,
-    baseSpeed: 18, // Fast - 180 scaled down by 10x
+    baseSpeed: 15, // Nerfed: 18 × 0.85 ≈ 15.3 → 15 (still fastest, no longer ridiculous)
     baseDamage: 2.78, // 50/18 = 2.78 to get 50 damage
     fireRateMultiplier: 1.0, // 10/s is baseline, so 1.0
     uniquePassive: {
@@ -36,6 +41,7 @@ export const SHIP_DEFINITIONS: Record<ShipId, ShipDef> = {
     },
     startingArtifact: 'basic_thrusters',
     color: '#3b82f6', // Bright blue
+    dashDisabled: true, // DASH unlocks globally after 3 boss kills
   },
   gunship: {
     id: 'gunship',

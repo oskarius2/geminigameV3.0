@@ -69,6 +69,7 @@ describe('companionBehavior', () => {
       player: {
         id: 'player',
         type: EntityType.PLAYER,
+        active: true,
         pos: new Vector2(0, 0),
         radius: 20,
         health: 20,
@@ -120,6 +121,7 @@ describe('companionBehavior', () => {
       player: {
         id: 'player',
         type: EntityType.PLAYER,
+        active: true,
         pos: new Vector2(2800, 2100),
         radius: 20,
         health: 100,

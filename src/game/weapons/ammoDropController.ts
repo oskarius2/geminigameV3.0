@@ -96,6 +96,7 @@ export function spawnAmmoPickupEntity(
       {
         id: Math.random().toString(36).slice(2, 11),
         type: EntityType.ITEM,
+        active: true,
         pos: pos.clone(),
         radius: 14,
         health: 1,

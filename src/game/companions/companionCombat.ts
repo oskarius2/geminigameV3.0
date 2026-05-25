@@ -9,6 +9,16 @@ import { playSfx } from '../audio/sfx';
 
 const SCOUT_OWNER = 'companion_scout';
 const GUNNER_OWNER = 'companion_gunner';
+const GUARDIAN_OWNER = 'companion_guardian';
+const HEALER_OWNER = 'companion_healer';
+
+/** Companion damage scaling vs player base damage (per archetype). */
+const PLAYER_DAMAGE_SHARE: Record<string, number> = {
+  scout: 0.32,
+  gunner: 0.5,
+  guardian: 0.3,
+  healer: 0.22,
+};
 
 /** Player damage multiplier vs scout-marked target. */
 export const SCOUT_MARK_SYNERGY_MULT = 1.28;
@@ -40,6 +50,7 @@ export function spawnCompanionBolt(
   state.projectiles.push({
     id: `c-${Math.random().toString(36).slice(2, 9)}`,
     type: EntityType.PROJECTILE,
+    active: true,
     pos: from.clone(),
     radius: ownerId === GUNNER_OWNER ? 4 : 3,
     /** Survives App.tsx projectile cleanup (`p.health > 0`) until hit / obstacle. */
@@ -71,14 +82,15 @@ function scoutBoltDamage(
 ): number {
   const scaled = getScaledCompanionStats(instance.id, instance.currentLevel);
   const base = scaled?.attackDamage ?? 14;
-  const playerShare = (runtime.playerBaseDamage ?? state.baseDamage ?? 20) * 0.28;
+  const playerShare =
+    (runtime.playerBaseDamage ?? state.baseDamage ?? 20) * (PLAYER_DAMAGE_SHARE.scout ?? 0.28);
   const markBonus = targetMarked ? 1.35 : 1;
   const evasion = (runtime.evasionBurstTimer ?? 0) > 0 ? 1.2 : 1;
   return (base + playerShare) * markBonus * evasion;
 }
 
 function livingEnemies(state: CompanionGameState) {
-  return state.enemies.filter((e) => e.type === EntityType.ENEMY && e.health > 0);
+  return state.enemies.filter((e) => e.active !== false && e.type === EntityType.ENEMY && e.health > 0);
 }
 
 function resolveScoutFireTarget(
@@ -169,9 +181,11 @@ export function applyGunnerCombatVolley(
   if (runtime.fireCooldown > 0) return;
 
   const fireRate = runtime.playerStats.companionFireRate ?? scaled?.fireRate ?? 6;
-  const damage = runtime.playerStats.companionFireDamage ?? scaled?.attackDamage ?? 25;
+  const baseDmg = runtime.playerStats.companionFireDamage ?? scaled?.attackDamage ?? 25;
+  /** Gunner: blend base damage with a share of the player's base damage for scaling. */
+  const playerShare = (state.baseDamage ?? 20) * (PLAYER_DAMAGE_SHARE.gunner ?? 0.5);
   const burstMult = runtime.playerStats.focusedBurstMult ?? 1;
-  const finalDmg = damage * burstMult;
+  const finalDmg = (baseDmg + playerShare) * burstMult;
 
   const muzzle = runtime.pos.add(
     target.pos.sub(runtime.pos).normalize().mul(16),
@@ -183,5 +197,97 @@ export function applyGunnerCombatVolley(
   );
   runtime.fireCooldown = 1 / Math.max(fireRate, 0.5);
   runtime.attackPulseTimer = 0.16;
+  notifyCompanionFired(runtime);
+}
+
+/** Pick closest living enemy within range from companion. */
+function pickEnemyInRange(
+  state: CompanionGameState,
+  fromPos: Vector2,
+  range: number,
+) {
+  const pool = state.enemies.filter(
+    (e) =>
+      e.type === EntityType.ENEMY &&
+      e.health > 0 &&
+      e.pos.distanceTo(fromPos) <= range,
+  );
+  if (pool.length === 0) return null;
+  return selectClosestEnemy(pool, fromPos);
+}
+
+/**
+ * Guardian — heavy slow plasma bolt. Lower fire rate, blocks projectiles & taunts.
+ * Damage scales with player base damage so it remains relevant late-game.
+ */
+export function applyGuardianCombat(
+  instance: CompanionInstance,
+  runtime: CompanionRuntime,
+  state: CompanionGameState,
+  dtSec: number,
+): void {
+  const range = 260;
+  const target = pickEnemyInRange(state, runtime.pos, range);
+  if (!target) return;
+
+  runtime.fireCooldown -= dtSec;
+  if (runtime.fireCooldown > 0) return;
+
+  const tauntActive = (runtime.tauntTimer ?? 0) > 0;
+  const fireRate = tauntActive ? 1.8 : 1.1; // shots/sec — slow but steady
+  const playerShare = (state.baseDamage ?? 20) * (PLAYER_DAMAGE_SHARE.guardian ?? 0.3);
+  const levelBoost = 1 + (instance.currentLevel - 1) * 0.12;
+  const damage = (8 + playerShare) * levelBoost * (tauntActive ? 1.3 : 1);
+
+  const muzzle = runtime.pos.add(
+    target.pos.sub(runtime.pos).normalize().mul(18),
+  );
+  spawnCompanionBolt(state, muzzle, target.pos, damage, GUARDIAN_OWNER, '#7dd3fc');
+  runtime.facingAngle = Math.atan2(
+    target.pos.y - runtime.pos.y,
+    target.pos.x - runtime.pos.x,
+  );
+  runtime.fireCooldown = 1 / Math.max(fireRate, 0.5);
+  runtime.attackPulseTimer = 0.18;
+  notifyCompanionFired(runtime);
+}
+
+/**
+ * Healer — only fires when player is healthy + an enemy is close, to clear pressure
+ * while letting regen run when the player is hurt. Light micro-bolts.
+ */
+export function applyHealerCombat(
+  instance: CompanionInstance,
+  runtime: CompanionRuntime,
+  state: CompanionGameState,
+  dtSec: number,
+): void {
+  const playerHpRatio =
+    state.player.health / Math.max(state.player.maxHealth, 1);
+  /** Healer prioritises healing — only chip-fires when player is healthy. */
+  if (playerHpRatio < 0.55) return;
+
+  const range = 200;
+  const target = pickEnemyInRange(state, runtime.pos, range);
+  if (!target) return;
+
+  runtime.fireCooldown -= dtSec;
+  if (runtime.fireCooldown > 0) return;
+
+  const fireRate = 1.4;
+  const playerShare = (state.baseDamage ?? 20) * (PLAYER_DAMAGE_SHARE.healer ?? 0.22);
+  const levelBoost = 1 + (instance.currentLevel - 1) * 0.1;
+  const damage = (5 + playerShare) * levelBoost;
+
+  const muzzle = runtime.pos.add(
+    target.pos.sub(runtime.pos).normalize().mul(12),
+  );
+  spawnCompanionBolt(state, muzzle, target.pos, damage, HEALER_OWNER, '#4ade80');
+  runtime.facingAngle = Math.atan2(
+    target.pos.y - runtime.pos.y,
+    target.pos.x - runtime.pos.x,
+  );
+  runtime.fireCooldown = 1 / Math.max(fireRate, 0.5);
+  runtime.attackPulseTimer = 0.12;
   notifyCompanionFired(runtime);
 }

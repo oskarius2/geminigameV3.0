@@ -61,7 +61,7 @@ export function PreRunShop({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="absolute inset-0 z-[600] overflow-hidden flex flex-col pointer-events-auto"
+      className="absolute inset-0 z-50 overflow-hidden flex flex-col pointer-events-auto"
       style={{
         background:
           'radial-gradient(ellipse 80% 60% at 50% 0%, rgba(0,212,255,0.08) 0%, transparent 70%), #020617',

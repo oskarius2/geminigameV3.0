@@ -61,6 +61,7 @@ export function getEffectiveTypeCap(type: EnemyType, levelProgress: number): num
 export function countEnemiesByType(enemies: Entity[]): Partial<Record<EnemyType, number>> {
   const counts: Partial<Record<EnemyType, number>> = {};
   for (const e of enemies) {
+    if (e.active === false) continue; // skip pooled dead slots
     if (e.enemyType) counts[e.enemyType] = (counts[e.enemyType] ?? 0) + 1;
   }
   return counts;
@@ -77,32 +78,60 @@ export function isPickAtCap(
   return (counts[type] ?? 0) >= cap;
 }
 
+/**
+ * Weighted candidate picks per stage+threat for NORMAL/CAMPAIGN spawns.
+ *
+ * Pick index → EnemyType mapping (see PICK_TO_TYPE above):
+ *   6=RANGED  7=CHASER  9=FAST  10=SWARMER  12=DASHER  16=SWARM_V2
+ *   2=WRAITH  14=ZAPPER  19=SHIELDED  3=ELITE  13=PHANTOM  15=STRIKER
+ *   17=TRACKER  4=SPLINTER  5=NOVA  20=REGENERATING  18=FORTIFIED  11=SNIPER
+ *   1=PHALANX  0=CHASER(alt)
+ */
 function buildCandidatePicks(threatLevel: number, stage = 1): number[] {
   const t = threatLevel;
+
   if (stage <= 1) {
-    return [7, 7, 7, 7];
+    // Stage 1: 3-type mix — CHASER dominant, FAST adds speed threat, SWARMER adds swarm teaser
+    return [
+      7, 7, 7,    // CHASER ×3 (most common)
+      9, 9,       // FAST ×2
+      10,         // SWARMER ×1
+      ...(t >= 20 ? [2] : []),  // WRAITH teaser at higher threat
+    ];
   }
+
   if (stage === 2) {
-    return [7, 7, 6, 6, 9, 9];
+    // Stage 2: CHASER + RANGED + speed/swarm variety
+    return [
+      7, 7,       // CHASER ×2
+      6, 6,       // RANGED ×2
+      9, 9,       // FAST ×2
+      10,         // SWARMER ×1
+      ...(t >= 15 ? [2] : []),   // WRAITH
+      ...(t >= 20 ? [12] : []),  // DASHER
+      ...(t >= 25 ? [14] : []),  // ZAPPER
+    ];
   }
+
+  // Stage 3+: full threat-gated roster
   return [
     9, 9,
     10, 10,
     7, 7,
-    12, 12,   // DASHER — available from the start
-    16, 16,   // SWARM_V2 — always present
+    12, 12,    // DASHER — available from the start
+    16, 16,    // SWARM_V2 — always present
     ...(t >= 15 ? [6] : []),
-    ...(t >= 15 ? [14] : []),  // ZAPPER
+    ...(t >= 15 ? [14] : []),   // ZAPPER
     ...(t >= 25 ? [2] : []),
-    ...(t >= 30 ? [19] : []),  // SHIELDED
+    ...(t >= 30 ? [19] : []),   // SHIELDED
     ...(t >= 35 ? [3] : []),
-    ...(t >= 35 ? [13] : []),  // PHANTOM
-    ...(t >= 40 ? [15] : []),  // STRIKER
+    ...(t >= 35 ? [13] : []),   // PHANTOM
+    ...(t >= 40 ? [15] : []),   // STRIKER
     ...(t >= 45 ? [4] : []),
-    ...(t >= 50 ? [17] : []),  // TRACKER
+    ...(t >= 50 ? [17] : []),   // TRACKER
     ...(t >= 55 ? [5] : []),
-    ...(t >= 55 ? [20] : []),  // REGENERATING
-    ...(t >= 60 ? [18] : []),  // FORTIFIED
+    ...(t >= 55 ? [20] : []),   // REGENERATING
+    ...(t >= 60 ? [18] : []),   // FORTIFIED
     ...(t >= 65 ? [11] : []),
     ...(t >= 75 ? [1] : []),
     ...(t >= 88 ? [0] : []),

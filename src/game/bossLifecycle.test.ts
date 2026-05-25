@@ -27,6 +27,7 @@ describe('bossLifecycle', () => {
     s.enemies.push({
       id: 'b1',
       type: EntityType.ENEMY,
+      active: true,
       pos: new Vector2(100, 100),
       radius: 50,
       health: 0,
@@ -45,6 +46,7 @@ describe('bossLifecycle', () => {
     expect(s.pendingArenaRestore).toBe(true);
     expect(s.stageTransition).toBe(90);
     expect(hasLiveBoss(s)).toBe(false);
-    expect(s.enemies.some((e) => e.enemyType === EnemyType.BOSS)).toBe(false);
+    // Pooling: boss slot stays in the array but is marked inactive (not removed)
+    expect(s.enemies.some((e) => e.enemyType === EnemyType.BOSS && e.active !== false)).toBe(false);
   });
 });

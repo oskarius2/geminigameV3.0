@@ -1,4 +1,4 @@
-import type { CompanionId } from '../types';
+import type { CompanionId, ShipId } from '../types';
 import {
   CompanionType,
   companionIdToType,
@@ -144,10 +144,10 @@ const guardianDroneDef: CompanionDef = {
   ],
   activeAbility: {
     name: 'Taunt',
-    description: 'Forces nearby enemies to target the drone for a short duration.',
-    cooldown: 12,
+    description: 'Pulls nearby enemy aggro and projectiles to the drone for several seconds.',
+    cooldown: 11,
     effect(instance, stats) {
-      const duration = instance.currentLevel >= 5 ? 4.5 : 3;
+      const duration = instance.currentLevel >= 5 ? 6 : 4;
       instance.tauntTimer = duration;
       stats.tauntActive = 1;
       stats.tauntDuration = duration;

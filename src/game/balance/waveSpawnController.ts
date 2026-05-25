@@ -11,6 +11,7 @@ import { getSpawnIntervalMs } from '../progression/difficultyScaler';
 import { getEffectiveTypeCap, countEnemiesByType } from './spawnComposition';
 import { getLevelProgress, getStageQuota } from './spawnCurve';
 import { getWaveForStage, WaveTemplate } from './waveCompositions';
+import { getEnemySpawnDelayMult } from './enemyArchetypes';
 
 /** Maps wave EnemyType → spawnEnemy() switch index (Logic.ts). */
 export const ENEMY_TYPE_TO_SPAWN_PICK: Partial<Record<EnemyType, number>> = {
@@ -115,7 +116,7 @@ export function tickSurvivalWaveSpawns(
   spawnFromPick: (pick: number) => Entity | null,
   spawnMiniBoss?: (id: MiniBossId) => Entity | null,
 ): Entity | null {
-  if (state.enemiesToKill <= 0 || state.enemies.length >= maxEnemies) {
+  if (state.enemiesToKill <= 0 || state.activeEnemyCount >= maxEnemies) {
     return null;
   }
 
@@ -129,6 +130,7 @@ export function tickSurvivalWaveSpawns(
     state.waveMiniBossQueue = buildMiniBossQueue(wave, state.stage);
     announceMiniBossWave(state, state.waveMiniBossQueue);
     state.waveSpawnCooldown = 0;
+    state.wave++;
   }
 
   if (state.waveSpawnQueue.length === 0 && state.waveMiniBossQueue.length === 0) {
@@ -181,6 +183,8 @@ export function tickSurvivalWaveSpawns(
   if (!nextType) return null;
 
   const entity = spawnFromPick(getSpawnPickForEnemyType(nextType));
-  state.waveSpawnCooldown = cooldown;
+  // Heavier types (tanks, specials) get a longer cooldown before the next spawn
+  // so the field never floods with the same slow unit — keeps combat varied.
+  state.waveSpawnCooldown = cooldown * getEnemySpawnDelayMult(nextType);
   return entity;
 }

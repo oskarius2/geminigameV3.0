@@ -8,8 +8,9 @@ import {
 
 describe('getStageQuota', () => {
   it('matches stage 1 initial and later stage formula', () => {
-    expect(getStageQuota(1)).toBe(50);
-    expect(getStageQuota(2)).toBe(85);
+    expect(getStageQuota(1)).toBe(40);
+    expect(getStageQuota(2)).toBe(60);
+    expect(getStageQuota(5)).toBeLessThanOrEqual(120);
   });
 });
 
@@ -76,6 +77,6 @@ describe('getSpawnChance', () => {
       mobile: false,
     });
     expect(early).toBeLessThan(later);
-    expect(early).toBeCloseTo(later * 0.6, 5); // Updated to match new grace period (0.6 instead of 0.35)
+    expect(early).toBeCloseTo(later * 0.5, 5);
   });
 });

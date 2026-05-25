@@ -1,5 +1,6 @@
 import { getThreatTier, getThreatVisualConfig } from '../balance/threat';
 import { GameState, Particle } from '../types';
+import { Vector2 } from '../utils/vector';
 
 const THREAT_MILESTONES = [25, 50, 75, 100] as const;
 
@@ -59,8 +60,8 @@ function spawnVignetteParticle(state: GameState, color: string): void {
 
   const particle: Particle = {
     id: `threat-v-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    pos: { x, y },
-    velocity: { x: (Math.random() - 0.5) * 0.4, y: (Math.random() - 0.5) * 0.4 },
+    pos: new Vector2(x, y),
+    velocity: new Vector2((Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4),
     life: 0.6 + Math.random() * 0.4,
     maxLife: 1,
     color,

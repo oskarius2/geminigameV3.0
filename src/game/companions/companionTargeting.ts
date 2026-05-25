@@ -29,7 +29,7 @@ export function getTargetSelectionStrategy(type: CompanionType): TargetSelection
 }
 
 function livingEnemies(state: CompanionGameState): CompanionEntityRef[] {
-  return state.enemies.filter((e) => e.type === EntityType.ENEMY && e.health > 0);
+  return state.enemies.filter((e) => e.active !== false && e.type === EntityType.ENEMY && e.health > 0);
 }
 
 export function selectClosestEnemy<T extends { pos: Vector2 }>(

@@ -33,6 +33,7 @@ function mockRuntime(): CompanionRuntime {
     visualTime: 0,
     playerHitBurstTimer: 0,
     playerHitsInBurst: 0,
+    timeSinceLastHit: 10,
   };
 }
 

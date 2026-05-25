@@ -12,12 +12,25 @@ import {
 import { EnemyType } from '../types';
 
 describe('waveCompositions', () => {
-  it('stage 1 uses only small enemy types across 3 waves', () => {
+  it('stage 1 has 3 waves and uses only intro-tier enemy types', () => {
     expect(STAGE_1_WAVES).toHaveLength(3);
-    const allowed = new Set([EnemyType.CHASER, EnemyType.FAST, EnemyType.SWARMER]);
+    // Stage 1 uses the lightweight roster: core melee, fast, swarm, and late-wave
+    // WRAITH/DASHER teasers to preview Stage 2+ threats without overwhelming new players.
+    const allowed = new Set([
+      EnemyType.CHASER,
+      EnemyType.FAST,
+      EnemyType.SWARMER,
+      EnemyType.WRAITH,   // speed-preview teaser in wave 1
+      EnemyType.DASHER,   // burst-dash teaser in wave 2
+    ]);
     for (const wave of STAGE_1_WAVES) {
       expect(wave.enemies.every((e) => allowed.has(e.type))).toBe(true);
     }
+    // Confirm core types appear in wave 0 for immediate variety
+    const wave0Types = new Set(STAGE_1_WAVES[0].enemies.map((e) => e.type));
+    expect(wave0Types.has(EnemyType.CHASER)).toBe(true);
+    expect(wave0Types.has(EnemyType.FAST)).toBe(true);
+    expect(wave0Types.has(EnemyType.SWARMER)).toBe(true);
   });
 
   it('returns wave 0 at stage start', () => {

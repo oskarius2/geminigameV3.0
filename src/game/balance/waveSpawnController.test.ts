@@ -20,9 +20,11 @@ function minimalWaveState(overrides: Partial<GameState> = {}): GameState {
     waveMiniBossQueue: [],
     waveSpawnCooldown: 0,
     activeWaveIndex: -1,
-    enemiesToKill: 50,
+    enemiesToKill: 40,
     enemies: [],
     gameMode: 'NORMAL',
+    wave: 0,
+    threatLevel: 0,
     ...overrides,
   } as GameState;
 }
@@ -57,6 +59,7 @@ describe('waveSpawnController', () => {
       return {
         id: 'e1',
         type: EntityType.ENEMY,
+        active: true,
         pos: new Vector2(0, 0),
         radius: 10,
         health: 10,
@@ -68,7 +71,9 @@ describe('waveSpawnController', () => {
       };
     });
     expect(entity).not.toBeNull();
-    expect(spawned[0]).toBe(7);
+    // Stage 1 wave 0 is now a 3-type mix (CHASER=7, FAST=9, SWARMER=10) and the
+    // queue is shuffled — assert the spawn is one of the allowed intro picks.
+    expect([7, 9, 10]).toContain(spawned[0]);
     expect(state.waveSpawnCooldown).toBeGreaterThan(0);
   });
 

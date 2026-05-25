@@ -53,10 +53,11 @@ export const DEFAULT_KEYBINDS: Record<KeybindAction, string> = {
 
 export const ALL_KEYBIND_ACTIONS = Object.keys(DEFAULT_KEYBINDS) as KeybindAction[];
 
-const CATEGORY_ORDER: KeybindAction['category'][] = ['movement', 'combat', 'ui'];
+type KeybindCategory = 'movement' | 'combat' | 'ui';
+const CATEGORY_ORDER: KeybindCategory[] = ['movement', 'combat', 'ui'];
 
 export function keybindsByCategory(): { category: string; actions: KeybindAction[] }[] {
-  const labels: Record<KeybindAction['category'], string> = {
+  const labels: Record<KeybindCategory, string> = {
     movement: 'Movement',
     combat: 'Combat',
     ui: 'Interface',

@@ -30,6 +30,7 @@ function mockAppState(): GameState {
     player: {
       id: 'player',
       type: EntityType.PLAYER,
+      active: true,
       pos: new Vector2(10, 20),
       radius: 20,
       health: 80,
@@ -42,6 +43,7 @@ function mockAppState(): GameState {
       {
         id: 'e1',
         type: EntityType.ENEMY,
+        active: true,
         pos: new Vector2(100, 0),
         radius: 18,
         health: 50,
@@ -56,6 +58,8 @@ function mockAppState(): GameState {
     particles: [],
     obstacles: [],
     hazards: [],
+    movingHazards: [],
+    movingHazardSpawnTimer: 8,
     world: { width: 2000, height: 2000 },
     camera: new Vector2(0, 0),
     activeCompanionId: 'scout',
@@ -68,7 +72,7 @@ function mockAppState(): GameState {
     companionRuntime: null,
     gameMode: 'NORMAL',
     isPaused: false,
-  } as GameState;
+  } as unknown as GameState;
 }
 
 describe('companionGameState', () => {
@@ -104,6 +108,7 @@ describe('companionGameState', () => {
     gs.projectiles.push({
       id: 'bolt-1',
       type: EntityType.PROJECTILE,
+      active: true,
       pos: new Vector2(0, 0),
       radius: 3,
       health: 1,

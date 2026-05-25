@@ -2,15 +2,44 @@ import { Entity, EnemyType, EntityType, GameState, Particle } from '../types';
 import { Vector2 } from '../utils/vector';
 import { hasTimeSlowEffect } from '../buffs/applyBuff';
 import { getMiniBossVelocity, runMiniBossAttacks } from '../bosses/miniBossAI';
+import { PROJECTILE_COLORS } from '../../config/gameTheme';
 
 type VelocityResult = { vx: number; vy: number };
 
-function dirToPlayer(enemy: Entity, playerPos: Vector2, dist: number): Vector2 {
+/**
+ * Resolve aggro target for an enemy. While Guardian's TAUNT is active and the
+ * companion is alive + within the enemy's awareness radius, the companion pulls
+ * aggro instead of the player. Bosses + minibosses ignore taunt (always target player).
+ */
+export function getEnemyAggroPos(state: GameState, enemy?: Entity): Vector2 {
+  const rt = state.companionRuntime;
+  if (!rt) return state.player.pos;
+  if (!rt.tauntTimer || rt.tauntTimer <= 0) return state.player.pos;
+  if (rt.health <= 0) return state.player.pos;
+  // Bosses + mini-bosses are immune to taunt — they always lock on player.
+  if (enemy && (enemy.enemyType === EnemyType.BOSS || enemy.miniBossId)) {
+    return state.player.pos;
+  }
+  // Only nearby enemies are pulled (250 px range from companion).
+  if (enemy) {
+    const dx = enemy.pos.x - rt.pos.x;
+    const dy = enemy.pos.y - rt.pos.y;
+    if (dx * dx + dy * dy > 250 * 250) return state.player.pos;
+  }
+  return rt.pos;
+}
+
+function dirToTarget(enemy: Entity, targetPos: Vector2, dist: number): Vector2 {
   if (dist < 0.1) return new Vector2(1, 0);
   return new Vector2(
-    (playerPos.x - enemy.pos.x) / dist,
-    (playerPos.y - enemy.pos.y) / dist
+    (targetPos.x - enemy.pos.x) / dist,
+    (targetPos.y - enemy.pos.y) / dist
   );
+}
+
+/** @deprecated kept for back-compat — use {@link dirToTarget} with {@link getEnemyAggroPos}. */
+function dirToPlayer(enemy: Entity, playerPos: Vector2, dist: number): Vector2 {
+  return dirToTarget(enemy, playerPos, dist);
 }
 
 function perp(dir: Vector2, sign: number): Vector2 {
@@ -29,8 +58,9 @@ export function steerAroundObstacles(
     const pushDist = enemy.radius + (obs.type === 'CIRCLE' ? obs.size.x : Math.max(obs.size.x, obs.size.y) * 0.5) + 40;
     const dx = enemy.pos.x - obs.pos.x;
     const dy = enemy.pos.y - obs.pos.y;
-    const d = Math.sqrt(dx * dx + dy * dy) || 0.1;
-    if (d < pushDist) {
+    const distSq = dx * dx + dy * dy;
+    if (distSq < pushDist * pushDist) {
+      const d = distSq > 0 ? Math.sqrt(distSq) : 0.1;
       const push = ((pushDist - d) / pushDist) * enemy.speed * 1.2;
       sx += (dx / d) * push;
       sy += (dy / d) * push;
@@ -55,6 +85,7 @@ export function pushProjectile(
   state.projectiles.push({
     id: Math.random().toString(),
     type: EntityType.PROJECTILE,
+    active: true,
     pos: enemy.pos.clone(),
     radius,
     health: 1,
@@ -83,8 +114,9 @@ export function markFired(enemy: Entity): void {
 
 /** Movement aligned away from player (backing off / kiting out). */
 function isRetreating(vx: number, vy: number, toPlayer: Vector2): boolean {
-  const vmag = Math.sqrt(vx * vx + vy * vy);
-  if (vmag < 0.4) return false;
+  const vSq = vx * vx + vy * vy;
+  if (vSq < 0.16) return false;
+  const vmag = Math.sqrt(vSq);
   const dot = (vx * toPlayer.x + vy * toPlayer.y) / vmag;
   return dot < -0.2;
 }
@@ -152,7 +184,7 @@ export function runEnemyAttacks(
 ): void {
   const slow = hasTimeSlowEffect(state);
   const angleToPlayer = Math.atan2(dy, dx);
-  const toPlayer = dirToPlayer(enemy, state.player.pos, dist);
+  const toPlayer = dirToPlayer(enemy, getEnemyAggroPos(state, enemy), dist);
   const backingOff = enemy.aiState === 'retreat' || isRetreating(vx, vy, toPlayer);
 
   if (enemy.miniBossId && runMiniBossAttacks(enemy, state, dist, dx, dy)) {
@@ -264,6 +296,7 @@ export function runEnemyAttacks(
           state.enemies.push({
             id: Math.random().toString(36).substr(2, 9),
             type: 'ENEMY' as any,
+            active: true,
             pos: { x: enemy.pos.x + Math.cos(mAngle) * mDist, y: enemy.pos.y + Math.sin(mAngle) * mDist, clone: () => ({ x: enemy.pos.x + Math.cos(mAngle) * mDist, y: enemy.pos.y + Math.sin(mAngle) * mDist }) } as any,
             radius: 9,
             health: enemy.maxHealth * 0.04,
@@ -323,7 +356,7 @@ export function runEnemyAttacks(
        fireAtPlayer(state, enemy, angleToPlayer, {
         speed: 16,
         radius: 10,
-        color: '#ffdd00',
+        color: PROJECTILE_COLORS.enemyBarrage,
         damage: enemy.damage || 25,
         spread: 0.1,
         count: 5,
@@ -628,7 +661,7 @@ export function computeEnemyVelocity(
   dx: number,
   dy: number
 ): VelocityResult {
-  const playerPos = state.player.pos;
+  const playerPos = getEnemyAggroPos(state, enemy);
   const seed = enemy.behaviorSeed ?? 0.5;
   const sign = seed > 0.5 ? 1 : -1;
   const toPlayer = dirToPlayer(enemy, playerPos, dist);
@@ -1085,8 +1118,8 @@ export function getSeparationForce(
         const sdy = enemy.pos.y - other.pos.y;
         const sdistSq = sdx * sdx + sdy * sdy;
         const minDist = (enemy.radius + other.radius) * bufferMult;
-        if (sdistSq < minDist * minDist) {
-          const sdist = Math.sqrt(sdistSq) || 0.1;
+                if (sdistSq < minDist * minDist) {
+          const sdist = sdistSq > 0 ? Math.sqrt(sdistSq) : 0.1;
           const push = (minDist - sdist) / minDist;
           steerX += (sdx / sdist) * push * sepMult;
           steerY += (sdy / sdist) * push * sepMult;

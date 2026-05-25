@@ -206,7 +206,7 @@ export function MobileCornerHud({
         className={`game-hud__corner-bottom ${loadoutExpanded ? 'game-hud__corner-bottom--expanded' : 'game-hud__corner-bottom--collapsed'}`}
       >
         {(gameMode === 'NORMAL' || gameMode === 'SURVIVAL') && (
-          <div className="pointer-events-auto mb-2 flex justify-center w-full px-2">
+          <div className="pointer-events-auto mb-1 flex justify-end w-full">
             <WeaponHUD
               weaponState={weaponState}
               gameMode={gameMode as GameState['gameMode']}

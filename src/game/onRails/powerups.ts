@@ -194,6 +194,7 @@ export function spawnRailsPowerupPickup(
   state.items.push({
     id: `rails_pu_${Math.random().toString(36).slice(2)}`,
     type: EntityType.ITEM,
+    active: true,
     pos: new Vector2(pos.x, pos.y - 120),
     radius: 18,
     health: 1,

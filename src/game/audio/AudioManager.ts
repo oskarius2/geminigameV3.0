@@ -141,9 +141,9 @@ const WEAPON_SOUNDS: Record<WeaponKey, ManagedSound> = {
 };
 
 let audioSettings: AudioSettings = {
-  masterVolume: 1,
-  musicVolume: 0.7,
-  sfxVolume: 0.8,
+  masterVolume: 0.9,   // -1 dB headroom on master
+  musicVolume: 0.65,   // Music sits under SFX (-3.7 dB relative)
+  sfxVolume: 0.85,     // SFX punchy and present
   isMuted: false,
 };
 
@@ -190,16 +190,36 @@ function syncLegacyEngine(): void {
   setChannelUserVolume('music', audioSettings.musicVolume);
   setChannelUserVolume('sfx', audioSettings.sfxVolume);
   setChannelUserVolume('ui', audioSettings.sfxVolume);
-  setChannelMuted('music', audioSettings.isMuted);
-  setChannelMuted('sfx', audioSettings.isMuted);
-  setChannelMuted('ui', audioSettings.isMuted);
+  // Only persist volumes — never write per-channel mute keys here.
+  // persistMusicMuted/persistSfxMuted must only be called from the
+  // dedicated music/sfx mute handlers to avoid corrupting per-channel state.
   try {
     persistMusicVolume(audioSettings.musicVolume);
     persistSfxVolume(audioSettings.sfxVolume);
-    persistMusicMuted(audioSettings.isMuted);
-    persistSfxMuted(audioSettings.isMuted);
   } catch {
     /* ignore */
+  }
+}
+
+function applyGlobalMute(muted: boolean): void {
+  if (muted) {
+    setChannelMuted('music', true);
+    setChannelMuted('sfx', true);
+    setChannelMuted('ui', true);
+  } else {
+    // Restore per-channel mutes from their own persisted state so that
+    // e.g. "SFX only muted" survives a global mute → unmute cycle.
+    try {
+      const sfxM = localStorage.getItem('sfxMuted') === '1';
+      const musicM = localStorage.getItem('musicMuted') === '1';
+      setChannelMuted('music', musicM);
+      setChannelMuted('sfx', sfxM);
+      setChannelMuted('ui', sfxM);
+    } catch {
+      setChannelMuted('music', false);
+      setChannelMuted('sfx', false);
+      setChannelMuted('ui', false);
+    }
   }
 }
 
@@ -217,9 +237,9 @@ export function loadBoomBapAudioSettings(): void {
     if (saved) {
       const parsed = JSON.parse(saved) as Partial<AudioSettings>;
       audioSettings = {
-        masterVolume: parsed.masterVolume ?? 1,
-        musicVolume: parsed.musicVolume ?? 0.7,
-        sfxVolume: parsed.sfxVolume ?? 0.8,
+        masterVolume: parsed.masterVolume ?? 0.9,
+        musicVolume: parsed.musicVolume ?? 0.65,
+        sfxVolume: parsed.sfxVolume ?? 0.85,
         isMuted: parsed.isMuted ?? false,
       };
     }
@@ -227,6 +247,8 @@ export function loadBoomBapAudioSettings(): void {
     /* ignore */
   }
   applyVolumes();
+  // Sync the Web Audio channel mutes to match the restored global-mute state.
+  applyGlobalMute(audioSettings.isMuted);
 }
 
 function canPlay(managed: ManagedSound): boolean {
@@ -262,16 +284,53 @@ function battleKeyForStage(stage: number): MusicKey {
   return 'battleStage5';
 }
 
+const CROSSFADE_MS = 300;
+
 function playMusicKey(key: MusicKey): void {
   if (currentMusicKey === key) return;
-  AudioManager.stopAllMusic();
+
+  // Fade out whatever is currently playing.
+  if (currentMusicKey) {
+    const prev = MUSIC[currentMusicKey];
+    if (!prev.failed && prev.howl) {
+      const fromVol = prev.howl.volume();
+      let elapsed = 0;
+      const step = 16;
+      const fade = setInterval(() => {
+        elapsed += step;
+        const t = Math.min(1, elapsed / CROSSFADE_MS);
+        prev.howl.volume(fromVol * (1 - t));
+        if (t >= 1) {
+          clearInterval(fade);
+          prev.howl.stop();
+        }
+      }, step);
+    }
+  }
+
+  currentMusicKey = key;
   const track = MUSIC[key];
   if (!canPlay(track)) {
     currentMusicKey = null;
     return;
   }
-  playManaged(track, 'music');
-  currentMusicKey = key;
+
+  // Fade in the new track.
+  const targetVol = musicGain(track.baseVolume);
+  track.howl.volume(0);
+  try {
+    track.howl.play();
+  } catch {
+    return;
+  }
+  let elapsed = 0;
+  const step = 16;
+  const fade = setInterval(() => {
+    elapsed += step;
+    const t = Math.min(1, elapsed / CROSSFADE_MS);
+    track.howl.volume(targetVol * t);
+    if (t >= 1) clearInterval(fade);
+  }, step);
 }
 
 export const AudioManager = {
@@ -319,8 +378,15 @@ export const AudioManager = {
   },
 
   stopAllMusic: () => {
-    Object.values(MUSIC).forEach(stopManaged);
+    Object.values(MUSIC).forEach((m) => {
+      if (m.failed || !m.howl) return;
+      try { m.howl.stop(); } catch { /* ignore */ }
+    });
     currentMusicKey = null;
+    if (duckRestoreTimer) {
+      clearTimeout(duckRestoreTimer);
+      duckRestoreTimer = null;
+    }
   },
 
   playUIHover: () => {
@@ -397,6 +463,7 @@ export const AudioManager = {
   setMuted: (muted: boolean) => {
     audioSettings.isMuted = muted;
     applyVolumes();
+    applyGlobalMute(muted);
     saveAudioSettings();
     if (muted) AudioManager.stopAllMusic();
   },

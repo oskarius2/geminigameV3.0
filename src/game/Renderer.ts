@@ -1,4 +1,4 @@
-import { GameState, Entity, EntityType, ItemType, EnemyType } from './types';
+import { GameState, Entity, EntityType, ItemType, EnemyType, MovingHazardKind } from './types';
 import { drawCompanionOnCanvas } from './companions/companionCanvasDraw';
 import { getScoutMinimapRevealRadius } from './companions/companionPassives';
 import {
@@ -27,6 +27,9 @@ import { railsPlayerScale } from './onRails/update';
 import { getProjectileRenderData, getImpactEffectData } from './weaponEffects';
 import { MINI_BOSS_DEFINITIONS } from './bosses/miniBossDefs';
 import { isVoidWalkerActive } from './bosses/miniBossPassives';
+import { getBossEnrageMultipliers } from './bosses/bossSurvivalAI';
+import { BOSS_ARENA_COLORS } from './content/bossArenas';
+import { HAZARD_COLORS, PROJECTILE_COLORS, GLOW_INTENSITY } from '../config/gameTheme';
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWidth: number, screenHeight: number, options: { isMobile?: boolean; debug?: boolean } = {}) {
   // Ensure screen dimensions are finite to avoid canvas errors
@@ -35,7 +38,7 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
 
   const { isMobile = false, debug = false } = options;
   const { camera } = state;
-  const densityTier = getCombatDensityTier(state.enemies.length);
+  const densityTier = getCombatDensityTier(state.activeEnemyCount ?? state.enemies.length);
   const cullMargin = state.qualityLevel === 'low' ? 50 : 200;
   
   // Helper to safely create radial gradients
@@ -79,7 +82,14 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
 
   // Dynamic background colors per stage (boss arena overrides theme)
   let stageThemeIndex = Math.min(Math.max(state.stage - 1, 0), 4);
-  if (state.bossActive && state.activeBossId) {
+  let bossArenaOverride: { center: string; edge: string } | null = null;
+  if (state.inBossArena && state.activeBossId && BOSS_ARENA_COLORS[state.activeBossId]) {
+    const bac = BOSS_ARENA_COLORS[state.activeBossId];
+    bossArenaOverride = {
+      center: bac.bgGradient[0].replace(/,\s*[\d.]+\)$/, ', 1)'),
+      edge: bac.bgGradient[1].replace(/,\s*[\d.]+\)$/, ', 1)'),
+    };
+  } else if (state.bossActive && state.activeBossId) {
     const bossThemes: Record<string, number> = {
       salvage_hauler: 0,
       hive_regent: 3,
@@ -119,8 +129,13 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWi
     );
 
     if (bgGrad) {
-      bgGrad.addColorStop(0, theme.center);
-      bgGrad.addColorStop(1, theme.edge);
+      if (bossArenaOverride) {
+        bgGrad.addColorStop(0, bossArenaOverride.center);
+        bgGrad.addColorStop(1, bossArenaOverride.edge);
+      } else {
+        bgGrad.addColorStop(0, theme.center);
+        bgGrad.addColorStop(1, theme.edge);
+      }
       ctx.fillStyle = bgGrad;
     } else {
       ctx.fillStyle = theme.center;
@@ -631,6 +646,176 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     ctx.restore();
   });
 
+  // ── Render Moving Hazards (Comets / Asteroids / Debris) ──────────────────
+  state.movingHazards.forEach(h => {
+    const drawX = h.pos.x - camera.x;
+    const drawY = h.pos.y - camera.y;
+    if (
+      drawX < -(h.radius + 60) || drawX > width + h.radius + 60 ||
+      drawY < -(h.radius + 60) || drawY > height + h.radius + 60
+    ) return;
+
+    ctx.save();
+    ctx.translate(drawX, drawY);
+
+    const isFlashing = h.hitFlash > 0;
+    const alpha = isFlashing ? 1 : 0.92;
+    const baseColor = isFlashing ? '#ffffff' : h.color;
+
+    if (h.kind === 'COMET') {
+      // ── COMET: bright cyan streaker with hot white core ──
+      const bodyColor = isFlashing ? '#ffffff' : HAZARD_COLORS.cometBody;
+      const trailColor = HAZARD_COLORS.cometTrail;
+
+      const speed = Math.sqrt(h.velocity.x * h.velocity.x + h.velocity.y * h.velocity.y) || 1;
+      const tailLen = h.radius * 6 + speed * 2.2;
+      const tailX = -(h.velocity.x / speed) * tailLen;
+      const tailY = -(h.velocity.y / speed) * tailLen;
+
+      const grad = ctx.createLinearGradient(0, 0, tailX, tailY);
+      grad.addColorStop(0, isFlashing ? 'rgba(255,255,255,0.95)' : `${bodyColor}ee`);
+      grad.addColorStop(0.35, `${trailColor}88`);
+      grad.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath();
+      ctx.moveTo(h.radius * 0.6, 0);
+      ctx.lineTo(tailX + h.radius * 0.6, tailY);
+      ctx.lineWidth = h.radius * 1.5;
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = grad;
+      ctx.stroke();
+
+      // Outer glow halo (only desktop) — clearly identifies as a hot comet
+      if (!isMobile) {
+        ctx.shadowBlur = GLOW_INTENSITY.hazardComet;
+        ctx.shadowColor = bodyColor;
+      }
+      ctx.beginPath();
+      ctx.arc(0, 0, h.radius, 0, Math.PI * 2);
+      ctx.fillStyle = bodyColor;
+      ctx.globalAlpha = alpha;
+      ctx.fill();
+
+      // Inner white-hot core
+      ctx.shadowBlur = 0;
+      ctx.beginPath();
+      ctx.arc(0, 0, h.radius * 0.45, 0, Math.PI * 2);
+      ctx.fillStyle = HAZARD_COLORS.cometCore;
+      ctx.globalAlpha = 0.95;
+      ctx.fill();
+
+    } else if (h.kind === 'ASTEROID') {
+      // ── ASTEROID: slow rocky tumbler with gray/brown sheen ──
+      const bodyColor = isFlashing ? '#ffffff' : HAZARD_COLORS.asteroidBody;
+      const trailColor = HAZARD_COLORS.asteroidTrail;
+
+      ctx.rotate(h.rotation);
+      const seed = parseInt(h.id.slice(-4), 36) || 1;
+      ctx.beginPath();
+      const pts = 8;
+      for (let i = 0; i < pts; i++) {
+        const angle = (i / pts) * Math.PI * 2;
+        const jitter = 0.7 + 0.35 * Math.sin(seed * (i + 1) * 2.3);
+        const r = h.radius * jitter;
+        const px2 = Math.cos(angle) * r;
+        const py2 = Math.sin(angle) * r;
+        i === 0 ? ctx.moveTo(px2, py2) : ctx.lineTo(px2, py2);
+      }
+      ctx.closePath();
+      if (!isMobile) {
+        ctx.shadowBlur = GLOW_INTENSITY.hazardAsteroid;
+        ctx.shadowColor = bodyColor;
+      }
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = bodyColor;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = isFlashing ? '#ffffff' : trailColor;
+      ctx.stroke();
+
+      // Cratered dark inner ring — sells the "rock" feel
+      if (!isFlashing) {
+        ctx.beginPath();
+        ctx.arc(0, 0, h.radius * 0.45, 0, Math.PI * 2);
+        ctx.fillStyle = HAZARD_COLORS.asteroidCrater;
+        ctx.fill();
+
+        // Tiny crater specks for surface detail
+        for (let c = 0; c < 3; c++) {
+          const cAng = (c / 3) * Math.PI * 2 + seed;
+          const cR = h.radius * 0.62;
+          ctx.beginPath();
+          ctx.arc(
+            Math.cos(cAng) * cR * 0.55,
+            Math.sin(cAng) * cR * 0.55,
+            h.radius * 0.13,
+            0,
+            Math.PI * 2,
+          );
+          ctx.fillStyle = 'rgba(0,0,0,0.55)';
+          ctx.fill();
+        }
+      }
+
+    } else {
+      // ── DEBRIS: small orange/gold spinning shard ──
+      const bodyColor = isFlashing ? '#ffffff' : HAZARD_COLORS.debrisBody;
+      const trailColor = HAZARD_COLORS.debrisTrail;
+
+      ctx.rotate(h.rotation);
+      ctx.beginPath();
+      const shardPts = 5;
+      const seedV = parseInt(h.id.slice(-3), 36) || 1;
+      for (let i = 0; i < shardPts; i++) {
+        const angle = (i / shardPts) * Math.PI * 2;
+        const jitter = 0.55 + 0.5 * Math.abs(Math.sin(seedV * (i + 1)));
+        const r = h.radius * jitter;
+        const px2 = Math.cos(angle) * r;
+        const py2 = Math.sin(angle) * r;
+        i === 0 ? ctx.moveTo(px2, py2) : ctx.lineTo(px2, py2);
+      }
+      ctx.closePath();
+      if (!isMobile) {
+        ctx.shadowBlur = GLOW_INTENSITY.hazardDebris;
+        ctx.shadowColor = bodyColor;
+      }
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = bodyColor;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = isFlashing ? '#ffffff' : trailColor;
+      ctx.stroke();
+
+      // Bright spark core to distinguish from enemies at a glance
+      if (!isFlashing) {
+        ctx.beginPath();
+        ctx.arc(0, 0, h.radius * 0.35, 0, Math.PI * 2);
+        ctx.fillStyle = HAZARD_COLORS.debrisCore;
+        ctx.globalAlpha = 0.85;
+        ctx.fill();
+      }
+    }
+
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+
+    // Health bar (only when damaged)
+    if (h.health < h.maxHealth && h.maxHealth > 1) {
+      const barW = h.radius * 2.2;
+      const barH = 3;
+      const barX = -barW / 2;
+      const barY = h.radius + 5;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)';
+      ctx.fillRect(barX, barY, barW, barH);
+      ctx.fillStyle = h.color;
+      ctx.fillRect(barX, barY, barW * (h.health / h.maxHealth), barH);
+    }
+
+    ctx.restore();
+  });
+  // ──────────────────────────────────────────────────────────────────────────
+
   // Render Items (with culling)
   state.items.forEach(item => {
     const drawX = item.pos.x - camera.x;
@@ -756,87 +941,164 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
 
   });
 
-  // Render Particles (with culling)
+  // ── Batch-Render Particles (grouped by color+type to minimize draw calls) ──
   ctx.save();
-  ctx.globalCompositeOperation = 'lighter'; 
-  state.particles.forEach(p => {
-    const drawX = p.pos.x - camera.x;
-    const drawY = p.pos.y - camera.y;
+  ctx.globalCompositeOperation = 'lighter';
 
-    if (drawX < -cullMargin || drawX > width + cullMargin || drawY < -cullMargin || drawY > height + cullMargin) return;
+  // Pre-compute visible particles with their screen positions + lifeRatio
+  const visibleParticles: {
+    p: typeof state.particles[0];
+    x: number;
+    y: number;
+    lr: number; // lifeRatio
+  }[] = [];
+  for (let i = 0; i < state.particles.length; i++) {
+    const p = state.particles[i];
+    const x = p.pos.x - camera.x;
+    const y = p.pos.y - camera.y;
+    if (x < -cullMargin || x > width + cullMargin || y < -cullMargin || y > height + cullMargin) continue;
+    visibleParticles.push({ p, x, y, lr: Math.max(0, Math.min(1, p.life / p.maxLife)) });
+  }
 
-    const lifeRatio = Math.max(0, Math.min(1, p.life / p.maxLife));
-    ctx.globalAlpha = lifeRatio;
-    ctx.fillStyle = p.color;
-    ctx.strokeStyle = p.color;
-
-    if (p.particleType === 'ring') {
+  // ── Batch streaks: group by color, single beginPath+stroke per color ──
+  {
+    const streakGroups = new Map<string, typeof visibleParticles>();
+    for (const vp of visibleParticles) {
+      if (vp.p.particleType !== 'streak') continue;
+      const key = vp.p.color;
+      let arr = streakGroups.get(key);
+      if (!arr) { arr = []; streakGroups.set(key, arr); }
+      arr.push(vp);
+    }
+    ctx.lineCap = 'round';
+    for (const [color, group] of streakGroups) {
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 1;
       ctx.beginPath();
-      ctx.lineWidth = (isMobile ? 6 : 4) * lifeRatio;
-      ctx.arc(drawX, drawY, Math.max(0, (isMobile ? p.size * 1.5 : p.size) * (1 - lifeRatio + 0.2)), 0, Math.PI * 2);
-      ctx.stroke();
-    } else if (p.particleType === 'streak') {
-      ctx.beginPath();
-      ctx.lineCap = 'round';
-      ctx.lineWidth = Math.max(0.5, (isMobile ? p.size * 1.5 : p.size) * Math.min(1, lifeRatio * 1.5));
-      ctx.moveTo(drawX, drawY);
-      ctx.lineTo(drawX - p.velocity.x * 2.5 * lifeRatio, drawY - p.velocity.y * 2.5 * lifeRatio);
-      ctx.stroke();
-    } else if (p.particleType === 'spark') {
-      ctx.beginPath();
-      ctx.lineWidth = Math.max(0, (isMobile ? p.size * 1.5 : p.size) * lifeRatio);
-      ctx.moveTo(drawX, drawY);
-      ctx.lineTo(drawX - p.velocity.x * 2 * lifeRatio, drawY - p.velocity.y * 2 * lifeRatio);
-      ctx.stroke();
-    } else if (p.particleType === 'flash') {
-      ctx.beginPath();
-      if (!isMobile) {
-        ctx.shadowBlur = p.size;
-        ctx.shadowColor = p.color;
+      for (const { p, x, y, lr } of group) {
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - p.velocity.x * 2.5 * lr, y - p.velocity.y * 2.5 * lr);
       }
-      ctx.arc(drawX, drawY, Math.max(0, (isMobile ? p.size * 1.5 : p.size) * lifeRatio * 0.5), 0, Math.PI * 2);
+      // Use median lineWidth for the group (visual trade-off for perf)
+      const midLr = group[group.length >> 1].lr;
+      const sz = isMobile ? group[0].p.size * 1.5 : group[0].p.size;
+      ctx.lineWidth = Math.max(0.5, sz * Math.min(1, midLr * 1.5));
+      ctx.stroke();
+    }
+  }
+
+  // ── Batch sparks: same strategy ──
+  {
+    const sparkGroups = new Map<string, typeof visibleParticles>();
+    for (const vp of visibleParticles) {
+      if (vp.p.particleType !== 'spark') continue;
+      const key = vp.p.color;
+      let arr = sparkGroups.get(key);
+      if (!arr) { arr = []; sparkGroups.set(key, arr); }
+      arr.push(vp);
+    }
+    ctx.lineCap = 'butt';
+    for (const [color, group] of sparkGroups) {
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      for (const { p, x, y, lr } of group) {
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - p.velocity.x * 2 * lr, y - p.velocity.y * 2 * lr);
+      }
+      const midLr = group[group.length >> 1].lr;
+      const sz = isMobile ? group[0].p.size * 1.5 : group[0].p.size;
+      ctx.lineWidth = Math.max(0, sz * midLr);
+      ctx.stroke();
+    }
+  }
+
+  // ── Batch default (filled circles): group by color ──
+  {
+    const fillGroups = new Map<string, typeof visibleParticles>();
+    for (const vp of visibleParticles) {
+      if (vp.p.particleType != null) continue; // only default (undefined type)
+      const key = vp.p.color;
+      let arr = fillGroups.get(key);
+      if (!arr) { arr = []; fillGroups.set(key, arr); }
+      arr.push(vp);
+    }
+    for (const [color, group] of fillGroups) {
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      for (const { p, x, y, lr } of group) {
+        const r = Math.max(0, ((isMobile ? p.size * 1.5 : p.size) / 2) * lr);
+        ctx.moveTo(x + r, y);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+      }
       ctx.fill();
-      if (!isMobile) {
-        ctx.shadowBlur = 0;
+    }
+  }
+
+  // ── Batch rings: group by color ──
+  {
+    const ringGroups = new Map<string, typeof visibleParticles>();
+    for (const vp of visibleParticles) {
+      if (vp.p.particleType !== 'ring') continue;
+      const key = vp.p.color;
+      let arr = ringGroups.get(key);
+      if (!arr) { arr = []; ringGroups.set(key, arr); }
+      arr.push(vp);
+    }
+    for (const [color, group] of ringGroups) {
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = 1;
+      ctx.lineWidth = (isMobile ? 6 : 4) * (group[group.length >> 1].lr);
+      ctx.beginPath();
+      for (const { p, x, y, lr } of group) {
+        const r = Math.max(0, (isMobile ? p.size * 1.5 : p.size) * (1 - lr + 0.2));
+        ctx.moveTo(x + r, y);
+        ctx.arc(x, y, r, 0, Math.PI * 2);
       }
+      ctx.stroke();
+    }
+  }
+
+  // ── Non-batchable particles (flash, cross, dot): rendered individually ──
+  for (const { p, x, y, lr } of visibleParticles) {
+    if (p.particleType === 'flash') {
+      ctx.globalAlpha = lr;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      if (!isMobile) { ctx.shadowBlur = p.size; ctx.shadowColor = p.color; }
+      ctx.arc(x, y, Math.max(0, (isMobile ? p.size * 1.5 : p.size) * lr * 0.5), 0, Math.PI * 2);
+      ctx.fill();
+      if (!isMobile) ctx.shadowBlur = 0;
     } else if (p.particleType === 'cross') {
+      ctx.globalAlpha = lr;
+      ctx.strokeStyle = p.color;
       ctx.save();
-      ctx.translate(drawX, drawY);
+      ctx.translate(x, y);
       ctx.rotate(p.life * 2);
       ctx.beginPath();
-      ctx.lineWidth = (isMobile ? 3 : 2) * lifeRatio;
-      const extent = Math.max(0, (isMobile ? p.size * 1.5 : p.size) * Math.pow(lifeRatio, 0.5));
-      ctx.moveTo(-extent, 0);
-      ctx.lineTo(extent, 0);
-      ctx.moveTo(0, -extent);
-      ctx.lineTo(0, extent);
-      
-      // Add diagonal cross too
-      ctx.moveTo(-extent * 0.5, -extent * 0.5);
-      ctx.lineTo(extent * 0.5, extent * 0.5);
-      ctx.moveTo(-extent * 0.5, extent * 0.5);
-      ctx.lineTo(extent * 0.5, -extent * 0.5);
-      
+      ctx.lineWidth = (isMobile ? 3 : 2) * lr;
+      const ext = Math.max(0, (isMobile ? p.size * 1.5 : p.size) * Math.pow(lr, 0.5));
+      ctx.moveTo(-ext, 0);  ctx.lineTo(ext, 0);
+      ctx.moveTo(0, -ext);  ctx.lineTo(0, ext);
+      ctx.moveTo(-ext * 0.5, -ext * 0.5); ctx.lineTo(ext * 0.5, ext * 0.5);
+      ctx.moveTo(-ext * 0.5, ext * 0.5);  ctx.lineTo(ext * 0.5, -ext * 0.5);
       ctx.stroke();
       ctx.restore();
     } else if (p.particleType === 'dot') {
-      ctx.beginPath();
-      const radius = Math.max(0, (isMobile ? p.size * 1.5 : p.size) * (1 - lifeRatio));
-      const g = createSafeRadialGradient(drawX, drawY, 0, drawX, drawY, radius);
+      ctx.globalAlpha = lr;
+      const radius = Math.max(0, (isMobile ? p.size * 1.5 : p.size) * (1 - lr));
+      const g = createSafeRadialGradient(x, y, 0, x, y, radius);
       if (g) {
+        ctx.beginPath();
         g.addColorStop(0, p.color);
         g.addColorStop(1, 'transparent');
         ctx.fillStyle = g;
-        ctx.arc(drawX, drawY, radius, 0, Math.PI * 2);
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
         ctx.fill();
       }
-    } else {
-      // Very simple particle fallback - no shadows for performance
-      ctx.beginPath();
-      ctx.arc(drawX, drawY, Math.max(0, ((isMobile ? p.size * 1.5 : p.size) / 2) * lifeRatio), 0, Math.PI * 2);
-      ctx.fill();
     }
-  });
+  }
   ctx.restore();
 
   // Render Projectiles (with ship-specific weapon effects)
@@ -1009,15 +1271,25 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
       ctx.fill();
       ctx.restore();
     } else {
-      // Enemy projectile rendering (keep existing)
+      // ─── Enemy projectile rendering ───────────────────────────────────────
+      // Color falls back to the standardised enemy-projectile red so we never
+      // accidentally render a "naked yellow circle" when a projectile is
+      // spawned without an explicit color (was the bug behind the random
+      // yellow blobs that appeared on screen).
+      const enemyProjColor = p.color || PROJECTILE_COLORS.enemyStandard;
       const trailLen = isRocket ? 35 : p.radius > 8 ? 25 : 18;
-      
+
       ctx.save();
-      const grad = createSafeLinearGradient(drawX, drawY, drawX - (p.velocity.x / velLen) * trailLen, drawY - (p.velocity.y / velLen) * trailLen);
+      const grad = createSafeLinearGradient(
+        drawX,
+        drawY,
+        drawX - (p.velocity.x / velLen) * trailLen,
+        drawY - (p.velocity.y / velLen) * trailLen,
+      );
       if (grad) {
-        grad.addColorStop(0, p.color || '#fef08a');
+        grad.addColorStop(0, enemyProjColor);
         grad.addColorStop(1, 'transparent');
-        
+
         ctx.strokeStyle = grad;
         ctx.globalCompositeOperation = 'lighter';
         ctx.lineWidth = isRocket ? p.radius * 2.5 : p.radius * 1.8;
@@ -1026,7 +1298,7 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
         ctx.moveTo(drawX, drawY);
         ctx.lineTo(
           drawX - (p.velocity.x / velLen) * trailLen,
-          drawY - (p.velocity.y / velLen) * trailLen
+          drawY - (p.velocity.y / velLen) * trailLen,
         );
         ctx.stroke();
       }
@@ -1035,16 +1307,18 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
       ctx.globalAlpha = 1.0;
 
       ctx.save();
-      ctx.fillStyle = p.color || '#ffffff';
+      ctx.fillStyle = enemyProjColor;
       if (!isMobile) {
-        ctx.shadowBlur = isRocket ? 30 : 20;
-        ctx.shadowColor = p.color || '#fef08a';
+        ctx.shadowBlur = isRocket ? GLOW_INTENSITY.projectileRocket : GLOW_INTENSITY.projectileEnemy;
+        ctx.shadowColor = enemyProjColor;
       }
       ctx.beginPath();
       ctx.arc(drawX, drawY, p.radius * (1 + Math.sin(time) * 0.1), 0, Math.PI * 2);
       ctx.fill();
-      
-      ctx.fillStyle = '#fff1f1';
+
+      // Bright hot core — slight tint toward the projectile color so it reads
+      // as a glowing energy bolt rather than a generic white dot.
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
       ctx.beginPath();
       ctx.arc(drawX, drawY, p.radius * 0.45, 0, Math.PI * 2);
       ctx.fill();
@@ -1053,18 +1327,20 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   });
 
   // --- Nano Plexus Links between enemies (Optimized and Throttled) ---
-  if (!isMobile && shouldDrawPlexusLinks(state.enemies.length, densityTier)) {
+  const activeCount = state.activeEnemyCount ?? state.enemies.length;
+  if (!isMobile && shouldDrawPlexusLinks(activeCount, densityTier)) {
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
     
     // Performance: Draw fewer links in higher density
-    const maxLinkDist = state.enemies.length > 80 ? 60 : 100;
-    const maxLinksPerEntity = state.enemies.length > 80 ? 2 : 4;
+    const maxLinkDist = activeCount > 80 ? 60 : 100;
+    const maxLinksPerEntity = activeCount > 80 ? 2 : 4;
     
     const plexusGrid: Record<string, number[]> = {};
     const pSize = 100;
     for (let i = 0; i < state.enemies.length; i++) {
       const e = state.enemies[i];
+      if (e.active === false) continue; // skip pooled dead slots
       const gx = Math.floor(e.pos.x / pSize);
       const gy = Math.floor(e.pos.y / pSize);
       const key = `${gx},${gy}`;
@@ -1074,6 +1350,7 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
 
     for (let i = 0; i < state.enemies.length; i++) {
       const e1 = state.enemies[i];
+      if (e1.active === false) continue; // skip pooled dead slots
       const gx = Math.floor(e1.pos.x / pSize);
       const gy = Math.floor(e1.pos.y / pSize);
       
@@ -1088,9 +1365,9 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
               if (linksCount >= maxLinksPerEntity) break;
 
               const e2 = state.enemies[j];
-              const distSq = e1.pos.distanceToSq(e2.pos);
+                            const distSq = e1.pos.distanceToSq(e2.pos);
               if (distSq < maxLinkDist * maxLinkDist) {
-                const dist = Math.sqrt(distSq);
+                const dist = distSq > 0 ? Math.sqrt(distSq) : 0.001;
                 const alpha = 1 - (dist / maxLinkDist);
                 ctx.beginPath();
                 ctx.moveTo(e1.pos.x - camera.x, e1.pos.y - camera.y);
@@ -1112,6 +1389,7 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   if (isOnRails) {
     renderRailsEntities(ctx, state, camera, Date.now() / 1000);
   } else state.enemies.forEach(e => {
+    if (e.active === false) return; // skip pooled dead slots
     const drawX = e.pos.x - camera.x;
     const drawY = e.pos.y - camera.y;
 
@@ -1158,29 +1436,38 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
       const ringRadius = e.radius * 2.5 * pulse;
       const isChronos = e.miniBossId === 'chronos_guardian';
       const ringScale = isChronos ? 1.35 : 1;
-      const hue =
-        e.miniBossId === 'chronos_guardian'
-          ? 265
-          : e.miniBossId === 'plasma_splitter'
-            ? 25
-            : e.miniBossId === 'swarm_overlord'
-              ? 45
-              : e.miniBossId
-                ? 270
-                : e.enemyType === EnemyType.BOSS
-                  ? 0
-                  : 20;
+      // Boss aura: shifts green (calm) → yellow (warning) → red (enraged) as the
+      // soft-enrage timer climbs from 0 → 180s → 300s. Visually telegraphs the
+      // stalemate-buster so players see "why is the boss suddenly hitting hard?".
+      let hue: number;
+      if (e.miniBossId === 'chronos_guardian') hue = 265;
+      else if (e.miniBossId === 'plasma_splitter') hue = 25;
+      else if (e.miniBossId === 'swarm_overlord') hue = 45;
+      else if (e.miniBossId) hue = 270;
+      else if (e.enemyType === EnemyType.BOSS) {
+        const engage = e.bossEngageTimer ?? 0;
+        // 0..120s: green (120). 120..180s: green→yellow (60). 180..300s: yellow→red (0).
+        if (engage < 120) hue = 120;
+        else if (engage < 180) hue = 120 - ((engage - 120) / 60) * 60; // 120 → 60
+        else hue = Math.max(0, 60 - ((engage - 180) / 120) * 60); // 60 → 0
+      } else hue = 20;
+
+      const bossEnrage = e.enemyType === EnemyType.BOSS
+        ? getBossEnrageMultipliers(e)
+        : { level: 0, damMult: 1, speedMult: 1 };
+      // Pulse the aura harder as enrage climbs so it visually "snarls".
+      const enragePulseAlpha = bossEnrage.level > 0 ? bossEnrage.level * 0.08 : 0;
       ctx.beginPath();
       ctx.arc(0, 0, ringRadius * ringScale, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${e.miniBossId ? 0.18 : 0.1})`;
+      ctx.fillStyle = `hsla(${hue}, 100%, 50%, ${(e.miniBossId ? 0.18 : 0.1) + enragePulseAlpha})`;
       ctx.fill();
-      ctx.strokeStyle = `hsla(${hue}, 100%, 60%, ${e.miniBossId ? 0.55 : 0.3})`;
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = `hsla(${hue}, 100%, 60%, ${(e.miniBossId ? 0.55 : 0.3) + enragePulseAlpha * 1.5})`;
+      ctx.lineWidth = 1.5 + bossEnrage.level * 0.75;
       ctx.stroke();
       if (e.enemyType === EnemyType.BOSS) {
         ctx.beginPath();
         ctx.arc(0, 0, ringRadius * 0.7, 0, Math.PI * 2);
-        ctx.strokeStyle = `hsla(0, 100%, 50%, 0.6)`;
+        ctx.strokeStyle = `hsla(${hue}, 100%, 50%, ${0.45 + bossEnrage.level * 0.2})`;
         ctx.stroke();
       }
       // Colossus telegraph: expanding warning ring during windup
@@ -1253,7 +1540,7 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     ctx.lineWidth = 2;
     
     // Reduced shadow overhead for performance
-    const useShadows = !isMobile && state.enemies.length < 100;
+    const useShadows = !isMobile && activeCount < 100;
     if (useShadows) {
       ctx.shadowColor = e.color;
       ctx.shadowBlur = (e.enemyType === EnemyType.BOSS ? 30 : 15) * (e.hitTimer && e.hitTimer > 0 ? 2 : 1);
@@ -1838,6 +2125,43 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     const c = state.companionRuntime;
     const cDrawX = c.pos.x - camera.x;
     const cDrawY = c.pos.y - camera.y;
+
+    /** Local taunt aura — pulsing ring + label, anchored to the companion (NOT screen-wide). */
+    const tauntRemaining = c.tauntTimer ?? 0;
+    if (tauntRemaining > 0) {
+      const pulse = 0.65 + Math.sin(Date.now() / 110) * 0.25;
+      const ringRadius = 38 + Math.sin(Date.now() / 200) * 4;
+      ctx.save();
+      ctx.globalAlpha = 0.55 * pulse;
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#fb923c';
+      if (!isMobile) {
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = 'rgba(251, 146, 60, 0.85)';
+      }
+      ctx.beginPath();
+      ctx.arc(cDrawX, cDrawY, ringRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 0.18 * pulse;
+      ctx.fillStyle = '#fb923c';
+      ctx.beginPath();
+      ctx.arc(cDrawX, cDrawY, ringRadius * 0.92, 0, Math.PI * 2);
+      ctx.fill();
+      if (!isMobile) ctx.shadowBlur = 0;
+      /** Small worldspace label above companion — never crosses the gameplay center. */
+      ctx.globalAlpha = 0.92;
+      ctx.font = 'bold 10px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#fde68a';
+      ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+      ctx.lineWidth = 3;
+      const labelY = cDrawY - ringRadius - 10;
+      ctx.strokeText('TAUNT', cDrawX, labelY);
+      ctx.fillText('TAUNT', cDrawX, labelY);
+      ctx.restore();
+    }
+
     ctx.save();
     ctx.translate(cDrawX, cDrawY);
     drawCompanionOnCanvas(ctx, {
@@ -2275,7 +2599,7 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
   const revealRadius = getScoutMinimapRevealRadius(state);
   const markedId = state.companionRuntime?.markedEnemyId;
   state.enemies.forEach(e => {
-    if (e.health <= 0) return;
+    if (e.active === false || e.health <= 0) return;
     if (e.pos.distanceTo(state.player.pos) > revealRadius) return;
     const ex = mapX + e.pos.x * scaleX;
     const ey = mapY + e.pos.y * scaleY;

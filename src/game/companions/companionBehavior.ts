@@ -374,6 +374,7 @@ export function updateCompanionBehavior(
   runtime.stateTimer += dtSec;
 
   if (runtime.hitFlashTimer > 0) runtime.hitFlashTimer -= dtSec;
+  if (runtime.timeSinceLastHit !== undefined) runtime.timeSinceLastHit += dtSec;
   if (runtime.abilityToastTimer !== undefined && runtime.abilityToastTimer > 0) {
     runtime.abilityToastTimer -= dtSec;
   }

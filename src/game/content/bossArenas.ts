@@ -22,7 +22,8 @@ export interface MainWorldSnapshot {
   camera: Vector2;
 }
 
-const ARENA_BASE_MULT = 9;
+// Smaller arena = intimate "enclosed" fight (was 9 → now 5.5 ≈ 60% of old size).
+const ARENA_BASE_MULT = 5.5;
 
 export function getBossArenaWorldSize(
   viewWidth: number,
@@ -114,6 +115,72 @@ function rect(
   return obs(id, 'RECT', x, y, rw, rh, rotation, color);
 }
 
+/** Per-boss arena color palettes for obstacle tinting + renderer background. */
+export const BOSS_ARENA_COLORS: Record<string, {
+  wallColor: string;
+  accentColor: string;
+  bgGradient: [string, string];
+}> = {
+  salvage_hauler: {
+    wallColor: 'rgba(51, 65, 85, 0.55)',
+    accentColor: 'rgba(251, 191, 36, 0.3)',
+    bgGradient: ['rgba(15, 23, 42, 0.95)', 'rgba(30, 41, 59, 0.85)'],
+  },
+  hive_regent: {
+    wallColor: 'rgba(22, 101, 52, 0.55)',
+    accentColor: 'rgba(74, 222, 128, 0.4)',
+    bgGradient: ['rgba(5, 46, 22, 0.95)', 'rgba(20, 83, 45, 0.85)'],
+  },
+  void_cardinal: {
+    wallColor: 'rgba(88, 28, 135, 0.6)',
+    accentColor: 'rgba(167, 139, 250, 0.4)',
+    bgGradient: ['rgba(30, 10, 60, 0.95)', 'rgba(76, 29, 149, 0.85)'],
+  },
+  crimson_tyrant: {
+    wallColor: 'rgba(127, 29, 29, 0.6)',
+    accentColor: 'rgba(239, 68, 68, 0.35)',
+    bgGradient: ['rgba(50, 10, 10, 0.95)', 'rgba(127, 29, 29, 0.85)'],
+  },
+  colossus: {
+    wallColor: 'rgba(30, 41, 59, 0.7)',
+    accentColor: 'rgba(148, 163, 184, 0.3)',
+    bgGradient: ['rgba(15, 23, 42, 0.95)', 'rgba(51, 65, 85, 0.9)'],
+  },
+  hive_queen: {
+    wallColor: 'rgba(22, 101, 52, 0.55)',
+    accentColor: 'rgba(250, 204, 21, 0.35)',
+    bgGradient: ['rgba(5, 46, 22, 0.95)', 'rgba(101, 63, 9, 0.85)'],
+  },
+  wraith_lord: {
+    wallColor: 'rgba(30, 27, 75, 0.65)',
+    accentColor: 'rgba(129, 140, 248, 0.35)',
+    bgGradient: ['rgba(15, 10, 50, 0.95)', 'rgba(49, 46, 129, 0.85)'],
+  },
+};
+
+/** Shared boundary walls — encloses the arena on all 4 sides.
+ *  Wall IDs start with `boss_bw_` so the audit can skip the max-size check. */
+function addArenaBoundaryWalls(m: ArenaMetrics, o: Obstacle[], bossId: string): void {
+  const colors = BOSS_ARENA_COLORS[bossId] ?? BOSS_ARENA_COLORS.salvage_hauler;
+  const wallW = m.s * 0.035;
+  // Boundary walls use `obs()` directly with `bw_` prefix (exempt from obstacle cap).
+  o.push(obs('bw_top', 'RECT', m.cx, wallW / 2, m.w, wallW, 0, colors.wallColor));
+  o.push(obs('bw_bot', 'RECT', m.cx, m.h - wallW / 2, m.w, wallW, 0, colors.wallColor));
+  o.push(obs('bw_left', 'RECT', wallW / 2, m.cy, wallW, m.h, 0, colors.wallColor));
+  o.push(obs('bw_right', 'RECT', m.w - wallW / 2, m.cy, wallW, m.h, 0, colors.wallColor));
+
+  // Corner energy nodes for "sealed" feel
+  const inset = m.s * 0.06;
+  const nodeR = m.s * 0.018;
+  const corners: [number, number][] = [
+    [inset, inset], [m.w - inset, inset],
+    [inset, m.h - inset], [m.w - inset, m.h - inset],
+  ];
+  corners.forEach(([x, y], i) => {
+    o.push(circle(m, `corner_${i}`, x, y, nodeR / m.s, colors.accentColor));
+  });
+}
+
 function layoutSalvageHauler(w: number, h: number): Obstacle[] {
   const m = arenaMetrics(w, h);
   const o: Obstacle[] = [];
@@ -137,6 +204,7 @@ function layoutSalvageHauler(w: number, h: number): Obstacle[] {
     }
   }
   o.push(rect(m, 'crane', m.cx - m.w * 0.06, m.cy - m.h * 0.32, 0.04, 0.14, 0.05, 'rgba(251, 191, 36, 0.25)'));
+  addArenaBoundaryWalls(m, o, 'salvage_hauler');
   return o;
 }
 
@@ -177,6 +245,7 @@ function layoutHiveRegent(w: number, h: number): Obstacle[] {
       )
     );
   }
+  addArenaBoundaryWalls(m, o, 'hive_regent');
   return o;
 }
 
@@ -194,6 +263,7 @@ function layoutVoidCardinal(w: number, h: number): Obstacle[] {
     const side = i % 2 === 0 ? m.w * 0.22 : m.w * 0.78;
     o.push(circle(m, `rift_${i}`, side, y, 0.028 + (i % 2) * 0.008, 'rgba(167, 139, 250, 0.35)'));
   }
+  addArenaBoundaryWalls(m, o, 'void_cardinal');
   return o;
 }
 
@@ -227,6 +297,7 @@ function layoutCrimsonTyrant(w: number, h: number): Obstacle[] {
     );
   }
   o.push(circle(m, 'brand', m.cx, m.cy, 0.045, 'rgba(239, 68, 68, 0.1)'));
+  addArenaBoundaryWalls(m, o, 'crimson_tyrant');
   return o;
 }
 
@@ -260,6 +331,7 @@ function layoutColossus(w: number, h: number): Obstacle[] {
     o.push(rect(m, `mass_${i}`, x, y, 0.08, 0.065, (i * Math.PI) / 6, 'rgba(51, 65, 85, 0.85)'));
   }
   o.push(circle(m, 'glow', m.cx, m.cy, 0.04, 'rgba(148, 163, 184, 0.1)'));
+  addArenaBoundaryWalls(m, o, 'colossus');
   return o;
 }
 
@@ -316,6 +388,7 @@ function layoutHiveQueen(w: number, h: number): Obstacle[] {
       )
     );
   }
+  addArenaBoundaryWalls(m, o, 'hive_queen');
   return o;
 }
 
@@ -371,6 +444,7 @@ function layoutWraithLord(w: number, h: number): Obstacle[] {
     );
   }
   o.push(circle(m, 'well', m.cx, m.h * 0.76, 0.038, 'rgba(79, 70, 229, 0.12)'));
+  addArenaBoundaryWalls(m, o, 'wraith_lord');
   return o;
 }
 
@@ -488,11 +562,13 @@ export function auditBossArena(
   };
 }
 
-/** Ensures no obstacle covers the whole viewport when scaled to real arena sizes. */
+/** Ensures no obstacle covers the whole viewport when scaled to real arena sizes.
+ *  Boundary walls (id contains `bw_`) are exempt — they are arena borders. */
 export function maxBossObstacleExtent(layout: Obstacle[], worldW: number, worldH: number): number {
   const cap = Math.min(worldW, worldH) * ARENA_OBSTACLE_MAX_FRAC;
   let max = 0;
   for (const o of layout) {
+    if (o.id.includes('bw_')) continue;
     const ext = o.type === 'CIRCLE' ? o.size.x : Math.max(o.size.x, o.size.y) / 2;
     max = Math.max(max, ext);
     if (ext > cap + 1) {

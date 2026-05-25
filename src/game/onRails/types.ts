@@ -1,5 +1,7 @@
 import { EnemyType, Obstacle } from '../types';
 import { Vector2 } from '../utils/vector';
+import type { RailsBossId } from './bosses';
+
 export interface BossEntranceParticle {
   x: number;
   y: number;
@@ -12,7 +14,7 @@ export interface BossEntranceParticle {
 }
 
 export interface RailsBossEntranceState {
-  bossId: string;
+  bossId: RailsBossId;
   elapsedMs: number;
   durationMs: number;
   audioPlayed: boolean;
@@ -22,7 +24,7 @@ export interface RailsBossEntranceState {
 }
 
 export interface RailsBossDeathState {
-  bossId: string;
+  bossId: RailsBossId;
   elapsedMs: number;
   durationMs: number;
   finished: boolean;

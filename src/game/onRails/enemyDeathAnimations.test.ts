@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { beginRailsEnemyDeath, getEnemyDeathDef } from './enemyDeathAnimations';
-import { EnemyType, EntityType } from '../types';
+import { EnemyType, Entity, EntityType } from '../types';
 import { Vector2 } from '../utils/vector';
 import { createRailsRunState } from './types';
 
@@ -37,9 +37,10 @@ describe('enemy death animations', () => {
 
   it('marks dying and awards score once', () => {
     const rails = createRailsRunState(stubLevel);
-    const enemy = {
+    const enemy: Entity = {
       id: 'e1',
       type: EntityType.ENEMY,
+      active: true,
       enemyType: EnemyType.RANGED,
       pos: new Vector2(10, 20),
       radius: 20,
@@ -57,7 +58,7 @@ describe('enemy death animations', () => {
       items: [],
       enemies: [enemy],
       rails,
-    } as never;
+    } as unknown as import('../types').GameState;
 
     beginRailsEnemyDeath(state, enemy);
     expect(enemy.railsDying).toBe(true);

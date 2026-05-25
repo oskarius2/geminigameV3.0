@@ -22,6 +22,7 @@ function mockEnemy(type: EnemyType): Entity {
   return {
     id: Math.random().toString(),
     type: EntityType.ENEMY,
+    active: true,
     pos: new Vector2(0, 0),
     radius: 10,
     health: 10,

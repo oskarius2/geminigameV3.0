@@ -13,14 +13,10 @@ export function AudioSettingsPanel() {
 
   return (
     <div className="audio-settings-panel">
-      <h2>Audio Settings</h2>
-      <p className="audio-settings-panel__hint">
-        90s boom-bap pack: drop files in <code>public/audio/</code> (see README).
-        Until then, procedural music and SFX still run.
-      </p>
+      <h2>Sound</h2>
 
       <div className="volume-control">
-        <label htmlFor="master-vol">Master Volume</label>
+        <label htmlFor="master-vol">Master</label>
         <input
           id="master-vol"
           type="range"
@@ -35,7 +31,7 @@ export function AudioSettingsPanel() {
       </div>
 
       <div className="volume-control">
-        <label htmlFor="music-vol">Music Volume</label>
+        <label htmlFor="music-vol">Music</label>
         <input
           id="music-vol"
           type="range"
@@ -50,7 +46,7 @@ export function AudioSettingsPanel() {
       </div>
 
       <div className="volume-control">
-        <label htmlFor="sfx-vol">SFX Volume</label>
+        <label htmlFor="sfx-vol">SFX</label>
         <input
           id="sfx-vol"
           type="range"
@@ -70,7 +66,7 @@ export function AudioSettingsPanel() {
           className={`mute-button ${settings.isMuted ? 'muted' : ''}`}
           onClick={toggleMute}
         >
-          {settings.isMuted ? 'Unmute' : 'Mute'}
+          {settings.isMuted ? '🔇 Unmute' : '🔊 Mute All'}
         </button>
       </div>
     </div>

@@ -96,6 +96,7 @@ export function spawnRailsBoss(state: GameState, bossId: RailsBossId): void {
   state.enemies.push({
     id: `rails_boss_${bossId}`,
     type: EntityType.ENEMY,
+    active: true,
     pos: new Vector2(pos.x, pos.y),
     radius,
     health: def.health,
@@ -139,6 +140,7 @@ function bossSpreadShot(
     state.projectiles.push({
       id: `boss_${Math.random().toString(36).slice(2)}`,
       type: EntityType.PROJECTILE,
+      active: true,
       pos: enemy.pos.clone(),
       radius: 8,
       health: 1,
@@ -161,6 +163,7 @@ function ironTitanDebris(state: GameState, enemy: GameState['enemies'][0]): void
   state.projectiles.push({
     id: `debris_${Math.random().toString(36).slice(2)}`,
     type: EntityType.PROJECTILE,
+    active: true,
     pos: new Vector2(pos.x, pos.y - 200),
     radius: 14,
     health: 1,
@@ -243,6 +246,7 @@ export function updateRailsBosses(state: GameState, dtSec: number): void {
       const homing = {
         id: `vp_${Math.random().toString(36).slice(2)}`,
         type: EntityType.PROJECTILE,
+        active: true,
         pos: enemy.pos.clone(),
         radius: 7,
         health: 1,

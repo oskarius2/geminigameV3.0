@@ -296,6 +296,7 @@ function fireEnemyShot(
   state.projectiles.push({
     id: `rails_${Math.random().toString(36).slice(2)}`,
     type: EntityType.PROJECTILE,
+    active: true,
     pos: enemy.pos.clone(),
     radius: enemy.enemyType === EnemyType.SWARM_V2 ? 4 : 6,
     health: 1,
@@ -332,6 +333,7 @@ export function spawnRailsEnemy(
   state.enemies.push({
     id: Math.random().toString(36).slice(2),
     type: EntityType.ENEMY,
+    active: true,
     pos: new Vector2(pos.x, pos.y),
     radius: def.radius,
     health: def.health,

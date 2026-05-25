@@ -31,6 +31,7 @@ function obstacleBlocksAt(origin: Vector2, dir: Vector2, dist: number, obstacles
   const probe: Entity = {
     id: 'beam-probe',
     type: EntityType.PROJECTILE,
+    active: true,
     pos: testPos,
     radius: BEAM_RADIUS * 0.5,
     health: 1,

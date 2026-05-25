@@ -53,6 +53,7 @@ describe('rails powerups', () => {
     const player = {
       id: 'p',
       type: EntityType.PLAYER,
+      active: true,
       pos: new Vector2(0, 0),
       radius: 10,
       health: 50,

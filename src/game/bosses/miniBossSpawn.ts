@@ -40,6 +40,7 @@ export function spawnMiniBoss(state: GameState, miniBossId: MiniBossId): Entity 
   return {
     id: `mb_${miniBossId}_${Math.random().toString(36).slice(2, 9)}`,
     type: EntityType.ENEMY,
+    active: true,
     pos,
     radius: def.baseRadius,
     health,

@@ -31,130 +31,157 @@ export interface WaveTemplate {
   duration: number;
 }
 
-/** Stage 1 — AWAKENING: calm intro, CHASER only (~2 min target). */
+/** Stage 1 — AWAKENING: mixed intro from the first spawn (~2 min target). */
 export const STAGE_1_WAVES: WaveTemplate[] = [
   {
+    // Wave 0: immediate variety — melee + fast + swarm teaser so game feels alive
     stage: 1,
     waveIndex: 0,
-    spawnDelay: 2.46,
-    enemies: [{ type: EnemyType.CHASER, count: 4 }],
+    spawnDelay: 2.2,
+    enemies: [
+      { type: EnemyType.CHASER, count: 3 },
+      { type: EnemyType.FAST, count: 2 },
+      { type: EnemyType.SWARMER, count: 2 },
+    ],
     duration: 35,
   },
   {
+    // Wave 1: adds WRAITH as a speed/evasion teaser
     stage: 1,
     waveIndex: 1,
-    spawnDelay: 1.32,
+    spawnDelay: 1.28,
     enemies: [
-      { type: EnemyType.CHASER, count: 4 },
+      { type: EnemyType.CHASER, count: 3 },
       { type: EnemyType.FAST, count: 3 },
-      { type: EnemyType.SWARMER, count: 2 },
+      { type: EnemyType.SWARMER, count: 3 },
+      { type: EnemyType.WRAITH, count: 1 },
     ],
     duration: 30,
   },
   {
+    // Wave 2: DASHER teaser + denser swarms to build intensity
     stage: 1,
     waveIndex: 2,
-    spawnDelay: 1.06,
+    spawnDelay: 1.0,
     enemies: [
-      { type: EnemyType.CHASER, count: 5 },
+      { type: EnemyType.CHASER, count: 4 },
       { type: EnemyType.FAST, count: 3 },
       { type: EnemyType.SWARMER, count: 3 },
+      { type: EnemyType.DASHER, count: 1 },
     ],
     duration: 25,
   },
 ];
 
-/** Stage 2 — PRESSURE: CHASER + RANGED (~3 min target). */
+/** Stage 2 — PRESSURE: melee + ranged + speed mix (~3 min target). */
 export const STAGE_2_WAVES: WaveTemplate[] = [
   {
+    // Wave 0: 3-type mix from the start — no more 2-type monotony
     stage: 2,
     waveIndex: 0,
-    spawnDelay: 1.41,
+    spawnDelay: 1.38,
     enemies: [
-      { type: EnemyType.CHASER, count: 5 },
+      { type: EnemyType.CHASER, count: 4 },
       { type: EnemyType.RANGED, count: 3 },
+      { type: EnemyType.FAST, count: 2 },
     ],
     duration: 35,
   },
   {
+    // Wave 1: swarm pressure added alongside ranged threat
     stage: 2,
     waveIndex: 1,
-    spawnDelay: 1.41,
-    enemies: [
-      { type: EnemyType.CHASER, count: 6 },
-      { type: EnemyType.RANGED, count: 4 },
-    ],
-    duration: 35,
-  },
-  {
-    stage: 2,
-    waveIndex: 2,
-    spawnDelay: 1.27,
-    miniBosses: [{ id: 'shockwave_sentinel', count: 1 }],
+    spawnDelay: 1.38,
     enemies: [
       { type: EnemyType.CHASER, count: 4 },
       { type: EnemyType.RANGED, count: 4 },
+      { type: EnemyType.SWARMER, count: 3 },
     ],
     duration: 35,
   },
   {
+    // Wave 2: DASHER adds burst threat alongside the mini-boss
+    stage: 2,
+    waveIndex: 2,
+    spawnDelay: 1.24,
+    miniBosses: [{ id: 'shockwave_sentinel', count: 1 }],
+    enemies: [
+      { type: EnemyType.CHASER, count: 3 },
+      { type: EnemyType.RANGED, count: 3 },
+      { type: EnemyType.DASHER, count: 2 },
+      { type: EnemyType.FAST, count: 2 },
+    ],
+    duration: 35,
+  },
+  {
+    // Wave 3: WRAITH introduced as fast melee + ZAPPER as ranged surprise
     stage: 2,
     waveIndex: 3,
-    spawnDelay: 1.13,
+    spawnDelay: 1.1,
     enemies: [
-      { type: EnemyType.CHASER, count: 7 },
-      { type: EnemyType.RANGED, count: 6 },
+      { type: EnemyType.CHASER, count: 5 },
+      { type: EnemyType.RANGED, count: 4 },
+      { type: EnemyType.WRAITH, count: 2 },
+      { type: EnemyType.ZAPPER, count: 2 },
     ],
     duration: 45,
   },
 ];
 
-/** Stage 3 — VARIATION: adds TANK + SWARM (~3 min target). */
+/** Stage 3 — VARIATION: TANK + SWARM + special preview (~3 min target). */
 export const STAGE_3_WAVES: WaveTemplate[] = [
   {
+    // Wave 0: TANK arrives immediately — 4-type variety
     stage: 3,
     waveIndex: 0,
-    spawnDelay: 1.06,
+    spawnDelay: 1.04,
     enemies: [
-      { type: EnemyType.CHASER, count: 5 },
-      { type: EnemyType.RANGED, count: 4 },
-      { type: EnemyType.SWARMER, count: 6 },
+      { type: EnemyType.CHASER, count: 4 },
+      { type: EnemyType.RANGED, count: 3 },
+      { type: EnemyType.SWARMER, count: 4 },
+      { type: EnemyType.TANK, count: 1 },
     ],
     duration: 35,
   },
   {
+    // Wave 1: STRIKER teaser as burst melee threat alongside mini-boss
     stage: 3,
     waveIndex: 1,
-    spawnDelay: 0.99,
+    spawnDelay: 0.97,
     miniBosses: [{ id: 'eclipse_dasher', count: 1 }],
     enemies: [
       { type: EnemyType.CHASER, count: 3 },
       { type: EnemyType.RANGED, count: 3 },
       { type: EnemyType.TANK, count: 2 },
+      { type: EnemyType.STRIKER, count: 1 },
     ],
     duration: 35,
   },
   {
+    // Wave 2: speed wave — DASHER + SWARM_V2 + ZAPPER for multi-direction pressure
     stage: 3,
     waveIndex: 2,
-    spawnDelay: 0.92,
+    spawnDelay: 0.9,
     enemies: [
-      { type: EnemyType.DASHER, count: 4 },
-      { type: EnemyType.RANGED, count: 4 },
-      { type: EnemyType.SWARM_V2, count: 8 },
+      { type: EnemyType.DASHER, count: 3 },
+      { type: EnemyType.SWARM_V2, count: 6 },
+      { type: EnemyType.ZAPPER, count: 2 },
+      { type: EnemyType.RANGED, count: 3 },
     ],
     duration: 35,
   },
   {
+    // Wave 3: 5-type showcase — PHANTOM introduced as unpredictable threat
     stage: 3,
     waveIndex: 3,
-    spawnDelay: 0.85,
+    spawnDelay: 0.83,
     miniBosses: [{ id: 'eclipse_dasher', count: 1 }],
     enemies: [
-      { type: EnemyType.CHASER, count: 4 },
+      { type: EnemyType.CHASER, count: 3 },
       { type: EnemyType.TANK, count: 2 },
-      { type: EnemyType.SWARMER, count: 6 },
-      { type: EnemyType.RANGED, count: 4 },
+      { type: EnemyType.SWARMER, count: 4 },
+      { type: EnemyType.RANGED, count: 3 },
+      { type: EnemyType.PHANTOM, count: 1 },
     ],
     duration: 35,
   },
@@ -168,49 +195,57 @@ function scaleWaveCount(count: number): number {
 
 export const STAGE_4_WAVES: WaveTemplate[] = [
   {
+    // Wave 0: 4-type diversity — SHIELDED introduced as defensive enemy
     stage: 4,
     waveIndex: 0,
-    spawnDelay: 1.06,
+    spawnDelay: 1.04,
     enemies: [
-      { type: EnemyType.CHASER, count: scaleWaveCount(4) },
-      { type: EnemyType.RANGED, count: scaleWaveCount(4) },
+      { type: EnemyType.CHASER, count: scaleWaveCount(3) },
+      { type: EnemyType.RANGED, count: scaleWaveCount(3) },
       { type: EnemyType.ELITE, count: scaleWaveCount(2) },
+      { type: EnemyType.SHIELDED, count: scaleWaveCount(2) },
     ],
     duration: 60,
   },
   {
+    // Wave 1: tank cluster + swarm burst + TRACKER (persistent hunter threat)
     stage: 4,
     waveIndex: 1,
-    spawnDelay: 0.99,
+    spawnDelay: 0.97,
     miniBosses: [{ id: 'void_harbinger', count: 1 }],
     enemies: [
       { type: EnemyType.TANK, count: scaleWaveCount(2) },
       { type: EnemyType.SPLINTER, count: scaleWaveCount(2) },
-      { type: EnemyType.SWARM_V2, count: scaleWaveCount(6) },
+      { type: EnemyType.SWARM_V2, count: scaleWaveCount(5) },
+      { type: EnemyType.TRACKER, count: scaleWaveCount(1) },
     ],
     duration: 60,
   },
   {
+    // Wave 2: REGENERATING added — forces sustained DPS; mixed ranged lineup
     stage: 4,
     waveIndex: 2,
-    spawnDelay: 0.92,
+    spawnDelay: 0.9,
     enemies: [
-      { type: EnemyType.ELITE, count: scaleWaveCount(3) },
+      { type: EnemyType.ELITE, count: scaleWaveCount(2) },
       { type: EnemyType.NOVA, count: scaleWaveCount(2) },
-      { type: EnemyType.RANGED, count: scaleWaveCount(4) },
+      { type: EnemyType.RANGED, count: scaleWaveCount(3) },
+      { type: EnemyType.REGENERATING, count: scaleWaveCount(2) },
     ],
     duration: 60,
   },
   {
+    // Wave 3: 5-type chaos — STRIKER high-damage melee + PHANTOM evasion
     stage: 4,
     waveIndex: 3,
-    spawnDelay: 0.77,
+    spawnDelay: 0.75,
     miniBosses: [{ id: 'void_harbinger', count: 1 }],
     enemies: [
       { type: EnemyType.DASHER, count: scaleWaveCount(3) },
       { type: EnemyType.ELITE, count: scaleWaveCount(2) },
       { type: EnemyType.WRAITH, count: scaleWaveCount(2) },
-      { type: EnemyType.SWARMER, count: scaleWaveCount(5) },
+      { type: EnemyType.STRIKER, count: scaleWaveCount(2) },
+      { type: EnemyType.SWARMER, count: scaleWaveCount(4) },
     ],
     duration: 60,
   },
@@ -219,43 +254,50 @@ export const STAGE_4_WAVES: WaveTemplate[] = [
 /** Stage 5+ — ENDLESS CHAOS: full roster, cycles forever. */
 export const STAGE_5_WAVES: WaveTemplate[] = [
   {
+    // Wave 0: 4-type fast-lane opener — speed + ranged + tank surprise
     stage: 5,
     waveIndex: 0,
-    spawnDelay: 0.7,
+    spawnDelay: 0.68,
     enemies: [
-      { type: EnemyType.FAST, count: scaleWaveCount(6) },
-      { type: EnemyType.RANGED, count: scaleWaveCount(4) },
-      { type: EnemyType.CHASER, count: scaleWaveCount(4) },
+      { type: EnemyType.FAST, count: scaleWaveCount(5) },
+      { type: EnemyType.RANGED, count: scaleWaveCount(3) },
+      { type: EnemyType.CHASER, count: scaleWaveCount(3) },
+      { type: EnemyType.TANK, count: scaleWaveCount(1) },
     ],
     duration: 50,
   },
   {
+    // Wave 1: elite + swarm pressure + PHANTOM + TRACKER alongside mini-boss
     stage: 5,
     waveIndex: 1,
-    spawnDelay: 0.63,
+    spawnDelay: 0.61,
     miniBosses: [{ id: 'rotating', count: 1 }],
     enemies: [
       { type: EnemyType.ELITE, count: scaleWaveCount(2) },
-      { type: EnemyType.TANK, count: scaleWaveCount(2) },
-      { type: EnemyType.ZAPPER, count: scaleWaveCount(3) },
+      { type: EnemyType.SWARM_V2, count: scaleWaveCount(5) },
+      { type: EnemyType.ZAPPER, count: scaleWaveCount(2) },
+      { type: EnemyType.PHANTOM, count: scaleWaveCount(1) },
     ],
     duration: 50,
   },
   {
+    // Wave 2: high-speed + STRIKER burst + SHIELDED to break up the rush
     stage: 5,
     waveIndex: 2,
-    spawnDelay: 0.6,
+    spawnDelay: 0.58,
     enemies: [
-      { type: EnemyType.SWARM_V2, count: scaleWaveCount(10) },
-      { type: EnemyType.STRIKER, count: scaleWaveCount(3) },
-      { type: EnemyType.PHANTOM, count: scaleWaveCount(2) },
+      { type: EnemyType.SWARM_V2, count: scaleWaveCount(7) },
+      { type: EnemyType.STRIKER, count: scaleWaveCount(2) },
+      { type: EnemyType.SHIELDED, count: scaleWaveCount(2) },
+      { type: EnemyType.DASHER, count: scaleWaveCount(2) },
     ],
     duration: 50,
   },
   {
+    // Wave 3: sustain gauntlet — REGENERATING + FORTIFIED + hunter + AoE threat
     stage: 5,
     waveIndex: 3,
-    spawnDelay: 0.56,
+    spawnDelay: 0.54,
     miniBosses: [{ id: 'rotating', count: 1 }],
     enemies: [
       { type: EnemyType.TRACKER, count: scaleWaveCount(2) },
@@ -266,14 +308,16 @@ export const STAGE_5_WAVES: WaveTemplate[] = [
     duration: 50,
   },
   {
+    // Wave 4: tanky + sniper line + SPLINTER burst + WRAITH evasion chaos
     stage: 5,
     waveIndex: 4,
-    spawnDelay: 0.53,
+    spawnDelay: 0.51,
     enemies: [
-      { type: EnemyType.SHIELDED, count: scaleWaveCount(3) },
+      { type: EnemyType.SHIELDED, count: scaleWaveCount(2) },
       { type: EnemyType.SNIPER, count: scaleWaveCount(2) },
       { type: EnemyType.PHALANX, count: scaleWaveCount(2) },
-      { type: EnemyType.SPLINTER, count: scaleWaveCount(3) },
+      { type: EnemyType.SPLINTER, count: scaleWaveCount(2) },
+      { type: EnemyType.WRAITH, count: scaleWaveCount(2) },
     ],
     duration: 50,
   },
@@ -290,35 +334,35 @@ const ENDLESS_STAGE = 5;
 
 /** Design targets: enemies spawned per wave (min–max) by stage. */
 export const STAGE_WAVE_ENEMY_TARGETS: Record<number, { min: number; max: number }> = {
-  1: { min: 5, max: 8 },
-  2: { min: 8, max: 12 },
-  3: { min: 12, max: 18 },
-  4: { min: 18, max: 30 },
-  5: { min: 30, max: 50 },
+  1: { min: 4, max: 8 },
+  2: { min: 8, max: 14 },
+  3: { min: 12, max: 20 },
+  4: { min: 16, max: 26 },
+  5: { min: 20, max: 35 },
 };
 
-/** Exponential enemy count scaling per survival stage (targets STAGE_WAVE_ENEMY_TARGETS). */
+/** Smooth enemy count scaling per survival stage. */
 export function scaleWaveEnemyCount(stage: number, count: number): number {
   const mult =
     stage <= 1
-      ? 1.35
+      ? 1.0
       : stage === 2
-        ? 1.45
+        ? 1.15
         : stage === 3
-          ? 1.12
+          ? 1.3
           : stage === 4
-            ? 2.55
-            : 3.5;
+            ? 1.5
+            : Math.min(2.0, 1.5 + (stage - 4) * 0.1);
   return Math.max(1, Math.round(count * mult));
 }
 
 /** Faster spawn cadence in later stages (multiplier on spawnDelay). */
 export function getStageSpawnDelayScale(stage: number): number {
-  if (stage <= 1) return 0.92;
-  if (stage === 2) return 0.8;
-  if (stage === 3) return 0.68;
-  if (stage === 4) return 0.55;
-  return 0.45;
+  if (stage <= 1) return 0.95;
+  if (stage === 2) return 0.85;
+  if (stage === 3) return 0.75;
+  if (stage === 4) return 0.65;
+  return Math.max(0.55, 0.65 - (stage - 4) * 0.02);
 }
 
 function applyWaveScaling(wave: WaveTemplate): WaveTemplate {

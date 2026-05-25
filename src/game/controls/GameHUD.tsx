@@ -296,7 +296,7 @@ export const GameHUD: React.FC<HUDProps> = ({
         className={
           useStackedHud || isLandscape
             ? 'w-full flex justify-center px-2'
-            : 'absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-30 px-4 w-full max-w-[200px]'
+            : 'absolute top-16 md:top-20 left-1/2 -translate-x-1/2 z-30 px-4 w-full max-w-[180px] pointer-events-none'
         }
       >
         <div className="boss-hp-hud w-full">

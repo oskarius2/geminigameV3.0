@@ -3,24 +3,21 @@ import { motion, AnimatePresence } from 'motion/react';
 import { GameIcon, GameIconFromKey, getSlotIconName } from './components/icons';
 import { StartPage } from './game/controls/StartPage';
 import { OptionsScreen } from './game/controls/OptionsScreen';
-import {
-  loadKeybinds,
-  keyMatches,
-  type KeybindAction,
-} from './game/settings/keybinds';
 import { Joystick } from './game/controls/Joystick';
 import { GameHUD } from './game/controls/GameHUD';
 import { BuffCardPicker } from './game/controls/BuffCardPicker';
 import { ArtifactUnlockPicker } from './game/controls/ArtifactUnlockPicker';
 import {
-  getViewportSnapshot,
-  subscribeViewport,
   getJoystickSize,
   getTouchActionSize,
   getHudVariant,
   getSynergyBarLayout,
+  getViewportSnapshot,
   type ViewportProfile,
 } from './game/controls/mobileLayout';
+import { useViewport } from './hooks/useViewport';
+import { useGameControls } from './hooks/useGameControls';
+import { useAudioLifecycle } from './hooks/useAudioLifecycle';
 import { getAugmentTier, getTierModifiers } from './game/balance/augmentTiers';
 import { resetWaveSpawnState, tickSurvivalWaveSpawns } from './game/balance/waveSpawnController';
 import {
@@ -86,6 +83,7 @@ import {
   type CompanionAbilityNotification,
 } from './game/meta/companionAbilityToast';
 import { CompanionSelectScreen } from './components/CompanionSelectScreen';
+import { GameErrorBoundary } from './components/GameErrorBoundary';
 import { PreRunShop } from './components/PreRunShop';
 import {
   applyCompanionHpShopBoost,
@@ -134,7 +132,7 @@ import {
   resolveDevBoss,
   triggerDevBossWarp,
   triggerDevMiniBossSpawn,
-  tryDevCheatKeydown,
+  type DevCheatHandlers,
 } from './game/dev/cheats';
 import { getRailsShootDirection } from './game/onRails/aim';
 import { startRailsRun } from './game/onRails/initRun';
@@ -215,7 +213,15 @@ import {
 } from './game/hud/artifactPopup';
 import { HUD_RARITY_HEX } from './game/hud/hudTokens';
 import { ArtifactAcquireOverlay } from './game/hud/ArtifactAcquireOverlay';
-import { addMetaScrap, getMetaScrap, spendMetaScrap } from './lib/metaStore';
+import {
+  addMetaScrap,
+  getMetaScrap,
+  spendMetaScrap,
+  addGlobalBossKill,
+  isDashUnlocked,
+  getTotalBossesDefeated,
+  DASH_UNLOCK_BOSS_THRESHOLD,
+} from './lib/metaStore';
 import {
   playSfx,
   playArtifactAcquireSfx,
@@ -227,7 +233,6 @@ import {
 } from './game/audio/sfx';
 import { startMusic, stopMusic, duckMusic, loadMusicSettings, setMusicMuted, setMusicVolume } from './game/audio/music';
 import { AudioManager } from './game/audio/AudioManager';
-import { useAudioManager } from './game/audio/useAudioManager';
 import {
   playPlayerWeaponAudio,
   playWeaponDryFire,
@@ -271,6 +276,7 @@ import {
   createImpact,
   updateParticles,
   updateHazards,
+  updateMovingHazards,
   spawnHazard,
   spawnItem,
   createItemSparkle,
@@ -282,9 +288,12 @@ import {
   pickBuffs,
   ARTIFACTS,
 } from './game/Logic';
+import { spawnMovingHazard, getHazardStageConfig } from './game/hazards/movingHazardDefs';
 import { applyBuff, hasPermanentOverdrive, hasPermanentPiercing, hasPermanentRapidFire } from './game/buffs/applyBuff';
 import {
   collectAmmoPickup,
+  getActiveWeaponSlot,
+  getWeaponDef,
   onMiniBossDefeatedAmmo,
   setGameWeaponSlot,
   tickAmmoOnFrame,
@@ -303,6 +312,8 @@ import {
   pickRandomTraits,
   RANDOM_EVENTS,
   ENEMY_SPATIAL_CELL_SIZE,
+  pooledEnemyPush,
+  deactivateEnemy,
 } from './game/Logic';
 import {
   applyBossDefeatState,
@@ -310,6 +321,7 @@ import {
   isBossTransitioning,
   logBossLifecycle,
 } from './game/bossLifecycle';
+import { applyBossKnockback } from './game/bosses/bossSurvivalAI';
 import { missionController } from './game/missionController';
 
 function findNearestEnemyInGrid(
@@ -343,7 +355,6 @@ function findNearestEnemyInGrid(
 }
 
 export default function App() {
-  useAudioManager();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameStateRef = useRef<GameState | null>(null);
   
@@ -381,7 +392,7 @@ export default function App() {
     };
     screenFlash?: number; 
     ultimateCharge: number;
-    activeWeaponSlot: 'CANNON_A',
+    activeWeaponSlot: 'CANNON_A' | 'CANNON_B',
     equippedArtifacts: Record<ArtifactSlot, string | null>;
     runScrapEarned: number;
     bossArenaTransition: number;
@@ -405,7 +416,6 @@ export default function App() {
     weaponState: GameState['weaponState'] | null;
   } | null>(null);
 
-  const [dimensions, setDimensions] = useState({ width: window.innerWidth, height: window.innerHeight });
   const [screen, setScreen] = useState<
     'MENU' | 'HANGAR' | 'COMPANION_SELECT' | 'PRE_RUN_SHOP' | 'CAMPAIGN_SELECT' | 'RAILS_SELECT' | 'GAME'
   >('MENU');
@@ -437,8 +447,8 @@ export default function App() {
   >([]);
   const prevCompanionToastTimerRef = useRef(0);
   const [isPauseMenuOpen, setIsPauseMenuOpen] = useState(false);
+  const [gameLoopError, setGameLoopError] = useState<string | null>(null);
   const [isOptionsOpen, setIsOptionsOpen] = useState(false);
-  const keybindsRef = useRef(loadKeybinds());
   const [stageIntroStage, setStageIntroStage] = useState<number | null>(null);
   const [stageIntroKey, setStageIntroKey] = useState(0);
   const clearStageIntro = useCallback(() => setStageIntroStage(null), []);
@@ -491,13 +501,6 @@ export default function App() {
   const [showLevelUp, setShowLevelUp] = useState(false);
   const showLevelUpRef = useRef(showLevelUp);
   const showArtifactUnlockRef = useRef(showArtifactUnlock);
-  const [viewportProfile, setViewportProfile] = useState<ViewportProfile>('desktop');
-  const [compactHud, setCompactHud] = useState(false);
-  const [landscapeHud, setLandscapeHud] = useState(false);
-  const [showTouchControls, setShowTouchControls] = useState(false);
-  const viewportProfileRef = useRef<ViewportProfile>('desktop');
-  const reducedEffectsRef = useRef(false);
-  const isMobile = viewportProfile !== 'desktop';
   const [newUnlockIds, setNewUnlockIds] = useState<string[]>(
     () => getMetaProgress().pendingNewArtifacts,
   );
@@ -623,17 +626,6 @@ export default function App() {
     localStorage.setItem('equippedArtifacts', JSON.stringify(equippedArtifactIds));
   }, [equippedArtifactIds]);
 
-  const controls = useRef({
-    move: { x: 0, y: 0 },
-    aim: { x: 0, y: 0 },
-    isFiring: false,
-    wantDash: false,
-    wantUltimate: false,
-    wantCompanionAbility: false,
-    mousePos: { x: 0, y: 0 },
-    keys: new Set<string>(),
-  });
-
   const lastFireTime = useRef(0);
   const unlockedArtifactIdsRef = useRef(unlockedArtifactIds);
   const equippedArtifactIdsRef = useRef(equippedArtifactIds);
@@ -643,6 +635,10 @@ export default function App() {
   const pendingArtifactUnlockRef = useRef<Artifact[] | null>(null);
   const [metaScrap, setMetaScrap] = useState(() => getMetaScrap());
   const [lastRunScrapEarned, setLastRunScrapEarned] = useState(0);
+  const [dashUnlocked, setDashUnlocked] = useState(() => isDashUnlocked());
+  const [totalBossesDefeated, setTotalBossesDefeated] = useState(() => getTotalBossesDefeated());
+  const [showDashUnlockPopup, setShowDashUnlockPopup] = useState(false);
+  const dashUnlockPopupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [currentBuffs, setCurrentBuffs] = useState<PassiveBuff[]>([]);
   const [currentCardChoices, setCurrentCardChoices] = useState<SurvivalCardChoice[]>([]);
   const [artifactAcquirePopup, setArtifactAcquirePopup] = useState<ArtifactAcquiredEvent | null>(
@@ -652,6 +648,118 @@ export default function App() {
   const artifactPopupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const forceUiSyncRef = useRef(false);
 
+  // === HOOKS: Viewport & Controls ===
+  const viewport = useViewport({
+    onProfileChange: () => {
+      // Reset joystick state on profile change (e.g., device rotation)
+      if (screen === 'GAME') {
+        console.log('[viewport] profile changed — resetting inputs');
+      }
+    }
+  });
+  
+  const {dimensions, isMobile, viewportProfile, compactHud, landscapeHud, showTouchControls, viewportProfileRef, reducedEffectsRef} = viewport;
+
+  const syncUi = useCallback(() => {
+    const next = gameStateRef.current;
+    if (!next) {
+      setUiState(null);
+      return;
+    }
+    const compSnap = getCompanionHudSnapshot(next);
+    setUiState({
+      health: next.player.health,
+      maxHealth: next.player.maxHealth,
+      survivalTime: next.survivalTime,
+      threatLevel: next.threatLevel,
+      threatPeak: next.threatPeak,
+      score: next.score,
+      wave: next.wave,
+      stage: next.stage,
+      enemiesToKill: next.enemiesToKill,
+      stageTransition: next.stageTransition,
+      energy: next.energy,
+      maxEnergy: next.maxEnergy,
+      velocityMag: next.player.velocity.magnitude(),
+      playerSpeed: next.player.speed,
+      isGameOver: next.isGameOver,
+      isPaused: next.isPaused,
+      gameMode: next.gameMode,
+      cardTimer: next.cardTimer,
+      passives: next.passives,
+      buffs: { ...next.buffs },
+      screenFlash: next.screenFlash,
+      ultimateCharge: next.ultimateCharge,
+      activeWeaponSlot: next.activeWeaponSlot,
+      equippedArtifacts: { ...next.equippedArtifacts },
+      runScrapEarned: next.runScrapEarned,
+      bossArenaTransition: next.bossArenaTransition,
+      activeBossId: next.activeBossId,
+      bossActive: next.bossActive,
+      lastBossDefeatedId: next.lastBossDefeatedId,
+      bossVictoryBannerTimer: next.bossVictoryBannerTimer,
+      pendingEvent: next.pendingEvent,
+      extraLifeCharges: next.extraLifeCharges,
+      selectedShip: next.selectedShip,
+      companionId: compSnap.companionId,
+      companionLevel: compSnap.level,
+      companionHealth: compSnap.health,
+      companionMaxHealth: compSnap.maxHealth,
+      companionAbilityCooldown: compSnap.abilityCooldownRemaining,
+      companionAbilityCooldownMax: compSnap.abilityCooldownMax,
+      companionAbilityName: compSnap.abilityName,
+      companionEnergy: compSnap.energy,
+      companionAbilityToastTimer: next.companionRuntime?.abilityToastTimer,
+      companionAbilityToastName: next.companionRuntime?.abilityToastName,
+      weaponState: next.weaponState,
+    });
+  }, []);
+
+  const showDevCheatToast = useCallback((msg: string) => {
+    setDevCheatToast(msg);
+    if (devCheatToastTimerRef.current) clearTimeout(devCheatToastTimerRef.current);
+    devCheatToastTimerRef.current = setTimeout(() => setDevCheatToast(null), 3000);
+  }, []);
+
+  const togglePause = useCallback(() => {
+    const next = gameStateRef.current;
+    if (!next) return;
+    next.isPaused = !next.isPaused;
+    syncUi();
+    setIsPauseMenuOpen(next.isPaused);
+  }, [syncUi]);
+
+  const closeOptions = useCallback(() => {
+    setIsOptionsOpen(false);
+  }, []);
+
+  const devCheatHandlersRef = useRef<DevCheatHandlers>({
+    onBossWarp: () => {},
+    onMiniBossSpawn: () => {},
+    onClearQuota: () => {},
+    onSkipWarp: () => {},
+  });
+
+  const { controls, keybindsRef } = useGameControls({
+    screen,
+    isOptionsOpen,
+    devCheatsActive,
+    showLevelUp,
+    showArtifactUnlock,
+    unlockToastsCount: unlockToasts.length,
+    gameStateRef,
+    devCheatHandlersRef,
+    callbacks: {
+      syncUi,
+      showDevCheatToast,
+      toggleAchievementsVisible,
+      togglePause,
+      closeOptions,
+    },
+  });
+
+  useAudioLifecycle({ screen, musicMuted });
+
   useEffect(() => {
     reconcileAllCompanionProgress();
     loadSfxMuted();
@@ -659,26 +767,6 @@ export default function App() {
     setSfxMutedState(localStorage.getItem('sfxMuted') === '1');
     setMusicMutedState(localStorage.getItem('musicMuted') === '1');
     setSfxVol(getSfxVolume());
-    const applyViewport = () => {
-      const w = window.innerWidth;
-      const h = window.innerHeight;
-      const snap = getViewportSnapshot(w, h);
-      const prev = viewportProfileRef.current;
-      setDimensions({ width: w, height: h });
-      setViewportProfile(snap.profile);
-      setCompactHud(snap.compactHud);
-      setLandscapeHud(snap.landscapeHud);
-      setShowTouchControls(snap.showTouchControls);
-      viewportProfileRef.current = snap.profile;
-      reducedEffectsRef.current = snap.reducedEffects;
-      if (prev !== snap.profile) {
-        controls.current.move = { x: 0, y: 0 };
-        controls.current.aim = { x: 0, y: 0 };
-        controls.current.isFiring = false;
-      }
-    };
-    applyViewport();
-    return subscribeViewport(applyViewport);
   }, []);
 
   useEffect(() => {
@@ -741,20 +829,6 @@ export default function App() {
   useEffect(() => {
     musicMutedRef.current = musicMuted;
   }, [musicMuted]);
-
-  useEffect(() => {
-    if (musicMuted) {
-      AudioManager.stopAllMusic();
-      return;
-    }
-    if (screen === 'MENU') {
-      AudioManager.playMenuTheme();
-      return () => AudioManager.stopAllMusic();
-    }
-    if (screen !== 'GAME') {
-      AudioManager.stopAllMusic();
-    }
-  }, [screen, musicMuted]);
 
   useEffect(() => {
     showLevelUpRef.current = showLevelUp;
@@ -907,6 +981,7 @@ export default function App() {
     initialState.postBossBuffPick = false;
     initialState.miniBossKillsThisRun = 0;
     initialState.runBossesDefeated = 0;
+    initialState.activeEnemyCount = 0;
     resetWaveSpawnState(initialState);
     gameStateRef.current = initStageDifficulty(initialState);
     setLastRunScrapEarned(0);
@@ -1058,74 +1133,6 @@ export default function App() {
     if (!musicMuted) startMusic();
   };
 
-  const syncUi = () => {
-    const state = gameStateRef.current;
-    if (!state) return;
-    setUiState({
-      health: state.player.health,
-      maxHealth: state.player.maxHealth,
-      survivalTime: state.survivalTime,
-      threatLevel: state.threatLevel,
-      threatPeak: state.threatPeak,
-      score: state.score,
-      wave: state.wave,
-      stage: state.stage,
-      enemiesToKill: state.enemiesToKill,
-      stageTransition: state.stageTransition,
-      energy: state.energy,
-      maxEnergy: state.maxEnergy,
-      velocityMag: state.player.velocity.magnitude(),
-      playerSpeed: state.player.speed,
-      isGameOver: state.isGameOver,
-      isPaused: state.isPaused,
-      gameMode: state.gameMode,
-      buffs: { ...state.buffs },
-      screenFlash: state.screenFlash,
-      ultimateCharge: state.ultimateCharge,
-      cardTimer: state.cardTimer,
-      activeWeaponSlot: state.activeWeaponSlot,
-      weaponState: state.weaponState ?? null,
-      equippedArtifacts: { ...state.equippedArtifacts },
-      runScrapEarned: state.runScrapEarned,
-      bossArenaTransition: state.bossArenaTransition,
-      activeBossId: state.activeBossId,
-      bossActive: state.bossActive,
-      lastBossDefeatedId: state.lastBossDefeatedId,
-      bossVictoryBannerTimer: state.bossVictoryBannerTimer,
-      pendingEvent: state.pendingEvent,
-      extraLifeCharges: state.extraLifeCharges,
-      passives: [...state.passives],
-      selectedShip: state.selectedShip,
-      ...(() => {
-        const snap = getCompanionHudSnapshot(state);
-        if (!snap) {
-          return {
-            companionId: null as CompanionId | null,
-            companionLevel: 1,
-            companionHealth: 0,
-            companionMaxHealth: 0,
-            companionAbilityCooldown: 0,
-            companionAbilityCooldownMax: 0,
-            companionAbilityName: '',
-            companionEnergy: undefined,
-          };
-        }
-        return {
-          companionId: snap.companionId,
-          companionLevel: snap.level,
-          companionHealth: snap.health,
-          companionMaxHealth: snap.maxHealth,
-          companionAbilityCooldown: snap.abilityCooldownRemaining,
-                    companionAbilityCooldownMax: snap.abilityCooldownMax,
-          companionAbilityName: snap.abilityName,
-          companionEnergy: snap.energy,
-          companionAbilityToastTimer: state.companionRuntime?.abilityToastTimer,
-          companionAbilityToastName: state.companionRuntime?.abilityToastName,
-        };
-      })(),
-    });
-  };
-
   const handleFatalDamage = (next: GameState, player: Entity): boolean => {
     if (player.health > 0) return false;
     if (next.isGameOver) return false;
@@ -1219,12 +1226,6 @@ export default function App() {
     syncUi();
   };
 
-  const showDevCheatToast = useCallback((message: string) => {
-    setDevCheatToast(message);
-    if (devCheatToastTimerRef.current) clearTimeout(devCheatToastTimerRef.current);
-    devCheatToastTimerRef.current = setTimeout(() => setDevCheatToast(null), 2600);
-  }, []);
-
   const showNotification = useCallback(
     (
       message: string,
@@ -1237,13 +1238,6 @@ export default function App() {
     },
     [],
   );
-
-  const devCheatHandlersRef = useRef({
-    onBossWarp: (_boss: BossDefinition) => {},
-    onMiniBossSpawn: (_id: MiniBossId) => {},
-    onClearQuota: () => {},
-    onSkipWarp: () => {},
-  });
 
   useEffect(() => {
     devCheatHandlersRef.current = {
@@ -1264,7 +1258,7 @@ export default function App() {
         }
         applyMiniBossSpawnJuice(next, id);
         playMiniBossSpawnSfx(id);
-        next.enemies.push(entity);
+        pooledEnemyPush(next, entity);
       },
       onClearQuota: () => {
         const next = gameStateRef.current;
@@ -1279,145 +1273,11 @@ export default function App() {
     };
   }, [dimensions.width, dimensions.height, showDevCheatToast]);
 
-  const togglePause = () => {
-    const next = gameStateRef.current;
-    if (!next) return;
-    next.isPaused = !next.isPaused;
-    if (next.isPaused) controls.current.isFiring = false;
-    setIsPauseMenuOpen(next.isPaused);
-    duckMusic(next.isPaused ? 0.3 : 1);
-    syncUi();
-  };
-
   useEffect(() => {
     const duck = showLevelUp || showArtifactUnlock || isPauseMenuOpen;
     duckMusic(duck ? 0.3 : 1);
   }, [showLevelUp, showArtifactUnlock, isPauseMenuOpen]);
 
-  useEffect(() => {
-    const movementActions: KeybindAction[] = [
-      'moveUp',
-      'moveDown',
-      'moveLeft',
-      'moveRight',
-    ];
-    const syncMovementKeys = (e: KeyboardEvent, down: boolean) => {
-      const binds = keybindsRef.current;
-      for (const action of movementActions) {
-        if (!keyMatches(binds[action], e)) continue;
-        if (down) controls.current.keys.add(action);
-        else controls.current.keys.delete(action);
-      }
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (isOptionsOpen) {
-        if (e.key === 'Escape') setIsOptionsOpen(false);
-        return;
-      }
-
-      if (screen === 'GAME' && devCheatsActive) {
-        const cheat = tryDevCheatKeydown(e, devCheatHandlersRef.current);
-        if (cheat?.handled) {
-          if (cheat.toast) showDevCheatToast(cheat.toast);
-          syncUi();
-          return;
-        }
-      }
-
-      const binds = keybindsRef.current;
-      syncMovementKeys(e, true);
-
-      if (keyMatches(binds.dash, e)) {
-        if (gameStateRef.current?.gameMode === 'ON_RAILS') {
-          controls.current.isFiring = true;
-        } else {
-          controls.current.wantDash = true;
-        }
-      }
-      if (keyMatches(binds.ultimate, e)) controls.current.wantUltimate = true;
-      if (keyMatches(binds.companionAbility, e)) {
-        controls.current.wantCompanionAbility = true;
-      }
-      if (keyMatches(binds.weaponSwap, e)) controls.current.keys.add('weaponSwap');
-      if (keyMatches(binds.weaponA, e)) controls.current.keys.add('weaponA');
-      if (keyMatches(binds.weaponB, e)) controls.current.keys.add('weaponB');
-
-      const canToggleAchievements =
-        unlockToasts.length > 0 && !showLevelUp && !showArtifactUnlock;
-      if (canToggleAchievements && keyMatches(binds.achievements, e)) {
-        e.preventDefault();
-        toggleAchievementsVisible();
-        return;
-      }
-
-      if (screen === 'GAME' && keyMatches(binds.pause, e)) {
-        e.preventDefault();
-        togglePause();
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (isOptionsOpen) return;
-      syncMovementKeys(e, false);
-      const binds = keybindsRef.current;
-      if (keyMatches(binds.dash, e) && gameStateRef.current?.gameMode === 'ON_RAILS') {
-        controls.current.isFiring = false;
-      }
-      if (keyMatches(binds.weaponSwap, e)) controls.current.keys.delete('weaponSwap');
-      if (keyMatches(binds.weaponA, e)) controls.current.keys.delete('weaponA');
-      if (keyMatches(binds.weaponB, e)) controls.current.keys.delete('weaponB');
-    };
-
-    const handlePointerMove = (e: PointerEvent) => {
-      controls.current.mousePos = { x: e.clientX, y: e.clientY };
-    };
-
-    const handleMouseDown = (e: MouseEvent) => {
-      if (e.button === 0) {
-        const target = e.target as HTMLElement;
-        if (target.closest('button') || target.closest('a')) return;
-        controls.current.isFiring = true;
-      }
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      if (e.button === 0 && gameStateRef.current?.gameMode !== 'ON_RAILS') {
-        controls.current.isFiring = false;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerdown', handlePointerMove);
-    window.addEventListener('mousedown', handleMouseDown);
-    window.addEventListener('mouseup', handleMouseUp);
-    
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerdown', handlePointerMove);
-      window.removeEventListener('mousedown', handleMouseDown);
-      window.removeEventListener('mouseup', handleMouseUp);
-      
-      // Cleanup notification timers
-      if (devCheatToastTimerRef.current) clearTimeout(devCheatToastTimerRef.current);
-      if (notificationTimerRef.current) clearTimeout(notificationTimerRef.current);
-      if (artifactPopupTimerRef.current) clearTimeout(artifactPopupTimerRef.current);
-    };
-  }, [
-    screen,
-    devCheatsActive,
-    showDevCheatToast,
-    syncUi,
-    unlockToasts.length,
-    showLevelUp,
-    showArtifactUnlock,
-    toggleAchievementsVisible,
-    isOptionsOpen,
-  ]);
 
   useEffect(() => {
     if (screen !== 'GAME' || !gameStateRef.current) return;
@@ -1441,7 +1301,7 @@ export default function App() {
       lastTime = currentTime;
 
       // dt is normalized to 60fps (16.67ms per frame), scaled by 0.75 to slow down the action
-      const dt = Math.min(deltaTime / 16.67, 4) * 0.70;
+      const dt = Math.min(deltaTime / 16.67, 3) * 0.70;
 
       // Rolling FPS average â€” update quality every FPS_WINDOW frames
       if (deltaTime > 0 && deltaTime < 500) {
@@ -1596,6 +1456,9 @@ export default function App() {
         return;
       }
 
+      let gameLogicFailed = false;
+      try {
+
       const { player } = next;
       const dtSec = dt * (16.67 / 1000);
 
@@ -1642,6 +1505,9 @@ export default function App() {
         }
         if ((next.bossVictoryBannerTimer ?? 0) > 0) {
           next.bossVictoryBannerTimer = Math.max(0, (next.bossVictoryBannerTimer ?? 0) - dt);
+        }
+        if ((next.bossEnrageWarningTimer ?? 0) > 0) {
+          next.bossEnrageWarningTimer = Math.max(0, (next.bossEnrageWarningTimer ?? 0) - dtSec);
         }
       }
 
@@ -1850,16 +1716,28 @@ export default function App() {
       
       // Dash Initiation
       const dashCost = Math.max(12, 30 - next.dashEnergyDiscount);
+      // Block dash when the ship has dashDisabled and the global unlock hasn't been reached
+      const shipDashBlocked =
+        (getShipDef(next.selectedShip)?.dashDisabled ?? false) && !isDashUnlocked();
+      // Clear wantDash when the ship's dash is globally locked OR cooldown is still running.
+      // Without the cooldown check, wantDash would stay queued and fire the instant
+      // the timer expires — effectively bypassing the anti-spam protection.
+      if (controls.current.wantDash && (shipDashBlocked || next.dashCooldownRemaining > 0)) {
+        controls.current.wantDash = false;
+      }
       if (
         !warpLocked &&
         next.gameMode !== 'CAMPAIGN' &&
         !onRailsActive &&
         controls.current.wantDash &&
         next.energy >= dashCost &&
-        !next.isDashing
+        !next.isDashing &&
+        next.dashCooldownRemaining <= 0
       ) {
         next.isDashing = true;
         next.dashDuration = 10;
+        // 0.5 s cooldown (21 dt-units ≈ 0.5 s at 60 fps with dt ≈ 0.70)
+        next.dashCooldownRemaining = 21;
         next.energy -= dashCost;
         if (next.dashIFrames) next.dashIFrameTimer = 18;
         controls.current.wantDash = false;
@@ -1946,6 +1824,11 @@ export default function App() {
         }
       }
 
+      // Tick dash cooldown every frame (dt-normalized, 0 = ready to dash)
+      if (next.dashCooldownRemaining > 0) {
+        next.dashCooldownRemaining = Math.max(0, next.dashCooldownRemaining - dt);
+      }
+
       if (!onRailsActive) {
         player.pos = player.pos.add(player.velocity);
       }
@@ -2000,12 +1883,13 @@ export default function App() {
         next.campaignCameraAngle = null;
       }
 
-      const fireIntervalBase = 120; // Super rapid fire base
+      const activeSlot = next.weaponState ? getActiveWeaponSlot(next.weaponState) : null;
+      const activeWeaponDef = activeSlot ? getWeaponDef(activeSlot.weaponId) : null;
+      const fireIntervalBase = activeWeaponDef
+        ? 1000 / activeWeaponDef.fireRate
+        : 120;
       let fireInterval = hasPermanentOverdrive(next) ? fireIntervalBase * 0.4 : fireIntervalBase;
       if (next.buffs.overdrive > 0 && !next.permanentOverdrive) fireInterval *= 0.4;
-      
-      // Weapon-specific fire rates
-      if (next.activeWeaponSlot === 'CANNON_B') fireInterval *= 3.0; // Rockets are slower, bigger
       
       if (hasPermanentRapidFire(next) || next.buffs.rapidFire > 0) fireInterval *= 0.4;
       if (onRailsActive && next.rails) {
@@ -2056,22 +1940,18 @@ export default function App() {
           numProjectiles += 6;
         }
 
-        // Special Tuning per Slot
-        let projectileSpeed = 10;
+        let projectileSpeed = activeWeaponDef?.speed ?? 10;
         let pRadius = 5;
         
-        // Ship-specific weapon signature colors
         const weaponSignature = WEAPON_SIGNATURES[next.selectedShip];
         let pColor = weaponSignature.projectileColor;
         let pPiercing = next.bounceCount;
         if (hasPermanentPiercing(next) || next.hasInfinityPierce) pPiercing += 1000;
 
-        if (next.activeWeaponSlot === 'CANNON_B') {
-          projectileSpeed = 7.5;
-          pRadius = 12; // Bigger rockets
-          pColor = '#10b981'; // Emerald Green for contrast (rockets keep distinct color)
-          // Rockets are inherently more powerful per shot
-          weaponDmgMod *= 4.5; 
+        if (next.activeWeaponSlot === 'CANNON_B' && activeWeaponDef) {
+          pRadius = 12;
+          pColor = '#10b981';
+          weaponDmgMod *= activeWeaponDef.damage;
         }
 
         // Tesla Procs - Optimized (no dt in Math.random for consistency)
@@ -2118,6 +1998,7 @@ export default function App() {
           next.projectiles.push({
             id: Math.random().toString(),
             type: EntityType.PROJECTILE,
+            active: true,
             pos: player.pos.clone(),
             radius: isCrit ? pRadius * 1.5 : pRadius,
             health: 1,
@@ -2168,7 +2049,7 @@ export default function App() {
            decay: 1.0
         });
 
-        if (next.activeWeaponSlot === 'CANNON_C') {
+        if ((next.activeWeaponSlot as string) === 'CANNON_C') {
           // Cannon particles are larger
           next.screenshake = Math.min(next.screenshake + 1.0, 3.5);
         }
@@ -2180,6 +2061,7 @@ export default function App() {
           next.projectiles.push({
             id: Math.random().toString(),
             type: EntityType.PROJECTILE,
+            active: true,
             pos: player.pos.clone(),
             radius: pRadius * 0.8,
             health: 1,
@@ -2247,6 +2129,7 @@ export default function App() {
 
       next.projectiles = updateProjectiles(next.projectiles, next.world.width, next.world.height, dt, next.bounceCount);
       updateHazards(next, dt);
+      updateMovingHazards(next, dt);
       if (next.gameMode !== 'ON_RAILS') {
         updateEnemies(next, dt);
       }
@@ -2276,10 +2159,11 @@ export default function App() {
 
       // Spawning logic
       if (next.gameMode === 'AIM_TRAINER') {
-        if (next.enemies.length < 15) {
-          next.enemies.push({
+        if (next.activeEnemyCount < 15) {
+          pooledEnemyPush(next, {
             id: Math.random().toString(),
             type: EntityType.ENEMY,
+            active: true,
             pos: new Vector2(Math.random() * next.world.width, Math.random() * next.world.height),
             radius: 12,
             health: 1,
@@ -2294,9 +2178,21 @@ export default function App() {
         next.stageTransition <= 0 &&
         next.bossArenaTransition <= 0
       ) {
-        // Hazard spawning
+        // Static hazard spawning (LASER / ZONE)
         if (Math.random() < 0.002) {
           next.hazards.push(spawnHazard(next));
+        }
+
+        // Moving hazard spawn tick (comet / asteroid / debris)
+        next.movingHazardSpawnTimer -= dt * (16.67 / 1000);
+        if (next.movingHazardSpawnTimer <= 0) {
+          const hazardStageCfg = getHazardStageConfig(next.stage);
+          if (next.movingHazards.length < hazardStageCfg.maxHazards) {
+            next.movingHazards.push(
+              spawnMovingHazard(next.world.width, next.world.height, next.stage)
+            );
+          }
+          next.movingHazardSpawnTimer = hazardStageCfg.spawnIntervalSecs;
         }
 
         if (next.spawnRampTimer > 0) next.spawnRampTimer -= dt * (16.67 / 1000);
@@ -2320,7 +2216,7 @@ export default function App() {
           !next.bossActive &&
           !isBossTransitioning(next)
         ) {
-          levelProgress = Math.min(1, levelProgress + next.survivalTime / 600);
+          levelProgress = Math.min(1, levelProgress + next.survivalTime / 1800);
         }
 
         const isRamping = next.spawnRampTimer > 0;
@@ -2369,17 +2265,17 @@ export default function App() {
             applyMiniBossSpawnJuice(next, mbId);
             playMiniBossSpawnSfx(mbId);
           }
-          next.enemies.push(entity);
-          if (entity.enemyType === EnemyType.SWARM_V2 && next.enemies.length < maxEnemies - 3) {
+          pooledEnemyPush(next, entity);
+          if (entity.enemyType === EnemyType.SWARM_V2 && next.activeEnemyCount < maxEnemies - 3) {
             const packSize = 2 + Math.floor(Math.random() * 3);
-            for (let pk = 0; pk < packSize && next.enemies.length < maxEnemies; pk++) {
+            for (let pk = 0; pk < packSize && next.activeEnemyCount < maxEnemies; pk++) {
               const packAngle = Math.random() * Math.PI * 2;
               const packDist = 25 + Math.random() * 70;
               const mate = spawnEnemy(next, 16);
               if (mate) {
                 mate.pos.x = Math.max(0, Math.min(next.world.width, entity.pos.x + Math.cos(packAngle) * packDist));
                 mate.pos.y = Math.max(0, Math.min(next.world.height, entity.pos.y + Math.sin(packAngle) * packDist));
-                next.enemies.push(mate);
+                pooledEnemyPush(next, mate);
               }
             }
           }
@@ -2387,7 +2283,7 @@ export default function App() {
 
         // No spawns during boss death, arena restore, warp, or stage intermission.
         if (!bossTransitioning) {
-          if (!next.bossActive && next.enemiesToKill > 0 && next.enemies.length < maxEnemies) {
+          if (!next.bossActive && next.enemiesToKill > 0 && next.activeEnemyCount < maxEnemies) {
             if (next.gameMode === 'NORMAL') {
               const entity = tickSurvivalWaveSpawns(
                 next,
@@ -2403,17 +2299,17 @@ export default function App() {
               }
 
               if (!isRamping) {
-                if (spawnChance > 0.1 && Math.random() < spawnChance * 0.7 && next.enemies.length < maxEnemies) {
+                if (spawnChance > 0.1 && Math.random() < spawnChance * 0.7 && next.activeEnemyCount < maxEnemies) {
                   pushSpawn(spawnOne());
                 }
-                if (spawnChance > 0.25 && Math.random() < spawnChance * 0.6 && next.enemies.length < maxEnemies) {
+                if (spawnChance > 0.25 && Math.random() < spawnChance * 0.6 && next.activeEnemyCount < maxEnemies) {
                   pushSpawn(spawnOne());
                   pushSpawn(spawnOne());
                 }
-                if (!campaignLevel && levelProgress > 0.5 && Math.random() < 0.05 && next.enemies.length < maxEnemies) {
+                if (!campaignLevel && levelProgress > 0.5 && Math.random() < 0.05 && next.activeEnemyCount < maxEnemies) {
                   const burstCount = Math.min(3, 1 + Math.floor(threatFactor));
                   for (let h = 0; h < burstCount; h++) {
-                    if (next.enemies.length >= maxEnemies) break;
+                    if (next.activeEnemyCount >= maxEnemies) break;
                     pushSpawn(spawnOne());
                   }
                 }
@@ -2436,7 +2332,7 @@ export default function App() {
                     Math.max(80, Math.min(next.world.width - 80, next.player.pos.x + Math.cos(mAngle) * 320)),
                     Math.max(80, Math.min(next.world.height - 80, next.player.pos.y + Math.sin(mAngle) * 320))
                   );
-                  next.enemies.push(minion);
+                  pooledEnemyPush(next, minion);
                 }
               }
             }
@@ -2444,21 +2340,17 @@ export default function App() {
           // Boss arenas should be 1v1 - no additional enemy spawns during boss fights
         }
 
-        // Hard trim: remove oldest non-boss enemies if over absolute limit
-        const HARD_CAP = mobile ? 25 : 40;
-        if (next.enemies.length > HARD_CAP) {
-          let toRemove = next.enemies.length - HARD_CAP;
-          next.enemies = next.enemies.filter((e) => {
-            if (
-              toRemove > 0 &&
-              e.enemyType !== EnemyType.BOSS &&
-              !e.miniBossId
-            ) {
+        // Hard trim: safety net above maxAliveEnemies (should rarely trigger)
+        const HARD_CAP = mobile ? 40 : 60;
+        if (next.activeEnemyCount > HARD_CAP) {
+          let toRemove = next.activeEnemyCount - HARD_CAP;
+          for (const e of next.enemies) {
+            if (toRemove <= 0) break;
+            if (e.active !== false && e.enemyType !== EnemyType.BOSS && !e.miniBossId) {
+              deactivateEnemy(next, e);
               toRemove--;
-              return false;
             }
-            return true;
-          });
+          }
         }
       }
 
@@ -2547,6 +2439,35 @@ export default function App() {
             if (p.health <= 0) break;
           }
           continue;
+        }
+
+        // Enemy projectiles vs Companion (takes hit instead of player when in path)
+        if (
+          p.ownerId !== 'player' &&
+          !p.ownerId?.startsWith('companion_') &&
+          next.bossArenaTransition <= 0 &&
+          next.companionRuntime &&
+          next.companionRuntime.health > 0
+        ) {
+          const cRt = next.companionRuntime;
+          const cdx = p.pos.x - cRt.pos.x;
+          const cdy = p.pos.y - cRt.pos.y;
+          const cRadius = 14 + (p.radius ?? 4);
+          if (cdx * cdx + cdy * cdy <= cRadius * cRadius) {
+            const tauntActive = (cRt.tauntTimer ?? 0) > 0;
+            // Always intercept during taunt; otherwise 35% chance for non-taunt bodyblock.
+            if (tauntActive || Math.random() < 0.35) {
+              const dmg = (p.damage || 10) * (tauntActive ? 0.6 : 0.45);
+              cRt.health = Math.max(0, cRt.health - dmg);
+              cRt.hitFlashTimer = 0.25;
+              cRt.timeSinceLastHit = 0;
+              p.health = 0;
+              if (next.qualityLevel === 'high') {
+                next.particles.push(...createImpact(cRt.pos, '#a78bfa', 3));
+              }
+              continue;
+            }
+          }
         }
 
         // Enemy projectiles vs Player
@@ -2647,6 +2568,11 @@ export default function App() {
                   }
 
                   e.health -= damage;
+                  // Boss knockback — makes hits feel impactful
+                  if (e.enemyType === EnemyType.BOSS && p.velocity) {
+                    const kbForce = isCrit ? 3.5 : 1.8;
+                    applyBossKnockback(e, p.velocity, kbForce);
+                  }
                   if (
                     e.miniBossId === 'void_harbinger' &&
                     next.passives.includes('mb_void_drain') &&
@@ -2666,11 +2592,12 @@ export default function App() {
                     player.health = Math.min(player.maxHealth, player.health + e.maxHealth * next.lifeSteal);
                   }
 
-                  // Explosive Rounds & Cannon B Rockets
+                                    // Explosive Rounds & Cannon B Rockets
                   const isRocket = p.itemType === ItemType.BOMB;
                   if (isRocket || (next.explosiveChance > 0 && Math.random() < next.explosiveChance)) {
                     // Hit nearby enemies - Optimized with Grid
                     const explosionRadius = isRocket ? 150 : 100;
+                    const explosionRadiusSq = explosionRadius * explosionRadius;
                     const egx = Math.floor(e.pos.x / cellSize);
                     const egy = Math.floor(e.pos.y / cellSize);
                     
@@ -2681,9 +2608,13 @@ export default function App() {
                         const cell = grid.get(`${egx + ox},${egy + oy}`);
                         if (cell) {
                           cell.forEach(other => {
-                            if (other !== e && other.pos.distanceTo(e.pos) < explosionRadius) {
-                              other.health -= explosionDamage;
-                              other.hitTimer = 3;
+                            if (other !== e) {
+                              const dx = other.pos.x - e.pos.x;
+                              const dy = other.pos.y - e.pos.y;
+                              if (dx * dx + dy * dy < explosionRadiusSq) {
+                                other.health -= explosionDamage;
+                                other.hitTimer = 3;
+                              }
                             }
                           });
                         }
@@ -2691,9 +2622,10 @@ export default function App() {
                     }
                   }
                   
-                  // Gravity Well
+                                    // Gravity Well
                   if (next.passives.includes('gravity_well') && Math.random() < 0.1) {
                     const pullRadius = 180;
+                    const pullRadiusSq = pullRadius * pullRadius;
                     const pgx = Math.floor(e.pos.x / cellSize);
                     const pgy = Math.floor(e.pos.y / cellSize);
 
@@ -2702,9 +2634,14 @@ export default function App() {
                         const cell = grid.get(`${pgx + ox},${pgy + oy}`);
                         if (cell) {
                           cell.forEach(other => {
-                            if (other !== e && other.pos.distanceTo(e.pos) < pullRadius) {
-                              const pullDir = e.pos.sub(other.pos).normalize();
-                              other.pos = other.pos.add(pullDir.mul(25 * dt));
+                            if (other !== e) {
+                              const dx = other.pos.x - e.pos.x;
+                              const dy = other.pos.y - e.pos.y;
+                              if (dx * dx + dy * dy < pullRadiusSq) {
+                                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                                const pullDir = new Vector2(dx / dist, dy / dist);
+                                other.pos = other.pos.add(pullDir.mul(25 * dt));
+                              }
                             }
                           });
                         }
@@ -2968,9 +2905,10 @@ export default function App() {
                       for (let s = 0; s < 3; s++) {
                         const angle = (s / 3) * Math.PI * 2;
                         const offset = new Vector2(Math.cos(angle) * 30, Math.sin(angle) * 30);
-                        next.enemies.push({
+                        pooledEnemyPush(next, {
                           id: Math.random().toString(),
                           type: EntityType.ENEMY,
+                          active: true,
                           pos: e.pos.add(offset),
                           radius: 10,
                           health: 30 * (1 + next.stage * 0.2),
@@ -2999,8 +2937,8 @@ export default function App() {
                       });
                     } else if (e.enemyType === EnemyType.FORTIFIED) {
                       // Always drops health
-                      next.items.push({ ...(spawnItem(e.pos) ?? { id: Math.random().toString(), type: EntityType.ITEM, pos: e.pos.clone(), radius: 10, health: 1, maxHealth: 1, speed: 0, velocity: new Vector2(0, 0), color: '#4ade80' }), itemType: ItemType.HEALTH });
-                      next.items.push({ ...(spawnItem(e.pos) ?? { id: Math.random().toString(), type: EntityType.ITEM, pos: new Vector2(e.pos.x + 30, e.pos.y), radius: 10, health: 1, maxHealth: 1, speed: 0, velocity: new Vector2(0, 0), color: '#4ade80' }), itemType: ItemType.ENERGY });
+                      next.items.push({ ...(spawnItem(e.pos) ?? { id: Math.random().toString(), type: EntityType.ITEM, active: true, pos: e.pos.clone(), radius: 10, health: 1, maxHealth: 1, speed: 0, velocity: new Vector2(0, 0), color: '#4ade80' }), itemType: ItemType.HEALTH });
+                      next.items.push({ ...(spawnItem(e.pos) ?? { id: Math.random().toString(), type: EntityType.ITEM, active: true, pos: new Vector2(e.pos.x + 30, e.pos.y), radius: 10, health: 1, maxHealth: 1, speed: 0, velocity: new Vector2(0, 0), color: '#4ade80' }), itemType: ItemType.ENERGY });
                     } else if (e.enemyType === EnemyType.TRACKER) {
                       // Drops extra XP
                       for (let x = 0; x < 3; x++) {
@@ -3032,6 +2970,19 @@ export default function App() {
                         next.bossVictoryBannerTimer = 150;
                         logBossLifecycle(next, 'boss-killed');
                         next.postBossBuffPick = true;
+
+                        // Global boss kill counter — persists across runs
+                        {
+                          const wasUnlocked = isDashUnlocked();
+                          const newTotal = addGlobalBossKill();
+                          setTotalBossesDefeated(newTotal);
+                          if (!wasUnlocked && newTotal >= DASH_UNLOCK_BOSS_THRESHOLD) {
+                            setDashUnlocked(true);
+                            if (dashUnlockPopupTimerRef.current) clearTimeout(dashUnlockPopupTimerRef.current);
+                            setShowDashUnlockPopup(true);
+                            dashUnlockPopupTimerRef.current = setTimeout(() => setShowDashUnlockPopup(false), 5000);
+                          }
+                        }
                         if (next.gameMode === 'NORMAL' && defeatedBossId) {
                           const bossLoot = rollBossLoot(next, defeatedBossId);
                           if (bossLoot) {
@@ -3061,9 +3012,18 @@ export default function App() {
                           );
                           next.runScrapEarned += 15;
                         }
-                        next.hitStop = 15;
-                        next.screenshake = 10;
-                        next.screenFlash = 5;
+                        // Boss defeat rewards: +50% score bonus, 15% max HP heal, +5 base damage
+                        const bossScoreBonus = Math.floor(next.score * 0.5);
+                        next.score += bossScoreBonus;
+                        const bossHeal = next.player.maxHealth * 0.15;
+                        next.player.health = Math.min(
+                          next.player.maxHealth,
+                          next.player.health + bossHeal,
+                        );
+                        next.baseDamage += 5;
+                        next.hitStop = 20;
+                        next.screenshake = 15;
+                        next.screenFlash = 6;
 
                         if (next.gameMode === 'CAMPAIGN' && next.campaignLevelId) {
                           markLevelComplete(next.campaignLevelId);
@@ -3116,10 +3076,14 @@ export default function App() {
         }
       }
 
-      next.enemies.forEach(e => {
-        if (e.health <= 0) missionController.notifyEvent('enemy_killed', e.enemyType);
-      });
-      next.enemies = next.enemies.filter(e => e.health > 0);
+      // Pool enemies instead of filtering — no array allocation on the hot path
+      for (const e of next.enemies) {
+        if (e.active === false) continue;
+        if (e.health <= 0) {
+          missionController.notifyEvent('enemy_killed', e.enemyType);
+          deactivateEnemy(next, e);
+        }
+      }
       next.projectiles = next.projectiles.filter((p) => {
         if (!p?.pos) return false;
         if (p.ownerId?.startsWith('companion_')) {
@@ -3131,6 +3095,93 @@ export default function App() {
       if (next.qualityLevel === 'low' && next.projectiles.length > 200) {
         next.projectiles.splice(0, next.projectiles.length - 200);
       }
+
+      // ── Moving Hazard Collisions ─────────────────────────────────────────
+      if (next.movingHazards.length > 0) {
+        // 1. Player/companion projectiles → moving hazards (destroy for points)
+        for (let pi = next.projectiles.length - 1; pi >= 0; pi--) {
+          const p = next.projectiles[pi];
+          if (!p?.pos) continue;
+          const isPlayerShot = p.ownerId === 'player' || p.ownerId?.startsWith('companion_');
+          if (!isPlayerShot) continue;
+
+          for (let hi = next.movingHazards.length - 1; hi >= 0; hi--) {
+            const hz = next.movingHazards[hi];
+            if (hz.health <= 0) continue;
+            const dx = p.pos.x - hz.pos.x;
+            const dy = p.pos.y - hz.pos.y;
+            if (dx * dx + dy * dy < (p.radius + hz.radius) ** 2) {
+              hz.health -= (p.damage ?? 10);
+              hz.hitFlash = 6;
+              p.health = 0;
+              if (hz.health <= 0) {
+                // Reward + particles
+                next.score += hz.scoreValue;
+                next.particles.push(...createExplosion(hz.pos, hz.color, 12, 1.4));
+                next.particles.push(...createExplosion(hz.pos, hz.trailColor, 6, 0.8));
+                playSfx('enemyDeath');
+                next.damageTexts.push({
+                  id: Math.random().toString(),
+                  pos: hz.pos.clone(),
+                  text: `+${hz.scoreValue}`,
+                  life: 1.2,
+                  color: hz.color,
+                });
+              } else {
+                if (next.qualityLevel === 'high') {
+                  next.particles.push(...createImpact(hz.pos, p.color, 2));
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        // 2. Player body → moving hazard (collision damage + knockback)
+        if (next.bossArenaTransition <= 0 && next.dashIFrameTimer <= 0 && next.playerIFrameTimer <= 0) {
+          for (const hz of next.movingHazards) {
+            if (hz.health <= 0) continue;
+            const dx = player.pos.x - hz.pos.x;
+            const dy = player.pos.y - hz.pos.y;
+            const distSq = dx * dx + dy * dy;
+            const combinedR = player.radius + hz.radius;
+            if (distSq < combinedR * combinedR) {
+              // Apply damage
+              const dmg = hz.damage;
+              player.health -= dmg;
+              next.playerIFrameTimer = 45;
+              next.screenshake = Math.max(next.screenshake, 6);
+              next.screenFlash = Math.max(next.screenFlash, 0.35);
+              hz.hitFlash = 6;
+
+              // Knockback away from hazard
+              const dist = Math.sqrt(distSq) || 1;
+              const kbMult = hz.knockbackForce * (16.67 / 1000);
+              player.velocity = new Vector2(
+                (dx / dist) * kbMult,
+                (dy / dist) * kbMult,
+              );
+
+              if (next.qualityLevel === 'high') {
+                next.particles.push(...createImpact(player.pos, hz.color, 4));
+              }
+
+              if (handleFatalDamage(next, player)) {
+                if (next.isGameOver) {
+                  next.particles.push(...createExplosion(player.pos, player.color, 50));
+                  next.particles.push(...createExplosion(player.pos, '#ffffff', 20));
+                  syncUi();
+                }
+              }
+              break;
+            }
+          }
+        }
+
+        // Remove destroyed hazards
+        next.movingHazards = next.movingHazards.filter(hz => hz.health > 0);
+      }
+      // ────────────────────────────────────────────────────────────────────
 
       // Item Collection
       next.items = next.items.filter(item => {
@@ -3279,6 +3330,7 @@ export default function App() {
             next.projectiles.push({
               id: Math.random().toString(),
               type: EntityType.PROJECTILE,
+              active: true,
               pos: player.pos.clone(),
               radius: 6,
               health: 1,
@@ -3297,7 +3349,7 @@ export default function App() {
         if (next.passives.includes('chrono_glitch')) {
            // Apply time slow to enemies but player moves normal/fast
            next.buffs.timeSlow = Math.max(next.buffs.timeSlow, 180); // 3 seconds freeze
-           player.speed = player.baseSpeed * 2; // Super speed temporarily
+           player.speed = (player.baseSpeed ?? player.speed) * 2; // Super speed temporarily
            // Just modifying base speed will reset next frame so we need a buff
            next.buffs.rapidFire = Math.max(next.buffs.rapidFire, 180);
         }
@@ -3337,7 +3389,30 @@ export default function App() {
         }, 0);
       }
 
-      render(ctx, next, dimensions.width, dimensions.height, { isMobile: reducedEffectsRef.current });
+      } catch (logicErr) {
+        console.error('[Game] Logic error — pausing:', logicErr);
+        gameLogicFailed = true;
+        next.isPaused = true;
+        setGameLoopError(
+          logicErr instanceof Error ? logicErr.message : String(logicErr),
+        );
+      }
+
+      if (gameLogicFailed) {
+        animId = requestAnimationFrame(loop);
+        return;
+      }
+
+      try {
+        render(ctx, next, dimensions.width, dimensions.height, { isMobile: reducedEffectsRef.current });
+      } catch (renderErr) {
+        console.error('[Game] Render error:', renderErr);
+        next.isPaused = true;
+        setGameLoopError(
+          renderErr instanceof Error ? renderErr.message : String(renderErr),
+        );
+        return;
+      }
       animId = requestAnimationFrame(loop);
     };
 
@@ -3347,6 +3422,7 @@ export default function App() {
 
   return (
     <div className={`fixed inset-0 bg-[#0c0c0e] overflow-hidden select-none touch-none ${screen === 'GAME' ? 'cursor-crosshair' : 'cursor-default'}`}>
+      <GameErrorBoundary>
       <AnimatePresence>
         {screen === 'MENU' && (
           <StartPage
@@ -3445,6 +3521,7 @@ export default function App() {
       </AnimatePresence>
 
 
+      <GameErrorBoundary>
       <canvas 
         ref={canvasRef} 
         width={dimensions.width} 
@@ -3517,6 +3594,47 @@ export default function App() {
         />
       )}
 
+      {/* Boss counter badge — visible only while DASH is still locked */}
+      {screen === 'GAME' && uiState && !dashUnlocked && (
+        <div className="absolute top-4 right-4 z-60 pointer-events-none">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-black/70 border border-blue-500/30 backdrop-blur-sm">
+            <span className="text-blue-400/80 text-[9px] font-mono uppercase tracking-widest">
+              DASH
+            </span>
+            <span className="text-slate-500 text-[9px] font-mono">—</span>
+            <span className="text-white/70 text-[9px] font-mono">
+              {Math.min(totalBossesDefeated, DASH_UNLOCK_BOSS_THRESHOLD)}/{DASH_UNLOCK_BOSS_THRESHOLD} bosses
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* DASH UNLOCKED popup */}
+      <AnimatePresence>
+        {showDashUnlockPopup && (
+          <motion.div
+            key="dash-unlock-popup"
+            initial={{ opacity: 0, scale: 0.85, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: -12 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            className="absolute inset-x-0 top-[28%] z-100 pointer-events-none flex justify-center px-4"
+          >
+            <div className="flex flex-col items-center gap-2 px-7 py-5 rounded-2xl bg-black/90 border border-cyan-400/60 shadow-[0_0_50px_rgba(0,212,255,0.35)] backdrop-blur-md max-w-sm text-center">
+              <p className="text-[10px] font-mono uppercase tracking-[0.35em] text-cyan-400">
+                Achievement Unlocked
+              </p>
+              <p className="text-2xl font-display font-black uppercase tracking-wide text-white mt-0.5">
+                ⚡ DASH UNLOCKED
+              </p>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                3 bosses defeated. All ships now have access to DASH — including Swift Falcon.
+              </p>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {uiState && uiState.health / uiState.maxHealth < 0.25 && (
         <motion.div 
           key="low-health-tint"
@@ -3533,7 +3651,7 @@ export default function App() {
           const threatVisual = getThreatVisualConfig(tier);
           return (
             <div
-              className="absolute inset-0 pointer-events-none z-[8]"
+              className="absolute inset-0 pointer-events-none z-8"
               style={{
                 background: `radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,${threatVisual.screenVignette}) 100%)`,
               }}
@@ -3591,7 +3709,9 @@ export default function App() {
         unlockToasts.length > 0 &&
         !showLevelUp &&
         !showArtifactUnlock &&
-        !isPauseMenuOpen && (
+        !isPauseMenuOpen &&
+        !isOptionsOpen &&
+        !uiState?.isGameOver && (
         <AchievementStack
           toasts={unlockToasts}
           visible={achievementsVisible}
@@ -3773,6 +3893,23 @@ export default function App() {
             </div>
           )}
 
+          {(gameStateRef.current?.bossEnrageWarningTimer ?? 0) > 0 && (
+            <div
+              className="ui-banner-anchor ui-banner-anchor--spawn animate-pulse"
+              style={{
+                color: '#ef4444',
+                textShadow: '0 0 18px #ef4444, 0 0 6px #fca5a5',
+              }}
+            >
+              <p className="text-xs font-semibold tracking-widest uppercase text-white/70">
+                Soft enrage
+              </p>
+              <p className="text-base font-bold tracking-wide uppercase">
+                Boss enraged!
+              </p>
+            </div>
+          )}
+
           {showTouchControls && uiState?.gameMode !== 'ON_RAILS' && (() => {
             const joystickSize = getJoystickSize(
               viewportProfile,
@@ -3848,30 +3985,74 @@ export default function App() {
                         glow={!!uiState && uiState.ultimateCharge >= 100}
                       />
                     </motion.button>
+                    {uiState?.companionId && uiState.gameMode === 'NORMAL' && (
+                      (() => {
+                        const ready = (uiState.companionAbilityCooldown ?? 0) <= 0.05;
+                        const cdSec = Math.max(0, Math.ceil(uiState.companionAbilityCooldown ?? 0));
+                        return (
+                          <motion.button
+                            whileTap={{ scale: 0.9 }}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              if (ready) controls.current.wantCompanionAbility = true;
+                            }}
+                            disabled={!ready}
+                            className={`relative rounded-full border flex items-center justify-center text-white transition-all duration-300 shadow-xl touch-manipulation backdrop-blur-xl ${touchBtnClass} ${
+                              ready
+                                ? 'bg-amber-600/75 border-white/40 shadow-[0_0_14px_rgba(251,191,36,0.5)]'
+                                : 'bg-black/60 border-white/10 opacity-50 grayscale'
+                            }`}
+                            aria-label={`Companion ability${ready ? ' ready' : ` cooldown ${cdSec}s`}`}
+                          >
+                            <GameIcon
+                              name="ui.ultimate"
+                              size={Math.max(20, touchIconSize - 4)}
+                              color={ready ? '#fef3c7' : 'rgba(255,255,255,0.35)'}
+                              glow={ready}
+                            />
+                            {!ready && (
+                              <span className="absolute inset-0 flex items-center justify-center text-[10px] font-mono font-bold text-white/90 tabular-nums">
+                                {cdSec}
+                              </span>
+                            )}
+                          </motion.button>
+                        );
+                      })()
+                    )}
                     <motion.div className="relative pointer-events-auto">
                       {uiState && uiState.energy < 30 && (
                         <div className="absolute inset-0 bg-red-500/10 rounded-full animate-pulse pointer-events-none" />
                       )}
-                      <motion.button
-                        whileTap={{ scale: 0.9 }}
-                        onPointerDown={(e) => {
-                          e.stopPropagation();
-                          controls.current.wantDash = true;
-                        }}
-                        className={`rounded-full border flex items-center justify-center text-white transition-all duration-300 shadow-xl touch-manipulation backdrop-blur-xl ${touchBtnClass} ${
-                          uiState && uiState.energy >= 30
-                            ? 'bg-white/10 border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.2)]'
-                            : 'bg-black/60 border-white/10 opacity-50 grayscale'
-                        }`}
-                        aria-label="Dash"
-                      >
-                        <GameIcon
-                          name="ui.dash"
-                          size={touchIconSize}
-                          color={uiState && uiState.energy >= 30 ? '#fff' : 'rgba(255,255,255,0.35)'}
-                          glow={!!uiState && uiState.energy >= 30}
-                        />
-                      </motion.button>
+                      {(() => {
+                        const shipDashLocked =
+                          (getShipDef(uiState?.selectedShip ?? 'interceptor')?.dashDisabled ?? false) &&
+                          !dashUnlocked;
+                        const dashReady = !shipDashLocked && !!(uiState && uiState.energy >= 30);
+                        return (
+                          <motion.button
+                            whileTap={shipDashLocked ? {} : { scale: 0.9 }}
+                            onPointerDown={(e) => {
+                              e.stopPropagation();
+                              if (!shipDashLocked) controls.current.wantDash = true;
+                            }}
+                            className={`rounded-full border flex items-center justify-center text-white transition-all duration-300 shadow-xl touch-manipulation backdrop-blur-xl ${touchBtnClass} ${
+                              shipDashLocked
+                                ? 'bg-black/60 border-white/10 opacity-40 grayscale cursor-not-allowed'
+                                : dashReady
+                                  ? 'bg-white/10 border-white/30 shadow-[0_0_15px_rgba(255,255,255,0.2)]'
+                                  : 'bg-black/60 border-white/10 opacity-50 grayscale'
+                            }`}
+                            aria-label={shipDashLocked ? 'Dash (locked — defeat 3 bosses)' : 'Dash'}
+                          >
+                            <GameIcon
+                              name={shipDashLocked ? 'ui.lock' : 'ui.dash'}
+                              size={touchIconSize}
+                              color={dashReady ? '#fff' : 'rgba(255,255,255,0.35)'}
+                              glow={dashReady}
+                            />
+                          </motion.button>
+                        );
+                      })()}
                     </motion.div>
                   </div>
                   <Joystick
@@ -3881,7 +4062,10 @@ export default function App() {
                       controls.current.move = dir;
                     }}
                     onTap={() => {
-                      controls.current.wantDash = true;
+                      const joystickDashLocked =
+                        (getShipDef(uiState?.selectedShip ?? 'interceptor')?.dashDisabled ?? false) &&
+                        !dashUnlocked;
+                      if (!joystickDashLocked) controls.current.wantDash = true;
                     }}
                     onEnd={() => {
                       controls.current.move = { x: 0, y: 0 };
@@ -3982,7 +4166,7 @@ export default function App() {
             initial={{ opacity: 0 }} 
             animate={{ opacity: 1 }} 
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-[110] bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-8"
+            className="absolute inset-0 z-40 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-8"
           >
             <div className="text-center mb-12">
               <h2 className="text-4xl md:text-6xl font-black text-white italic uppercase tracking-tighter">System Paused</h2>
@@ -4157,6 +4341,60 @@ export default function App() {
           />
         )
       ) : null}
+      </GameErrorBoundary>
+
+      {/* Game-loop error banner */}
+      {gameLoopError && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          className="absolute bottom-0 inset-x-0 z-[9999] flex flex-col items-center gap-2 p-4"
+          style={{
+            background: 'linear-gradient(to top, rgba(20,2,5,0.97) 60%, transparent)',
+          }}
+        >
+          <div
+            className="w-full max-w-lg rounded-xl border p-4 flex flex-col gap-3"
+            style={{
+              borderColor: 'rgba(255,34,68,0.5)',
+              background: 'rgba(30,5,10,0.95)',
+              boxShadow: '0 0 32px rgba(255,34,68,0.2)',
+            }}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-xl shrink-0 mt-0.5" aria-hidden style={{ filter: 'drop-shadow(0 0 8px #ff2244)' }}>⚠</span>
+              <div className="flex-1 min-w-0">
+                <p className="font-display font-black uppercase tracking-widest text-sm" style={{ color: '#ff4466' }}>
+                  Game Paused — Logic Error
+                </p>
+                <p className="mt-1 text-xs font-mono text-red-300/80 break-all">{gameLoopError}</p>
+                <p className="mt-1 text-[10px] font-mono uppercase tracking-wider text-white/30">
+                  Full details in browser console (F12)
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 mt-1">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="flex-1 min-h-[40px] rounded-lg text-xs font-display font-bold uppercase tracking-widest transition-all"
+                style={{ background: 'rgba(255,34,68,0.15)', border: '1px solid rgba(255,34,68,0.5)', color: '#ff4466' }}
+              >
+                Refresh &amp; Restart
+              </button>
+              <button
+                type="button"
+                onClick={() => setGameLoopError(null)}
+                className="flex-1 min-h-[40px] rounded-lg text-xs font-display font-semibold uppercase tracking-wider transition-all"
+                style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.45)' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      </GameErrorBoundary>
     </div>
   );
 }

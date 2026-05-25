@@ -56,15 +56,16 @@ export function createWeaponSlot(
   };
 }
 
-/** Weapon 1 always ready; weapon 2 locked until first pickup. */
+/** Weapon 1 starts with full magazine + unlimited reserve; weapon 2 locked until first pickup. */
 export function createInitialWeaponState(): WeaponState {
+  const primaryDef = getWeaponDef(DEFAULT_PRIMARY_WEAPON);
   return {
     slots: [
       {
         weaponId: DEFAULT_PRIMARY_WEAPON,
-        ammoLoaded: 9999,
+        ammoLoaded: primaryDef.magazineSize,
         ammoReserve: 9999,
-        isUnlimited: true,
+        isUnlimited: false,
         isUnlocked: true,
         isDisabledUI: false,
       },

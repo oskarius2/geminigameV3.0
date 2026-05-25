@@ -1,109 +1,136 @@
 .audio-settings-panel {
-  background: rgba(0, 0, 0, 0.8);
-  border: 2px solid #00ff00;
-  border-radius: 8px;
-  padding: 20px;
-  max-width: 400px;
-  font-family: 'Courier New', monospace;
-  color: #00ff00;
+  background: rgba(8, 8, 20, 0.88);
+  border: 1px solid rgba(99, 179, 237, 0.25);
+  border-radius: 12px;
+  padding: 16px 20px;
+  max-width: 380px;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  color: #e2e8f0;
+  backdrop-filter: blur(12px);
 }
 
 .audio-settings-panel h2 {
-  margin-top: 0;
+  margin: 0 0 14px;
   text-align: center;
-  font-size: 18px;
+  font-size: 13px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 2px;
-}
-
-.audio-settings-panel__hint {
-  font-size: 10px;
-  text-align: center;
-  opacity: 0.65;
-  margin-bottom: 16px;
-  line-height: 1.4;
+  letter-spacing: 3px;
+  color: #93c5fd;
+  opacity: 0.9;
 }
 
 .volume-control {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 .volume-control label {
-  flex: 0 0 120px;
-  font-size: 12px;
+  flex: 0 0 52px;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 1px;
+  letter-spacing: 1.2px;
+  color: #94a3b8;
 }
 
 .volume-slider {
   flex: 1;
-  height: 6px;
-  background: #1a1a1a;
-  border: 1px solid #00ff00;
-  border-radius: 3px;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 2px;
   outline: none;
   cursor: pointer;
   -webkit-appearance: none;
   appearance: none;
+  transition: background 0.15s;
+}
+
+.volume-slider:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .volume-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 16px;
-  height: 16px;
-  background: #00ff00;
-  border: 2px solid #003300;
+  width: 14px;
+  height: 14px;
+  background: #60a5fa;
+  border: 2px solid #1e3a5f;
   border-radius: 50%;
   cursor: pointer;
-  box-shadow: 0 0 8px rgba(0, 255, 0, 0.6);
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.55), 0 0 2px rgba(96, 165, 250, 0.9);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+
+.volume-slider::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+  box-shadow: 0 0 14px rgba(96, 165, 250, 0.8);
 }
 
 .volume-slider::-moz-range-thumb {
-  width: 16px;
-  height: 16px;
-  background: #00ff00;
-  border: 2px solid #003300;
+  width: 14px;
+  height: 14px;
+  background: #60a5fa;
+  border: 2px solid #1e3a5f;
   border-radius: 50%;
   cursor: pointer;
-  box-shadow: 0 0 8px rgba(0, 255, 0, 0.6);
+  box-shadow: 0 0 8px rgba(96, 165, 250, 0.55);
 }
 
 .volume-value {
-  flex: 0 0 40px;
+  flex: 0 0 36px;
   text-align: right;
-  font-size: 12px;
-  font-weight: bold;
+  font-size: 11px;
+  font-weight: 700;
+  color: #60a5fa;
+  font-variant-numeric: tabular-nums;
 }
 
 .mute-control {
   display: flex;
   justify-content: center;
-  margin-top: 20px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .mute-button {
-  padding: 10px 20px;
-  background: #1a1a1a;
-  border: 2px solid #00ff00;
-  border-radius: 4px;
-  color: #00ff00;
-  font-family: 'Courier New', monospace;
+  padding: 8px 24px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(99, 179, 237, 0.2);
+  border-radius: 8px;
+  color: #93c5fd;
+  font-family: inherit;
   font-size: 12px;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 1px;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
 .mute-button:hover {
-  background: rgba(0, 255, 0, 0.1);
-  box-shadow: 0 0 12px rgba(0, 255, 0, 0.5);
+  background: rgba(96, 165, 250, 0.1);
+  border-color: rgba(99, 179, 237, 0.45);
+  box-shadow: 0 0 12px rgba(96, 165, 250, 0.15);
+}
+
+.mute-button:active {
+  transform: scale(0.97);
 }
 
 .mute-button.muted {
   opacity: 0.5;
+  border-color: rgba(99, 179, 237, 0.1);
+  color: #64748b;
+}
+
+.mute-button.muted:hover {
+  opacity: 0.75;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
 }

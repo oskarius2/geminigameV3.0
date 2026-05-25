@@ -21,47 +21,47 @@ export interface WeaponDef {
 export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
   laser: {
     id: 'laser',
-    name: 'Laser',
-    damage: 15,
-    fireRate: 5,
-    magazineSize: 15,
-    reloadTime: 0.5,
+    name: 'Pulse Blaster',
+    damage: 1,
+    fireRate: 10,
+    magazineSize: 12,
+    reloadTime: 0.6,
     speed: 10,
   },
   rockets: {
     id: 'rockets',
     name: 'Rockets',
-    damage: 50,
-    fireRate: 1,
-    magazineSize: 15,
-    reloadTime: 0.5,
+    damage: 5,
+    fireRate: 5,
+    magazineSize: 5,
+    reloadTime: 1.0,
     speed: 7.5,
     spread: 0.1,
   },
   plasma: {
     id: 'plasma',
     name: 'Plasma',
-    damage: 25,
-    fireRate: 3,
-    magazineSize: 12,
+    damage: 4,
+    fireRate: 6,
+    magazineSize: 8,
     reloadTime: 0.8,
     speed: 9,
   },
   railgun: {
     id: 'railgun',
     name: 'Railgun',
-    damage: 80,
-    fireRate: 0.5,
-    magazineSize: 4,
+    damage: 10,
+    fireRate: 1,
+    magazineSize: 3,
     reloadTime: 1.5,
     speed: 14,
   },
   flamethrower: {
     id: 'flamethrower',
     name: 'Flamethrower',
-    damage: 8,
-    fireRate: 8,
-    magazineSize: 30,
+    damage: 2,
+    fireRate: 12,
+    magazineSize: 20,
     reloadTime: 0.6,
     speed: 8,
     spread: 0.25,
@@ -69,9 +69,9 @@ export const WEAPON_DEFS: Record<WeaponId, WeaponDef> = {
   shotgun: {
     id: 'shotgun',
     name: 'Shotgun',
-    damage: 12,
-    fireRate: 2,
-    magazineSize: 10,
+    damage: 3,
+    fireRate: 3,
+    magazineSize: 6,
     reloadTime: 0.9,
     speed: 9,
     spread: 0.35,
@@ -89,7 +89,7 @@ export const BONUS_WEAPON_POOL: WeaponId[] = [
   'shotgun',
 ];
 
-export const AMMO_RESERVE_PER_WEAPON = 60;
+export const AMMO_RESERVE_PER_WEAPON = 15;
 
 export function getWeaponDef(id: WeaponId): WeaponDef {
   return WEAPON_DEFS[id];

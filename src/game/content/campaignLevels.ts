@@ -354,7 +354,8 @@ export function samplePathTangent(
   const b = samplePath(level, Math.min(1, t + eps), worldW, worldH);
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const distSq = dx * dx + dy * dy;
+  const len = distSq > 0 ? Math.sqrt(distSq) : 1;
   return { x: dx / len, y: dy / len };
 }
 

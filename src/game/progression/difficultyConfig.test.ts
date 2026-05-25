@@ -13,7 +13,7 @@ import {
 describe('difficulty progression', () => {
   it('returns configured stages 1–5', () => {
     expect(getDifficultyForStage(1).spawnIntervalMs).toBe(2000);
-    expect(getDifficultyForStage(5).enemyHealthMultiplier).toBe(3);
+    expect(getDifficultyForStage(5).enemyHealthMultiplier).toBe(1.9);
     expect(DIFFICULTY_PROGRESSION).toHaveLength(5);
   });
 
@@ -26,10 +26,10 @@ describe('difficulty progression', () => {
 
   it('exposes spawn pacing and pools', () => {
     expect(getSpawnIntervalMs(1)).toBe(2000);
-    expect(getSpawnIntervalMs(5)).toBe(400);
-    expect(getEnemyCountRange(4).max).toBe(30);
+    expect(getSpawnIntervalMs(5)).toBe(700);
+    expect(getEnemyCountRange(4).max).toBe(22);
     expect(getMiniBossStats(1).maxHealth).toBe(100);
-    expect(getMiniBossStats(5).damage).toBe(100);
+    expect(getMiniBossStats(5).damage).toBe(80);
     expect(getArtifactPoolForStage(1)).toContain('utility');
     expect(getArtifactPoolForStage(5)).toContain('corrupted');
   });

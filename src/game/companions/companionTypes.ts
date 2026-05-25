@@ -153,6 +153,7 @@ export interface CompanionRuntime {
   facingAngle: number;
   /** Visual / feedback timers (seconds). */
   hitFlashTimer: number;
+  timeSinceLastHit: number;
   abilityPulseTimer: number;
   attackPulseTimer: number;
   levelUpPulseTimer: number;
