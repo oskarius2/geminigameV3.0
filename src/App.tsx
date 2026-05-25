@@ -59,7 +59,7 @@ import {
   getThreatVisualConfig,
 } from './game/balance/threat';
 import {
-  getSurvivalDifficultyLabelSv,
+  getSurvivalDifficultyLabel,
   getSurvivalSpawnModifiers,
 } from './game/balance/miniBossDifficulty';
 import { getEffectiveCardIntervalSeconds } from './game/buffs/cardTiming';
@@ -184,6 +184,7 @@ import {
   type UnlockToast,
 } from './game/meta/unlockNotifications';
 import { rollLootOnKill, applyLootDrop, rollBossLoot } from './game/loot/lootDropController';
+import { applyGroundItemCap } from './game/loot/groundItemCap';
 import { BossVictoryBanner } from './game/controls/BossVictoryBanner';
 import { getRecommendedCompanion } from './game/companions/companionDefs';
 import { applyShipStats, getShipDef } from './game/ships/shipDefs';
@@ -265,7 +266,7 @@ import { getCampaignLevel, pickCampaignEnemyType, getSpawnPosAlongPath, samplePa
 import { CampaignSelect, markLevelComplete } from './game/controls/CampaignSelect';
 import { BuffRarity } from './game/types';
 import { Vector2 } from './game/utils/vector';
-import { Artifact, ArtifactSlot, PassiveBuff, EntityType, GameState, ItemType, EnemyType, Entity, Hazard, RandomEvent, ShipId } from './game/types';
+import { Artifact, ArtifactSlot, PassiveBuff, EntityType, GameState, ItemType, EnemyType, Entity, Hazard, RandomEvent, ShipId, type DebuffId } from './game/types';
 import {
   INITIAL_STATE,
   spawnEnemy,
@@ -277,7 +278,6 @@ import {
   updateParticles,
   updateHazards,
   updateMovingHazards,
-  spawnHazard,
   spawnItem,
   createItemSparkle,
   createImplosion,
@@ -287,6 +287,9 @@ import {
   generateObstaclesForStage,
   pickBuffs,
   ARTIFACTS,
+  createDebuffDrop,
+  applyDebuffToState,
+  DEBUFF_DEFS,
 } from './game/Logic';
 import { spawnMovingHazard, getHazardStageConfig } from './game/hazards/movingHazardDefs';
 import { applyBuff, hasPermanentOverdrive, hasPermanentPiercing, hasPermanentRapidFire } from './game/buffs/applyBuff';
@@ -322,6 +325,7 @@ import {
   logBossLifecycle,
 } from './game/bossLifecycle';
 import { applyBossKnockback } from './game/bosses/bossSurvivalAI';
+import { capBossHitDamage, getEffectiveBossDamageResist, isBossEntity } from './game/bosses/bossDamageRules';
 import { missionController } from './game/missionController';
 
 function findNearestEnemyInGrid(
@@ -938,7 +942,7 @@ export default function App() {
       playSfx('artifact');
       const snap = getViewportSnapshot(dimensions.width, dimensions.height);
       if (snap.profile === 'desktop') {
-        showNotification(`${equippedCount} artefakt(er) utrustad`, 'info');
+        showNotification(`${equippedCount} artifact(s) equipped`, 'info');
       }
     }
     if (shopSpent > 0) {
@@ -1013,7 +1017,7 @@ export default function App() {
             }
           }, 700);
         } else {
-          showDevCheatToast(`Okänd boss: ${bossId}`);
+          showDevCheatToast(`Unknown boss: ${bossId}`);
         }
       }
     }
@@ -1245,7 +1249,7 @@ export default function App() {
         const next = gameStateRef.current;
         if (!next) return;
         if (!triggerDevBossWarp(next, boss, dimensions.width, dimensions.height)) {
-          showDevCheatToast('Boss-cheat: endast Survival (Start Survival)');
+          showDevCheatToast('Boss cheat: Survival only (Start Survival)');
         }
       },
       onMiniBossSpawn: (id) => {
@@ -1253,7 +1257,7 @@ export default function App() {
         if (!next) return;
         const entity = triggerDevMiniBossSpawn(next, id);
         if (!entity) {
-          showDevCheatToast('Miniboss-cheat: endast Survival');
+          showDevCheatToast('Miniboss cheat: Survival only');
           return;
         }
         applyMiniBossSpawnJuice(next, id);
@@ -1582,6 +1586,18 @@ export default function App() {
       if (!next.permanentRapidFire && next.buffs.rapidFire > 0) next.buffs.rapidFire -= dt;
       if (!next.permanentTimeSlow && next.buffs.timeSlow > 0) next.buffs.timeSlow -= dt;
       if (!next.permanentPiercing && next.buffs.piercing > 0) next.buffs.piercing -= dt;
+
+      // Debuff tick — count down in seconds, apply per-frame effects
+      if (next.activeDebuffs.length > 0) {
+        for (const db of next.activeDebuffs) {
+          db.remaining -= dtSec;
+          if (db.id === 'poisoned' && db.remaining > 0) {
+            player.health -= 5 * dtSec;
+            if (player.health <= 0) handleFatalDamage(next, player);
+          }
+        }
+        next.activeDebuffs = next.activeDebuffs.filter((db) => db.remaining > 0);
+      }
       
       if (next.comboTimer > 0) {
         next.comboTimer -= dt * (16.67 / 1000);
@@ -1761,7 +1777,8 @@ export default function App() {
       }
 
       // Apply Movement
-      let targetVelocity = moveDir.mul(player.speed * dt);
+      const slowMult = next.activeDebuffs.some((d) => d.id === 'slow') ? 0.6 : 1;
+      let targetVelocity = moveDir.mul(player.speed * dt * slowMult);
       
       // Ultimate Initiation
       if (controls.current.wantUltimate && next.ultimateCharge >= 100) {
@@ -1925,7 +1942,9 @@ export default function App() {
         let spread = Math.min(Math.PI / 4, 0.1 * numProjectiles);
         if (onRailsActive) spread = Math.min(spread, 0.08);
         
-          const totalCritChance = (next.critChance || 0.15) + next.pendingCritBonus;
+          // Cursed debuff: −15% crit accuracy
+          const cursedPenalty = next.activeDebuffs.some((d) => d.id === 'cursed') ? 0.15 : 0;
+          const totalCritChance = Math.max(0, (next.critChance || 0.15) + next.pendingCritBonus - cursedPenalty);
 
         // Weapon damage modifier
         let weaponDmgMod = 1;
@@ -1990,6 +2009,8 @@ export default function App() {
           else baseDmg *= weaponDmgMod;
 
           let finalDamage = Math.floor(baseDmg * damageMult * getMiniBossOutgoingDamageMult(next));
+          // Weakened debuff: −30% outgoing damage
+          if (next.activeDebuffs.some((d) => d.id === 'weakened')) finalDamage = Math.floor(finalDamage * 0.7);
           if (onRailsActive && next.rails && consumeRailsMegaBlast(next.rails)) {
             finalDamage = 50;
           }
@@ -2178,19 +2199,24 @@ export default function App() {
         next.stageTransition <= 0 &&
         next.bossArenaTransition <= 0
       ) {
-        // Static hazard spawning (LASER / ZONE)
-        if (Math.random() < 0.002) {
-          next.hazards.push(spawnHazard(next));
-        }
+        // NOTE: Legacy random LASER/ZONE static hazards (yellow squares) were removed
+        // here — they spawned at random world positions and visually clashed with the
+        // moving hazard system. Hazards are now exclusively COMET/ASTEROID/DEBRIS,
+        // edge-spawned with clear identity. To restore static hazards, scope them to
+        // a specific stage range and use distinct colours that aren't `#ffff00`.
 
         // Moving hazard spawn tick (comet / asteroid / debris)
         next.movingHazardSpawnTimer -= dt * (16.67 / 1000);
         if (next.movingHazardSpawnTimer <= 0) {
           const hazardStageCfg = getHazardStageConfig(next.stage);
           if (next.movingHazards.length < hazardStageCfg.maxHazards) {
-            next.movingHazards.push(
-              spawnMovingHazard(next.world.width, next.world.height, next.stage)
+            const hz = spawnMovingHazard(
+              next.world.width,
+              next.world.height,
+              next.stage,
+              next.movingHazards,
             );
+            if (hz) next.movingHazards.push(hz);
           }
           next.movingHazardSpawnTimer = hazardStageCfg.spawnIntervalSecs;
         }
@@ -2503,6 +2529,24 @@ export default function App() {
               applyPlasmaExplosion(next, p.pos, p.damage ?? 20, p.explosiveRadius);
             }
 
+            // Boss projectiles: 20% chance to apply Slow or Weakened
+            if (
+              next.bossActive &&
+              Math.random() < 0.20 &&
+              next.gameMode !== 'ON_RAILS'
+            ) {
+              const bossDebuff = Math.random() < 0.5 ? 'slow' as const : 'weakened' as const;
+              applyDebuffToState(next, bossDebuff);
+              const def = DEBUFF_DEFS[bossDebuff];
+              next.damageTexts.push({
+                id: Math.random().toString(),
+                pos: new Vector2(player.pos.x, player.pos.y - 40),
+                text: `[${def.name}] ${def.effectText} for ${def.duration}s`,
+                life: 2.5,
+                color: '#f87171',
+              });
+            }
+
             if (handleFatalDamage(next, player)) {
               if (next.isGameOver) syncUi();
             }
@@ -2541,6 +2585,11 @@ export default function App() {
                       e.aiTimer = 300; // 5s recharge at 60fps
                     }
                     damage *= 0.15; // shield absorbs most damage
+                  } else if (isBossEntity(e)) {
+                    // Bosses: dynamic resist (baseline + entry-grace bonus
+                    // for ~8s after spawn) so opening burst damage doesn't
+                    // trivialize the fight.
+                    damage *= 1 - getEffectiveBossDamageResist(e);
                   } else if (e.damageResist && e.damageResist > 0) {
                     damage *= 1 - e.damageResist;
                   }
@@ -2566,6 +2615,11 @@ export default function App() {
                     mbRt.nextShotShockwave = false;
                     fireMiniBossShockwave(next, e);
                   }
+
+                  // Boss-only single-hit cap (3% of maxHP). Prevents
+                  // augment-stacked one-shots and enforces the
+                  // 30–90s TTK design target. No-op for non-bosses.
+                  damage = capBossHitDamage(e, damage);
 
                   e.health -= damage;
                   // Boss knockback — makes hits feel impactful
@@ -2893,13 +2947,25 @@ export default function App() {
                       }
                     }
                     
-                    const item = spawnItem(e.pos);
+                    const item = spawnItem(e.pos, next.stage);
                     if (item) next.items.push(item);
                     if (next.gameMode === 'NORMAL' && e.enemyType !== EnemyType.BOSS) {
                       const ammoDrop = tryRollAmmoDropOnKill(next, e.pos);
                       next.items = ammoDrop.items;
                     }
-                    
+
+                    // ELITE / WRAITH death: 25% chance to drop a debuff orb
+                    if (
+                      (e.enemyType === EnemyType.ELITE || e.enemyType === EnemyType.WRAITH) &&
+                      Math.random() < 0.25
+                    ) {
+                      const eliteDebuffs: DebuffId[] = e.enemyType === EnemyType.WRAITH
+                        ? ['slow', 'blinded', 'cursed']
+                        : ['weakened', 'slow', 'poisoned'];
+                      const chosen = eliteDebuffs[Math.floor(Math.random() * eliteDebuffs.length)];
+                      next.items.push(createDebuffDrop(e.pos, chosen));
+                    }
+
                     // Special death behaviors
                     if (e.enemyType === EnemyType.SPLINTER) {
                       for (let s = 0; s < 3; s++) {
@@ -3152,6 +3218,18 @@ export default function App() {
               next.playerIFrameTimer = 45;
               next.screenshake = Math.max(next.screenshake, 6);
               next.screenFlash = Math.max(next.screenFlash, 0.35);
+
+              // Comet impact → Blinded
+              if (hz.kind === 'COMET') {
+                applyDebuffToState(next, 'blinded');
+                next.damageTexts.push({
+                  id: Math.random().toString(),
+                  pos: new Vector2(player.pos.x, player.pos.y - 40),
+                  text: '[Blinded] -50% vision for 3s',
+                  life: 2.5,
+                  color: '#6b7280',
+                });
+              }
               hz.hitFlash = 6;
 
               // Knockback away from hazard
@@ -3183,6 +3261,17 @@ export default function App() {
       }
       // ────────────────────────────────────────────────────────────────────
 
+      // Cap loot drops on the ground (default 3) — drop the oldest when exceeded.
+      // DEBUFF orbs (danger) and BOMB drops (boss reward) are exempt so they
+      // never silently disappear behind a stack of health pickups. See
+      // groundItemCap.ts for the full exemption list and rationale.
+      next.items = applyGroundItemCap(next.items);
+
+      // Tick item collection cooldown
+      if (next.itemCollectCooldown > 0) {
+        next.itemCollectCooldown = Math.max(0, next.itemCollectCooldown - dt);
+      }
+
       // Item Collection
       next.items = next.items.filter(item => {
         const d = player.pos.sub(item.pos);
@@ -3199,20 +3288,31 @@ export default function App() {
         }
 
         if (checkCollision(player, item)) {
+          const isXp = item.itemType === ItemType.XP;
+          // Non-XP items respect 0.5s collection cooldown to prevent instant bulk pickup
+          if (!isXp && next.itemCollectCooldown > 0) return true;
+
           missionController.notifyEvent('item_collected');
-          if (item.itemType === ItemType.XP) {
+          if (isXp) {
             next.experience += Math.floor((item.damage ?? 25) * getExperienceGainMultiplier(next));
             playSfx('pickup');
           } else if (item.itemType === ItemType.HEALTH) {
             player.health = Math.min(player.maxHealth, player.health + 100);
             playSfx('pickup');
+            next.damageTexts.push({
+              id: Math.random().toString(),
+              pos: player.pos.clone(),
+              text: '+HEALTH',
+              life: 1.2,
+              color: '#4ade80'
+            });
           } else if (item.itemType === ItemType.SHIELD) {
             grantExtraLife(next);
             playSfx('pickup');
             next.damageTexts.push({
               id: Math.random().toString(),
               pos: player.pos.clone(),
-              text: 'EXTRA LIV!',
+              text: 'EXTRA LIFE!',
               life: 1.5,
               color: '#10b981'
             });
@@ -3257,7 +3357,35 @@ export default function App() {
               life: 1.4,
               color: '#a78bfa',
             });
+          } else if (item.itemType === ItemType.ENERGY) {
+            next.energy = Math.min(next.maxEnergy, next.energy + 30);
+            playSfx('pickup');
+            next.damageTexts.push({
+              id: Math.random().toString(),
+              pos: player.pos.clone(),
+              text: '+ENERGY',
+              life: 1.2,
+              color: '#38bdf8'
+            });
+          } else if (item.itemType === ItemType.DEBUFF && item.debuffId) {
+            applyDebuffToState(next, item.debuffId);
+            const def = DEBUFF_DEFS[item.debuffId];
+            playSfx('pickup');
+            next.damageTexts.push({
+              id: Math.random().toString(),
+              pos: player.pos.clone(),
+              text: `\u26a0\ufe0f [${def.name}] ${def.effectText} (${def.duration}s)`,
+              life: 2.8,
+              color: '#f87171',
+            });
+            next.screenshake = Math.max(next.screenshake, 4);
           }
+
+          // Set collection cooldown for non-XP items (21 dt ≈ 0.5s at 60fps)
+          if (!isXp) {
+            next.itemCollectCooldown = 21;
+          }
+
           next.particles.push(...createItemSparkle(item.pos, item.color, 12));
           return false;
         }
@@ -3786,7 +3914,7 @@ export default function App() {
             selectedShip={uiState.selectedShip}
             isPaused={uiState.isPaused}
             survivalDifficultyLabel={
-              uiState.gameMode === 'NORMAL' ? getSurvivalDifficultyLabelSv() : undefined
+              uiState.gameMode === 'NORMAL' ? getSurvivalDifficultyLabel() : undefined
             }
             miniBossKillsThisRun={gameStateRef.current?.miniBossKillsThisRun ?? 0}
             miniBossActive={
@@ -3849,7 +3977,7 @@ export default function App() {
               }}
             >
               <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-white/60">
-                Miniboss i denna våg
+                Miniboss incoming
               </p>
               <p className="text-sm font-bold uppercase tracking-wide">
                 {gameStateRef.current?.miniBossIncomingText ?? ''}
@@ -3883,7 +4011,7 @@ export default function App() {
               }}
             >
               <p className="text-sm font-bold tracking-widest uppercase">
-                {gameStateRef.current?.miniBossPopupText ?? 'MINIBOSS BESEGRAD'}
+                {gameStateRef.current?.miniBossPopupText ?? 'MINIBOSS DEFEATED'}
               </p>
               {gameStateRef.current?.miniBossPopupSubtext && (
                 <p className="mt-1 text-xs font-semibold text-white/90">
@@ -4174,7 +4302,7 @@ export default function App() {
               {uiState?.gameMode === 'NORMAL' && gameStateRef.current && (
                 <div className="mt-4 flex flex-wrap justify-center gap-2 text-[10px] font-mono uppercase tracking-widest">
                   <span className="px-3 py-1 rounded-full border border-cyan-500/30 text-cyan-300/90 bg-cyan-500/10">
-                    {getSurvivalDifficultyLabelSv()}
+                    {getSurvivalDifficultyLabel()}
                   </span>
                   <span className="px-3 py-1 rounded-full border border-violet-500/30 text-violet-300/90 bg-violet-500/10">
                     Miniboss {gameStateRef.current.miniBossKillsThisRun ?? 0}

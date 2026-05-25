@@ -130,10 +130,10 @@ export function applyMiniBossDefeatJuice(
 ): void {
   const def = getMiniBossDef(miniBossId);
   state.miniBossPopupTimer = 2;
-  state.miniBossPopupText = 'Miniboss besegrad';
+  state.miniBossPopupText = 'Miniboss defeated';
   state.miniBossPopupSubtext = rewards.passive
-    ? `Passiv: ${rewards.passive.name}${rewards.passive.rarity === BuffRarity.LEGENDARY ? ' (Legendarisk)' : ''}`
-    : 'Artefakt säkrad';
+    ? `Passive: ${rewards.passive.name}${rewards.passive.rarity === BuffRarity.LEGENDARY ? ' (Legendary)' : ''}`
+    : 'Artifact secured';
   state.miniBossPopupColor = def.auraColor;
   state.screenFlash = Math.max(state.screenFlash, 6);
   state.screenFlashColor = def.auraColor;

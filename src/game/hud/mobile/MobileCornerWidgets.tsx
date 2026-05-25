@@ -128,7 +128,7 @@ export function MobileScoreCorner({
       <button
         type="button"
         className="mobile-score-corner__menu pointer-events-auto"
-        aria-label="Pausmeny"
+        aria-label="Pause menu"
         onClick={(e) => {
           e.stopPropagation();
           onOpenMenu?.();

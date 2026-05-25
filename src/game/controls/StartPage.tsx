@@ -211,7 +211,7 @@ export const StartPage: React.FC<StartPageProps> = ({
           transition={{ delay: 0.22, duration: 0.4 }}
           className="w-full mb-4"
         >
-          <p className="mb-2 text-center hud-micro-label">Svårighet</p>
+          <p className="mb-2 text-center hud-micro-label">Difficulty</p>
           <div className="grid grid-cols-3 gap-1.5">
             {(['easy', 'normal', 'hard'] as SurvivalDifficulty[]).map((d) => {
               const active = difficulty === d;
@@ -235,9 +235,9 @@ export const StartPage: React.FC<StartPageProps> = ({
             })}
           </div>
           <p className="mt-2 text-center font-mono text-[9px] leading-snug text-white/30">
-            {difficulty === 'easy' && 'Färre minibossar · lägre HP'}
-            {difficulty === 'normal' && 'Design-standard'}
-            {difficulty === 'hard' && 'Miniboss nästan varje våg'}
+            {difficulty === 'easy' && 'Fewer minibosses · lower HP'}
+            {difficulty === 'normal' && 'Balanced'}
+            {difficulty === 'hard' && 'Miniboss almost every wave'}
           </p>
         </motion.div>
 

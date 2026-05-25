@@ -93,7 +93,7 @@ describe('waveSpawnController', () => {
     });
     tickSurvivalWaveSpawns(state, 0.1, 20, () => null);
     expect(state.miniBossIncomingTimer).toBe(4);
-    expect(state.miniBossIncomingText).toBe('Chockvågssköld');
+    expect(state.miniBossIncomingText).toBe('Shockwave Sentinel');
     expect(state.waveMiniBossQueue.length).toBeGreaterThan(0);
   });
 });

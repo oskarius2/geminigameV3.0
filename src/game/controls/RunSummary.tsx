@@ -11,7 +11,7 @@ import { getNextUnlockGoal } from '../meta/artifactGoals';
 import type { RunUnlocksSnapshot } from '../meta/metaProgress';
 import { getCompanionDisplayName } from '../meta/unlockHints';
 import { formatSurvivalTime } from '../meta/survivalStats';
-import { getSurvivalDifficultyLabelSv } from '../balance/miniBossDifficulty';
+import { getSurvivalDifficultyLabel } from '../balance/miniBossDifficulty';
 import { getTotalMiniBossKills } from '../meta/survivalStats';
 
 interface RunSummaryProps {
@@ -120,17 +120,17 @@ export const RunSummary: React.FC<RunSummaryProps> = ({
           {showSurvivalExtras && (
             <>
               <div className="bg-violet-500/10 border border-violet-500/25 p-3 rounded-xl">
-                <p className="text-white/40 text-[10px] uppercase font-bold">Minibossar</p>
+                <p className="text-white/40 text-[10px] uppercase font-bold">Minibosses</p>
                 <p className="text-violet-300 font-black">{miniBossKills}</p>
                 {careerMiniBossKills > miniBossKills && (
                   <p className="text-violet-400/60 text-[10px] font-mono mt-0.5">
-                    Totalt: {careerMiniBossKills}
+                    Total: {careerMiniBossKills}
                   </p>
                 )}
               </div>
               <div className="bg-cyan-500/10 border border-cyan-500/25 p-3 rounded-xl">
-                <p className="text-white/40 text-[10px] uppercase font-bold">Svårighet</p>
-                <p className="text-cyan-300 font-black">{getSurvivalDifficultyLabelSv()}</p>
+                <p className="text-white/40 text-[10px] uppercase font-bold">Difficulty</p>
+                <p className="text-cyan-300 font-black">{getSurvivalDifficultyLabel()}</p>
               </div>
             </>
           )}

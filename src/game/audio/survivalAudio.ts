@@ -38,11 +38,33 @@ export function resetSurvivalAudioSession(): void {
 
 export function startSurvivalAudio(): void {
   resetSurvivalAudioSession();
-  if (AudioManager.isMusicPackReady()) {
+
+  const howlerReady = AudioManager.isMusicPackReady();
+  const howlerFailed = AudioManager.isMusicPackFailed();
+
+  if (import.meta.env.DEV) {
+    const t = AudioManager.MUSIC.battleStage1;
+    console.log(
+      '[survivalAudio] startSurvivalAudio()',
+      '| howlerReady:', howlerReady,
+      '| howlerFailed:', howlerFailed,
+      '| battleStage1.loaded:', t.loaded,
+      '| battleStage1.failed:', t.failed,
+      '| battleStage1.duration:', t.howl?.duration?.().toFixed(2), 's',
+    );
+  }
+
+  if (howlerReady) {
+    // Real Howler MP3s (duration ≥ 5 s) confirmed loaded.
     lastBattleStageBucket = battleStageBucket(1);
     AudioManager.playBattleMusic(1);
     return;
   }
+  // Fallback: placeholder stubs or assets still loading → procedural synths.
+  // playBattleMusic also registers an onload retry so if real assets arrive
+  // later during the session they will take over automatically.
+  lastBattleStageBucket = battleStageBucket(1);
+  AudioManager.playBattleMusic(1);
   startSurvivalMusic();
 }
 

@@ -36,6 +36,24 @@ export enum ItemType {
   AMMO_PACK = 'AMMO_PACK',
   /** Survival ammo system — random secondary / refill. */
   WEAPON_CRATE = 'WEAPON_CRATE',
+  /** Negative effect drop — collecting applies a debuff to the player. */
+  DEBUFF = 'DEBUFF',
+}
+
+// ---------------------------------------------------------------------------
+// DEBUFF SYSTEM
+// ---------------------------------------------------------------------------
+
+/** The five debuff archetypes. Extend here + add a MIGRATIONS step in debuffDefs. */
+export type DebuffId = 'slow' | 'weakened' | 'cursed' | 'blinded' | 'poisoned';
+
+/** Live debuff instance tracked in GameState.activeDebuffs[]. */
+export interface ActiveDebuff {
+  id: DebuffId;
+  /** Seconds remaining. Counts down each frame. */
+  remaining: number;
+  /** Original duration — used to draw the timer ring. */
+  maxDuration: number;
 }
 
 export enum EnemyType {
@@ -148,6 +166,8 @@ export interface Entity {
   miniBossParentId?: string;
   /** Enemy plasma cluster — splash on impact (pixels). */
   explosiveRadius?: number;
+  /** DEBUFF item — which debuff to apply on player pickup. */
+  debuffId?: DebuffId;
 }
 
 export interface Particle {
@@ -347,6 +367,8 @@ export interface GameState {
   dashDuration: number;
   /** Frames remaining before next dash is allowed (dt-normalized). 0 = ready. */
   dashCooldownRemaining: number;
+  /** Frames remaining before next item can be collected (dt-normalized). 0 = ready. */
+  itemCollectCooldown: number;
   buffs: {
     shield: number;
     overdrive: number;
@@ -519,6 +541,9 @@ export interface GameState {
 
   /** Magazine / reserve / reload (NORMAL + SURVIVAL). */
   weaponState: WeaponState;
+
+  /** Currently active negative status effects. Empty array = clean. */
+  activeDebuffs: ActiveDebuff[];
 }
 
 export interface DamageText {

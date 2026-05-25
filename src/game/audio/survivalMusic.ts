@@ -52,14 +52,47 @@ const STAGE_LAYER_GAIN: Record<number, number> = {
   5: 0.75,
 };
 
-/** Master output before music bus — keeps procedural stems from clipping. */
-const MUSIC_MASTER_GAIN = 0.09;
-/** Stereo pad carriers (Hz): left warm, right air — avoids harsh 300–1000 Hz squares. */
-const PAD_FREQ_LEFT = 100;
-const PAD_FREQ_RIGHT = 200;
-const BASS_CARRIER_HZ = 100;
-const MELODY_CARRIER_HZ = 200;
-const STEM_VOICE_GAIN = 0.04;
+/**
+ * Master output before music bus — initial value that is immediately
+ * overwritten by applyThreatMasterGain(0) in startSurvivalMusic(). The old
+ * value of 0.09 was never overridden for non-NORMAL game modes (Campaign /
+ * On-Rails), producing -41 dB of output — inaudible. The true "calm threat"
+ * level from applyThreatMasterGain is 0.72 + stageLayerGain*0.12 ≈ 0.762;
+ * we keep this constant only as a fallback if setTargetAtTime has not fired.
+ */
+const MUSIC_MASTER_GAIN = 0.72;
+/**
+ * Stereo pad carriers — A3 (220 Hz) panned left + E4 (330 Hz) panned right.
+ * These form a perfect fifth, the most consonant interval after the octave.
+ * Old values (100/200 Hz) were in the sub-bass register: laptop and phone
+ * speakers can't reproduce them cleanly → they came out as muddy rumble.
+ * 220–330 Hz is the "warmth" range that every speaker can reproduce.
+ */
+const PAD_FREQ_LEFT = 220;   // A3  — left channel warm pad
+const PAD_FREQ_RIGHT = 330;  // E4  — right channel air pad (perfect fifth above A3)
+/**
+ * Bass carrier: A2 (110 Hz) — one octave below the pad's A3.
+ * Old value 100 Hz was the SAME pitch as the pad left, causing phase
+ * cancellation and a single-frequency drone. 110 Hz vs 220 Hz is a
+ * clean octave, which reinforces rather than fights the pad.
+ */
+const BASS_CARRIER_HZ = 110; // A2
+/**
+ * Melody carrier: A4 (440 Hz) — standard concert pitch, one octave above
+ * the pad. Old value 200 Hz (G3) was in the same octave as the pad,
+ * making everything sound like one undifferentiated blob. 440 Hz sits
+ * above the pad so the melody is actually audible as a distinct voice.
+ */
+const MELODY_CARRIER_HZ = 440; // A4
+/**
+ * Individual oscillator voice gain before the stem bus.
+ * Old value 0.04 — combined with masterMusicGain and channel gain produced
+ * -28 to -31 dB total: audible in headphones, inaudible through laptop /
+ * phone speakers. Raised to 0.12 to bring the procedural mix to roughly
+ * -18 dB at the destination, matching the perceived loudness of a typical
+ * game-music MP3 at the same channel-volume setting.
+ */
+const STEM_VOICE_GAIN = 0.12;
 
 type StemId = 'pad' | 'drums' | 'bass' | 'melody';
 
@@ -90,8 +123,15 @@ export const THREAT_MUSIC_MAX = 100;
 /** Min BPM delta before retuning drum/melody timers (was 3 → stutter; 20 matches tier steps). */
 const THREAT_BPM_STEP_THRESHOLD = 20;
 
-const THREAT_FREQ_MIN_HZ = 80;
-const THREAT_FREQ_MAX_HZ = 240;
+/**
+ * Threat-driven root frequency range for dynamic pad/bass/melody tuning.
+ * Old range 80–240 Hz = sub-bass shelf: speakers distort, sounds like rumble.
+ * New range 220–440 Hz = A3→A4 (one octave): sits in the mid-range where
+ * every speaker reproduces cleanly. At threat=0 pads play A3; at full
+ * critical-tier threat they shift up to A4 — audibly more intense, not louder.
+ */
+const THREAT_FREQ_MIN_HZ = 220; // A3
+const THREAT_FREQ_MAX_HZ = 440; // A4
 const THREAT_RAMP_SEC = 0.1;
 
 /** Normalized threat 0–1 for audio mapping. */
@@ -380,17 +420,31 @@ function tickDrums(): void {
   drumBeat = (drumBeat + 1) % 4;
 }
 
+/**
+ * A-minor pentatonic melody sequence: A4-G4-E4-D4-C4-D4-E4-G4.
+ * Frequencies derived from equal temperament relative to A4 = 440 Hz.
+ * The sequence is indexed every 2 beats (melody timer = beatMs * 2),
+ * which at 92 BPM means one note every ~1.3 s — slow, ambient arpeggiation.
+ * Boss themes scale all frequencies by a small factor for tonal colour shift.
+ */
+const MELODY_SEQUENCE_HZ = [440, 392, 329.6, 293.7, 261.6, 293.7, 329.6, 392]; // A G E D C D E G
+let melodySeqIdx = 0;
+
 function tickMelody(): void {
   const ac = getAudioContext();
   if (!ac || !melodyOsc || !stemGains.melody) return;
   const g = stemGains.melody.gain.value;
   if (g < 0.08) return;
-  const ladder = [0.75, 0.875, 1, 0.875];
-  const idx = Math.floor(Date.now() / 200) % ladder.length;
-  const themeScale =
-    bossTheme === 'void_whisper' ? 0.9 : bossTheme === 'titan_strike' ? 1.05 : 1;
-  const freq = Math.min(MELODY_CARRIER_HZ, MELODY_CARRIER_HZ * ladder[idx] * themeScale);
-  melodyOsc.frequency.setTargetAtTime(freq, ac.currentTime, 0.04);
+
+  melodySeqIdx = (melodySeqIdx + 1) % MELODY_SEQUENCE_HZ.length;
+  let baseFreq = MELODY_SEQUENCE_HZ[melodySeqIdx];
+
+  // Boss theme colour shifts — minor adjustments, not random pitch chaos.
+  if (bossTheme === 'void_whisper') baseFreq *= 0.944; // down a semitone (Gm flavour)
+  else if (bossTheme === 'titan_strike') baseFreq *= 1.059; // up a semitone (Bb intensity)
+  else if (bossTheme === 'red_predator') baseFreq *= 1.0; // stays A minor
+
+  melodyOsc.frequency.setTargetAtTime(baseFreq, ac.currentTime, 0.06);
 }
 
 function startStems(): void {
@@ -452,10 +506,13 @@ function startStems(): void {
   melPan.connect(stemGains.melody!);
   melodyOsc.start();
 
+  // Slow vibrato LFO on the left pad: 0.06 Hz (one cycle per ~17 s) with
+  // ±4 Hz depth. On A3 (220 Hz) that's ±18 cents — gentle breathing motion.
+  // Old depth of 3 Hz on old 100 Hz carrier = ±50 cents: noticeable wobble.
   const lfo = ac.createOscillator();
   const lfoG = ac.createGain();
   lfo.frequency.value = 0.06;
-  lfoG.gain.value = 3;
+  lfoG.gain.value = 4;
   lfo.connect(lfoG);
   if (padOscs[0]) lfoG.connect(padOscs[0].frequency);
   lfo.start();
@@ -475,11 +532,35 @@ export function startSurvivalMusic(): void {
   resumeAudioContext();
   const ac = getAudioContext();
   if (!ac) return;
+
+  if (import.meta.env.DEV) {
+    console.log(
+      '[survivalMusic] startSurvivalMusic() — AC state:',
+      ac.state,
+      '| musicMuted:', isMusicMuted(),
+    );
+  }
+
   running = true;
   lastThreatMusicSample = -1;
   startStems();
   setBpm(BPM_BY_TIER.calm);
   crossfadeStems('calm', 0.5);
+
+  // BUG FIX: masterMusicGain is initialised to MUSIC_MASTER_GAIN (a fallback
+  // constant) inside startStems(). For non-NORMAL game modes (Campaign /
+  // On-Rails) updateMusicThreat() is never called from the game loop, so
+  // the gain never ramps up — music is inaudible. Apply the "calm-threat"
+  // target immediately so all modes start at the correct volume.
+  applyThreatMasterGain(0);
+
+  if (import.meta.env.DEV) {
+    console.log(
+      '[survivalMusic] stems started — masterMusicGain.value:',
+      masterMusicGain?.gain.value,
+      '| running:', running,
+    );
+  }
 }
 
 /**
@@ -500,6 +581,18 @@ export function setStageThreatBpmRange(base: number, max: number): void {
 
 export function updateMusicThreat(threatLevel: number): void {
   if (!running || bossTheme) return;
+  if (import.meta.env.DEV && masterMusicGain) {
+    // Log once per 5 seconds so devtools isn't flooded.
+    const ac = getAudioContext();
+    if (ac && Math.floor(ac.currentTime) % 5 === 0 && Math.floor(ac.currentTime * 10) % 10 === 0) {
+      console.log(
+        '[survivalMusic] updateMusicThreat — threatLevel:', threatLevel,
+        '| masterGain:', masterMusicGain.gain.value.toFixed(3),
+        '| AC state:', ac.state,
+        '| currentTier:', currentTier,
+      );
+    }
+  }
 
   const tier = getThreatTier(threatLevel);
   if (tier !== currentTier) {
@@ -521,10 +614,14 @@ export function updateMusicThreat(threatLevel: number): void {
 }
 
 export function stopSurvivalMusic(): void {
+  if (import.meta.env.DEV) {
+    console.log('[survivalMusic] stopSurvivalMusic() called — running was:', running);
+  }
   running = false;
   lastBossIntensitySample = -1;
   lastThreatMusicSample = -1;
   drumBeat = 0;
+  melodySeqIdx = 0;
   if (drumTimer) clearInterval(drumTimer);
   if (hihatTimer) clearInterval(hihatTimer);
   if (melodyTimer) clearInterval(melodyTimer);

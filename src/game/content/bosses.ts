@@ -2,6 +2,8 @@ import { Obstacle } from '../types';
 import { Vector2 } from '../utils/vector';
 import { buildBossArenaLayout } from './bossArenas';
 
+export type BossVisualId = 'salvage' | 'hive' | 'void' | 'crimson' | 'colossus' | 'wraith';
+
 export interface BossDefinition {
   id: string;
   name: string;
@@ -10,6 +12,7 @@ export interface BossDefinition {
   hpMult: number;
   speedMult: number;
   damageMult: number;
+  bossVisualId: BossVisualId;
 }
 
 export const BOSS_DEFINITIONS: BossDefinition[] = [
@@ -21,6 +24,7 @@ export const BOSS_DEFINITIONS: BossDefinition[] = [
     hpMult: 1.0,
     speedMult: 0.85,
     damageMult: 1.2,
+    bossVisualId: 'salvage',
   },
   {
     id: 'hive_regent',
@@ -30,6 +34,7 @@ export const BOSS_DEFINITIONS: BossDefinition[] = [
     hpMult: 1.15,
     speedMult: 1,
     damageMult: 1.3,
+    bossVisualId: 'hive',
   },
   {
     id: 'void_cardinal',
@@ -39,6 +44,7 @@ export const BOSS_DEFINITIONS: BossDefinition[] = [
     hpMult: 1.3,
     speedMult: 0.9,
     damageMult: 1.4,
+    bossVisualId: 'void',
   },
   {
     id: 'crimson_tyrant',
@@ -48,6 +54,7 @@ export const BOSS_DEFINITIONS: BossDefinition[] = [
     hpMult: 1.5,
     speedMult: 0.75,
     damageMult: 1.6,
+    bossVisualId: 'crimson',
   },
   {
     id: 'colossus',
@@ -57,6 +64,7 @@ export const BOSS_DEFINITIONS: BossDefinition[] = [
     hpMult: 2.2,
     speedMult: 0.35,
     damageMult: 2.2,
+    bossVisualId: 'colossus',
   },
   {
     id: 'hive_queen',
@@ -66,6 +74,7 @@ export const BOSS_DEFINITIONS: BossDefinition[] = [
     hpMult: 0.9,
     speedMult: 0.75,
     damageMult: 1.0,
+    bossVisualId: 'hive',
   },
   {
     id: 'wraith_lord',
@@ -75,6 +84,7 @@ export const BOSS_DEFINITIONS: BossDefinition[] = [
     hpMult: 1.1,
     speedMult: 1.5,
     damageMult: 1.8,
+    bossVisualId: 'wraith',
   },
 ];
 

@@ -207,7 +207,7 @@ export const RailsHUD: React.FC<RailsHUDProps> = ({
             </div>
             {weakPointOpen && (
               <p className="mt-1 text-[8px] uppercase tracking-widest text-red-300/90">
-                Svag punkt öppen
+                Weak point open
               </p>
             )}
           </div>
@@ -219,7 +219,7 @@ export const RailsHUD: React.FC<RailsHUDProps> = ({
           className="text-sm font-bold uppercase tracking-widest text-cyan-300"
           style={{ textShadow: '0 0 14px rgba(34, 211, 238, 0.65)' }}
         >
-          Score {Math.floor(score).toLocaleString('sv-SE')}
+          Score {Math.floor(score).toLocaleString()}
         </p>
         <p className="mt-1 text-[11px] uppercase tracking-[0.2em] text-white/55">
           Kills {killCount}
@@ -234,7 +234,7 @@ export const RailsHUD: React.FC<RailsHUDProps> = ({
             textShadow: '0 0 18px rgba(252, 211, 77, 0.85)',
           }}
         >
-          <p className="text-xs font-bold uppercase tracking-widest">2x score aktiv</p>
+          <p className="text-xs font-bold uppercase tracking-widest">2x score active</p>
           <p className="mt-0.5 text-[11px] tabular-nums opacity-90">{scoreMultLeft}s</p>
         </div>
       )}
@@ -245,7 +245,7 @@ export const RailsHUD: React.FC<RailsHUDProps> = ({
             const def = RAILS_POWERUP_DEFS[chip.kind];
             const detail =
               chip.kind === 'SHIELD_BUBBLE'
-                ? `${shieldBubbleHits} träff`
+                ? `${shieldBubbleHits} hit${shieldBubbleHits !== 1 ? 's' : ''}`
                 : chip.kind === 'MEGA_BLAST'
                   ? `x${megaBlastCharges}`
                   : `${Math.ceil(chip.remaining)}s`;

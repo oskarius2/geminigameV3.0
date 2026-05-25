@@ -1,4 +1,4 @@
-import { GameState, Entity, EntityType, Particle, ItemType, EnemyType, Obstacle, Hazard, MovingHazard, Trait, RandomEvent, ShipId } from './types';
+import { GameState, Entity, EntityType, Particle, ItemType, EnemyType, Obstacle, Hazard, MovingHazard, Trait, RandomEvent, ShipId, DebuffId, ActiveDebuff } from './types';
 import { Vector2 } from './utils/vector';
 import { COLORS, SIZES, PHYSICS } from '../config/gameTheme';
 import { hasTimeSlowEffect } from './buffs/applyBuff';
@@ -256,6 +256,7 @@ export const INITIAL_STATE = (
     dashDirection: new Vector2(0, 0),
     dashDuration: 0,
     dashCooldownRemaining: 0,
+    itemCollectCooldown: 0,
     buffs: {
       shield: 0,
       overdrive: 0,
@@ -373,6 +374,7 @@ export const INITIAL_STATE = (
     shopRunFlags: {},
     shopScrapSpent: 0,
     weaponState: createInitialWeaponState(),
+    activeDebuffs: [],
   };
 
   const shipDef = getShipDef(selectedShip);
@@ -424,10 +426,10 @@ export function handleEventChoice(state: GameState, choiceId: string) {
         state.runScrapEarned -= 40;
         const heal = state.player.maxHealth * 0.4;
         state.player.health = Math.min(state.player.maxHealth, state.player.health + heal);
-        popup('-40 SKROT', '#f87171');
+        popup('-40 SCRAP', '#f87171');
         popup('+40% HP', '#4ade80');
       } else {
-        popup('INTE NOG SKROT', '#f87171');
+        popup('NOT ENOUGH SCRAP', '#f87171');
       }
       break;
     case 'rob_deal':
@@ -437,12 +439,12 @@ export function handleEventChoice(state: GameState, choiceId: string) {
         popup('-100 HP', '#f87171');
       } else {
         state.runScrapEarned += 50;
-        popup('+50 SKROT', '#4ade80');
+        popup('+50 SCRAP', '#4ade80');
       }
       break;
     case 'salvage_safe':
       state.runScrapEarned += 60;
-      popup('+60 SKROT', '#4ade80');
+      popup('+60 SCRAP', '#4ade80');
       break;
     case 'salvage_risky':
       if (Math.random() < 0.4) {
@@ -458,10 +460,10 @@ export function handleEventChoice(state: GameState, choiceId: string) {
       if (state.runScrapEarned >= 100) {
         state.runScrapEarned -= 100;
         state.baseDamage *= 1.1;
-        popup('-100 SKROT', '#f87171');
+        popup('-100 SCRAP', '#f87171');
         popup('DMG +10%', '#fbbf24');
       } else {
-        popup('INTE NOG SKROT', '#f87171');
+        popup('NOT ENOUGH SCRAP', '#f87171');
       }
       break;
     case 'deal_blood':
@@ -1050,10 +1052,14 @@ export function spawnXpOrb(pos: Vector2, amount = 25): Entity {
   };
 }
 
-export function spawnItem(pos: Vector2): Entity | null {
-  // 25% chance to drop a health item
-  if (Math.random() > 0.25) return null; 
-  
+/**
+ * Stage-scaled drop chance: 1% at stage 1, ramping to 3% at stage 5+.
+ * `currentNonXpItems` is used to enforce a max-on-ground cap externally.
+ */
+export function spawnItem(pos: Vector2, stage = 1): Entity | null {
+  const dropChance = Math.min(0.03, 0.005 + stage * 0.005);
+  if (Math.random() > dropChance) return null;
+
   return {
     id: Math.random().toString(36).substr(2, 9),
     type: EntityType.ITEM,
@@ -1067,6 +1073,107 @@ export function spawnItem(pos: Vector2): Entity | null {
     color: '#4ade80',
     itemType: ItemType.HEALTH,
   };
+}
+
+// ============================================================================
+// DEBUFF SYSTEM
+// ============================================================================
+
+/** Static definition for a debuff archetype. */
+export interface DebuffDef {
+  id: DebuffId;
+  name: string;
+  /** Human-readable effect line shown in the toast. */
+  effectText: string;
+  duration: number; // seconds
+  /** Canvas fill color for the drop orb. */
+  color: string;
+  /** Hex tint used on the HUD icon and screen effect. */
+  tintHex: string;
+}
+
+export const DEBUFF_DEFS: Record<DebuffId, DebuffDef> = {
+  slow: {
+    id: 'slow',
+    name: 'Slow',
+    effectText: '-40% speed',
+    duration: 6,
+    color: '#7c3aed',
+    tintHex: '#7c3aed',
+  },
+  weakened: {
+    id: 'weakened',
+    name: 'Weakened',
+    effectText: '-30% damage',
+    duration: 5,
+    color: '#dc2626',
+    tintHex: '#dc2626',
+  },
+  cursed: {
+    id: 'cursed',
+    name: 'Cursed',
+    effectText: '-15% accuracy',
+    duration: 8,
+    color: '#9333ea',
+    tintHex: '#9333ea',
+  },
+  blinded: {
+    id: 'blinded',
+    name: 'Blinded',
+    effectText: '-50% vision',
+    duration: 3,
+    color: '#1e1e2e',
+    tintHex: '#000000',
+  },
+  poisoned: {
+    id: 'poisoned',
+    name: 'Poisoned',
+    effectText: '5 HP/s DOT',
+    duration: 10,
+    color: '#16a34a',
+    tintHex: '#4ade80',
+  },
+};
+
+/**
+ * Build a collectible DEBUFF drop entity. If placed in `state.items[]` the
+ * player will pick it up and immediately receive the debuff.
+ *
+ * We also export `applyDebuffToState` so that direct sources (boss projectile
+ * hits, comet impacts) can apply debuffs without requiring a drop item.
+ */
+export function createDebuffDrop(pos: Vector2, debuffId: DebuffId): Entity {
+  const def = DEBUFF_DEFS[debuffId];
+  return {
+    id: Math.random().toString(36).substr(2, 9),
+    type: EntityType.ITEM,
+    active: true,
+    pos: pos.clone(),
+    radius: 11,
+    health: 1,
+    maxHealth: 1,
+    speed: 0,
+    velocity: new Vector2(0, 0),
+    color: def.color,
+    itemType: ItemType.DEBUFF,
+    debuffId,
+  };
+}
+
+/**
+ * Apply or refresh a debuff on the game state. If the same debuff is already
+ * active its timer is reset to max duration (no stacking, just refresh).
+ */
+export function applyDebuffToState(state: GameState, id: DebuffId): ActiveDebuff {
+  const def = DEBUFF_DEFS[id];
+  const existing = state.activeDebuffs.find((d) => d.id === id);
+  if (existing) {
+    existing.remaining = def.duration;
+    return existing;
+  }
+  const debuff: ActiveDebuff = { id, remaining: def.duration, maxDuration: def.duration };
+  state.activeDebuffs.push(debuff);
+  return debuff;
 }
 
 export function spawnHazard(state: GameState): Hazard {

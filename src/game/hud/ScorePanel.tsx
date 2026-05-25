@@ -128,7 +128,7 @@ export function ScorePanel({
         </div>
         <button
           type="button"
-          aria-label="Pausmeny"
+          aria-label="Pause menu"
           onClick={(e) => {
             e.stopPropagation();
             onOpenMenu?.();

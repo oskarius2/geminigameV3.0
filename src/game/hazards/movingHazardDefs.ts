@@ -101,14 +101,29 @@ function pickFrom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+/** Minimum spawn-point distance (px) between a new hazard and any existing one. */
+const MIN_SPAWN_SEPARATION = 220;
+/** Max attempts to find a non-overlapping edge spawn before giving up. */
+const SPAWN_ATTEMPTS = 6;
+
+/** Toggle dev logging for hazard spawns. Set false in production builds. */
+const HAZARD_SPAWN_LOG =
+  typeof import.meta !== 'undefined' && (import.meta as any).env?.DEV;
+
 /**
  * Spawn a moving hazard from a random world edge, aimed toward the interior.
+ *
+ * @param existing Currently alive hazards — used to avoid overlapping spawn points.
+ *                 Pass `[]` if you don't care about clustering.
+ * @returns The new hazard, or `null` if no non-overlapping edge slot was found
+ *          (caller can simply skip spawning this tick).
  */
 export function spawnMovingHazard(
   worldWidth: number,
   worldHeight: number,
   stage: number,
-): MovingHazard {
+  existing: MovingHazard[] = [],
+): MovingHazard | null {
   const stageConf = getHazardStageConfig(stage);
   const kind = pickFrom(stageConf.kinds);
   const cfg = MOVING_HAZARD_CONFIGS[kind];
@@ -118,28 +133,52 @@ export function spawnMovingHazard(
   const damage = rand(cfg.damage[0], cfg.damage[1]);
   const pattern: MovingHazardPattern = pickFrom(cfg.patterns);
 
-  // Pick a random edge: 0=top, 1=bottom, 2=left, 3=right
-  const edge = Math.floor(Math.random() * 4);
-  const margin = radius + 10;
+  // Try multiple edge spawns; reject any that overlap an existing hazard.
   let spawnX = 0;
   let spawnY = 0;
+  let edge = 0;
+  let attempt = 0;
+  for (; attempt < SPAWN_ATTEMPTS; attempt++) {
+    edge = Math.floor(Math.random() * 4);
+    const margin = radius + 10;
+
+    if (edge === 0) {
+      spawnX = rand(margin, worldWidth - margin);
+      spawnY = -margin;
+    } else if (edge === 1) {
+      spawnX = rand(margin, worldWidth - margin);
+      spawnY = worldHeight + margin;
+    } else if (edge === 2) {
+      spawnX = -margin;
+      spawnY = rand(margin, worldHeight - margin);
+    } else {
+      spawnX = worldWidth + margin;
+      spawnY = rand(margin, worldHeight - margin);
+    }
+
+    let overlaps = false;
+    for (const other of existing) {
+      const dx = other.pos.x - spawnX;
+      const dy = other.pos.y - spawnY;
+      if (dx * dx + dy * dy < MIN_SPAWN_SEPARATION * MIN_SPAWN_SEPARATION) {
+        overlaps = true;
+        break;
+      }
+    }
+    if (!overlaps) break;
+  }
+  if (attempt >= SPAWN_ATTEMPTS) {
+    if (HAZARD_SPAWN_LOG) {
+      console.log(
+        `[hazard] skipped ${kind} — could not find non-overlapping edge after ${SPAWN_ATTEMPTS} attempts`,
+      );
+    }
+    return null;
+  }
+
   // Aim toward a random point near world center (with scatter)
   const targetX = worldWidth / 2 + (Math.random() - 0.5) * worldWidth * 0.5;
   const targetY = worldHeight / 2 + (Math.random() - 0.5) * worldHeight * 0.5;
-
-  if (edge === 0) {
-    spawnX = rand(margin, worldWidth - margin);
-    spawnY = -margin;
-  } else if (edge === 1) {
-    spawnX = rand(margin, worldWidth - margin);
-    spawnY = worldHeight + margin;
-  } else if (edge === 2) {
-    spawnX = -margin;
-    spawnY = rand(margin, worldHeight - margin);
-  } else {
-    spawnX = worldWidth + margin;
-    spawnY = rand(margin, worldHeight - margin);
-  }
 
   const dx = targetX - spawnX;
   const dy = targetY - spawnY;
@@ -147,16 +186,12 @@ export function spawnMovingHazard(
   const vx = (dx / len) * speed;
   const vy = (dy / len) * speed;
 
-  // For orbital/sine patterns we store the initial anchor = mid-world
   const anchorX = worldWidth / 2;
   const anchorY = worldHeight / 2;
-
-  // Sine amplitude based on speed (faster → narrower wave for comets, wider for debris)
   const sineAmplitude = kind === 'COMET' ? 40 + Math.random() * 60 : 80 + Math.random() * 120;
-
   const health = cfg.health + Math.floor(stage / 3);
 
-  return {
+  const hazard: MovingHazard = {
     id: `hz_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     kind,
     pos: new Vector2(spawnX, spawnY),
@@ -177,4 +212,14 @@ export function spawnMovingHazard(
     scoreValue: cfg.scoreValue,
     knockbackForce: cfg.knockbackForce,
   };
+
+  if (HAZARD_SPAWN_LOG) {
+    const edgeName = ['TOP', 'BOTTOM', 'LEFT', 'RIGHT'][edge];
+    console.log(
+      `[hazard] spawn ${kind} stage=${stage} edge=${edgeName} pos=(${spawnX.toFixed(0)},${spawnY.toFixed(0)}) ` +
+        `vel=(${vx.toFixed(1)},${vy.toFixed(1)}) hp=${health} dmg=${damage.toFixed(1)} pattern=${pattern}`,
+    );
+  }
+
+  return hazard;
 }

@@ -29,7 +29,10 @@ import { MINI_BOSS_DEFINITIONS } from './bosses/miniBossDefs';
 import { isVoidWalkerActive } from './bosses/miniBossPassives';
 import { getBossEnrageMultipliers } from './bosses/bossSurvivalAI';
 import { BOSS_ARENA_COLORS } from './content/bossArenas';
+import { BOSS_DEFINITIONS } from './content/bosses';
+import { drawBossGeometry } from './bosses/bossVisuals';
 import { HAZARD_COLORS, PROJECTILE_COLORS, GLOW_INTENSITY } from '../config/gameTheme';
+import { DEBUFF_DEFS } from './Logic';
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState, screenWidth: number, screenHeight: number, options: { isMobile?: boolean; debug?: boolean } = {}) {
   // Ensure screen dimensions are finite to avoid canvas errors
@@ -821,124 +824,591 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     const drawX = item.pos.x - camera.x;
     const drawY = item.pos.y - camera.y;
 
-    if (drawX < -25 || drawX > width + 25 || drawY < -25 || drawY > height + 25) return;
+    if (drawX < -50 || drawX > width + 50 || drawY < -50 || drawY > height + 50) return;
 
     const time = Date.now() / 400;
     const bounce = Math.sin(time + item.id.length) * 4;
-    const size = item.radius * (isMobile ? 1.5 : 1); // Make items slightly bigger on mobile
+    const pulse = 0.9 + Math.sin(time * 2) * 0.1;
+    const size = item.radius * (isMobile ? 1.5 : 1) * pulse;
 
-    // Rarity determination
-    if (item.itemType === ItemType.XP) {
-      ctx.save();
-      ctx.translate(drawX, drawY + bounce);
-      if (!isMobile) {
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = '#22d3ee';
-      }
-      ctx.fillStyle = '#22d3ee';
-      ctx.beginPath();
-      ctx.arc(0, 0, size * 0.9, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(0, 0, size * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-      return;
-    }
-
-    const isLegendary = [ItemType.MULTISHOT, ItemType.OVERDRIVE, ItemType.SHIELD, ItemType.RAPID_FIRE, ItemType.TIME_SLOW, ItemType.PIERCING].includes(item.itemType!);
-    const isRare = [ItemType.BOMB, ItemType.MAGNET, ItemType.SCORE_MULTIPLIER].includes(item.itemType!);
-
+    // ── Item-specific visual rendering ──
     ctx.save();
     ctx.translate(drawX, drawY + bounce);
-    
-    if (isLegendary) {
-      // Pulsing Star shape
-      const rot = time;
-      ctx.rotate(rot);
-      if (!isMobile) {
-        ctx.shadowBlur = 25;
-        ctx.shadowColor = item.color;
-      }
-      ctx.fillStyle = item.color;
-      ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        const ang = (i * Math.PI * 2) / 5;
-        const x = Math.cos(ang) * size * 1.6;
-        const y = Math.sin(ang) * size * 1.6;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-        const ang2 = ang + (Math.PI * 2) / 10;
-        ctx.lineTo(Math.cos(ang2) * size * 0.8, Math.sin(ang2) * size * 0.8);
-      }
-      ctx.closePath();
-      ctx.fill();
-      
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (isRare) {
-      // Rotating Diamond
-      ctx.rotate(time * 1.5);
-      if (!isMobile) {
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = item.color;
-      }
-      ctx.fillStyle = item.color;
-      ctx.rotate(Math.PI / 4);
-      ctx.fillRect(-size * 0.8, -size * 0.8, size * 1.6, size * 1.6);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(-size * 0.8, -size * 0.8, size * 1.6, size * 1.6);
-    } else {
-      // Common Hexagon
-      ctx.rotate(time * 0.5);
-      if (!isMobile) {
-        ctx.shadowBlur = 8;
-        ctx.shadowColor = item.color;
-      }
-      ctx.fillStyle = item.color;
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const ang = (i * Math.PI * 2) / 6;
-        const x = Math.cos(ang) * size;
-        const y = Math.sin(ang) * size;
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.stroke();
-    }
-    
-    ctx.restore();
-    if (!isMobile) {
-      ctx.shadowBlur = 0;
-    }
-    
-    // Draw Emojis
-    const emojiMap: Record<string, string> = {
-      [ItemType.HEALTH]: '❤️',
-      [ItemType.ENERGY]: '⚡',
-      [ItemType.SCORE]: '⭐',
-      [ItemType.MULTISHOT]: '🔷',
-      [ItemType.OVERDRIVE]: '💥',
-      [ItemType.SHIELD]: '🛡️',
-      [ItemType.MAGNET]: '🧲',
-      [ItemType.SCORE_MULTIPLIER]: '💯',
-      [ItemType.BOMB]: '💣',
-      [ItemType.RAPID_FIRE]: '🔥',
-      [ItemType.TIME_SLOW]: '⏰',
-      [ItemType.PIERCING]: '🎯',
-    };
-    const emoji = item.itemType ? emojiMap[item.itemType] : '🎁';
-    ctx.font = `${Math.round(isMobile ? 22 : 16 / zoom)}px sans-serif`;
-    ctx.fillStyle = 'white';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(emoji, drawX, drawY + bounce);
 
+    // Helper: draw a plus/cross shape
+    const drawPlus = (s: number, thickness: number) => {
+      ctx.fillRect(-s, -thickness / 2, s * 2, thickness);
+      ctx.fillRect(-thickness / 2, -s, thickness, s * 2);
+    };
+
+    // Helper: draw a 5-pointed star
+    const drawStar = (outerR: number, innerR: number, points: number) => {
+      ctx.beginPath();
+      for (let i = 0; i < points * 2; i++) {
+        const r = i % 2 === 0 ? outerR : innerR;
+        const ang = (i * Math.PI) / points - Math.PI / 2;
+        const x = Math.cos(ang) * r;
+        const y = Math.sin(ang) * r;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+    };
+
+    // Helper: draw a diamond
+    const drawDiamond = (s: number) => {
+      ctx.beginPath();
+      ctx.moveTo(0, -s);
+      ctx.lineTo(s * 0.6, 0);
+      ctx.lineTo(0, s);
+      ctx.lineTo(-s * 0.6, 0);
+      ctx.closePath();
+    };
+
+    let label = '';
+    let labelColor = '#ffffff';
+    let glowColor = item.color;
+    let glowIntensity = 15;
+
+    switch (item.itemType) {
+      case ItemType.HEALTH: {
+        // Red glowing plus symbol
+        glowColor = '#ef4444';
+        glowIntensity = 20;
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#ef4444';
+        drawPlus(size * 1.2, size * 0.5);
+        ctx.fillStyle = '#fca5a5';
+        drawPlus(size * 0.6, size * 0.25);
+        label = '+25 HP';
+        labelColor = '#4ade80';
+        break;
+      }
+
+      case ItemType.XP: {
+        // Golden glowing orb with spinning sparkle
+        glowColor = '#fbbf24';
+        glowIntensity = 22;
+        ctx.rotate(time * 1.5);
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        // Outer gold ring
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 1.1, 0, Math.PI * 2);
+        ctx.stroke();
+        // Inner gold sphere
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+        // White core highlight
+        ctx.fillStyle = '#fef3c7';
+        ctx.beginPath();
+        ctx.arc(-size * 0.2, -size * 0.2, size * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        const xpAmount = item.damage ?? 50;
+        label = `+${xpAmount} XP`;
+        labelColor = '#fbbf24';
+        break;
+      }
+
+      case ItemType.ARTIFACT: {
+        // Multi-colored pulsing star
+        glowColor = '#e879f9';
+        glowIntensity = 30;
+        ctx.rotate(time * 0.8);
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        // Rainbow gradient effect via multiple layers
+        const colors = ['#f472b6', '#c084fc', '#60a5fa', '#34d399'];
+        colors.forEach((c, i) => {
+          ctx.fillStyle = c;
+          ctx.globalAlpha = 0.7 - i * 0.15;
+          drawStar(size * (1.8 - i * 0.3), size * (0.8 - i * 0.15), 5);
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        label = '⭐ ARTIFACT';
+        labelColor = '#e879f9';
+        break;
+      }
+
+      case ItemType.ENERGY: {
+        // Blue lightning bolt
+        glowColor = '#3b82f6';
+        glowIntensity = 18;
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#3b82f6';
+        ctx.beginPath();
+        ctx.moveTo(-size * 0.3, -size * 1.2);
+        ctx.lineTo(size * 0.3, -size * 0.3);
+        ctx.lineTo(0, -size * 0.3);
+        ctx.lineTo(size * 0.5, size * 1.2);
+        ctx.lineTo(-size * 0.1, size * 0.2);
+        ctx.lineTo(size * 0.1, size * 0.2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#93c5fd';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+        label = '+20 NRG';
+        labelColor = '#60a5fa';
+        break;
+      }
+
+      case ItemType.SHIELD: {
+        // Cyan shield icon
+        glowColor = '#22d3ee';
+        glowIntensity = 20;
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#22d3ee';
+        ctx.beginPath();
+        ctx.moveTo(0, -size * 1.3);
+        ctx.quadraticCurveTo(size * 1.2, -size * 0.8, size * 1.0, size * 0.3);
+        ctx.quadraticCurveTo(0, size * 1.5, 0, size * 1.5);
+        ctx.quadraticCurveTo(0, size * 1.5, -size * 1.0, size * 0.3);
+        ctx.quadraticCurveTo(-size * 1.2, -size * 0.8, 0, -size * 1.3);
+        ctx.fill();
+        ctx.fillStyle = '#a5f3fc';
+        ctx.beginPath();
+        ctx.arc(0, -size * 0.2, size * 0.3, 0, Math.PI * 2);
+        ctx.fill();
+        label = '🛡️ SHIELD';
+        labelColor = '#22d3ee';
+        break;
+      }
+
+      case ItemType.OVERDRIVE: {
+        // Orange/red burst
+        glowColor = '#f97316';
+        glowIntensity = 25;
+        ctx.rotate(time * 2);
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#f97316';
+        drawStar(size * 1.6, size * 0.7, 8);
+        ctx.fill();
+        ctx.fillStyle = '#fed7aa';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+        label = '💥 OVERDRIVE';
+        labelColor = '#fb923c';
+        break;
+      }
+
+      case ItemType.MAGNET: {
+        // Purple magnetic field
+        glowColor = '#a855f7';
+        glowIntensity = 18;
+        ctx.rotate(time * 0.5);
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        // Outer ring
+        ctx.strokeStyle = '#a855f7';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 1.2, 0, Math.PI * 2);
+        ctx.stroke();
+        // Inner arc
+        ctx.strokeStyle = '#c084fc';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.7, Math.PI * 0.2, Math.PI * 1.8);
+        ctx.stroke();
+        ctx.fillStyle = '#e9d5ff';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        label = '🧲 MAGNET';
+        labelColor = '#c084fc';
+        break;
+      }
+
+      case ItemType.RAPID_FIRE: {
+        // Red/orange flames
+        glowColor = '#ef4444';
+        glowIntensity = 22;
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        // Flame shape
+        ctx.fillStyle = '#ef4444';
+        ctx.beginPath();
+        ctx.moveTo(0, -size * 1.4);
+        ctx.quadraticCurveTo(size * 0.8, -size * 0.5, size * 0.5, size * 0.8);
+        ctx.quadraticCurveTo(0, size * 0.4, -size * 0.5, size * 0.8);
+        ctx.quadraticCurveTo(-size * 0.8, -size * 0.5, 0, -size * 1.4);
+        ctx.fill();
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.moveTo(0, -size * 0.8);
+        ctx.quadraticCurveTo(size * 0.4, -size * 0.2, size * 0.25, size * 0.5);
+        ctx.quadraticCurveTo(0, size * 0.3, -size * 0.25, size * 0.5);
+        ctx.quadraticCurveTo(-size * 0.4, -size * 0.2, 0, -size * 0.8);
+        ctx.fill();
+        label = '🔥 RAPID FIRE';
+        labelColor = '#fbbf24';
+        break;
+      }
+
+      case ItemType.TIME_SLOW: {
+        // Blue hourglass/clock
+        glowColor = '#6366f1';
+        glowIntensity = 18;
+        ctx.rotate(time * 0.3);
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.strokeStyle = '#6366f1';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 1.1, 0, Math.PI * 2);
+        ctx.stroke();
+        // Clock hands
+        ctx.strokeStyle = '#a5b4fc';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -size * 0.6);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(size * 0.4, size * 0.2);
+        ctx.stroke();
+        ctx.fillStyle = '#c7d2fe';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+        label = '⏰ TIME SLOW';
+        labelColor = '#818cf8';
+        break;
+      }
+
+      case ItemType.PIERCING: {
+        // Red arrow/spear tip
+        glowColor = '#dc2626';
+        glowIntensity = 18;
+        ctx.rotate(time * 0.8);
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#dc2626';
+        ctx.beginPath();
+        ctx.moveTo(0, -size * 1.5);
+        ctx.lineTo(size * 0.8, size * 0.5);
+        ctx.lineTo(0, size * 0.1);
+        ctx.lineTo(-size * 0.8, size * 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#fca5a5';
+        ctx.beginPath();
+        ctx.arc(0, -size * 0.3, size * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+        label = '🎯 PIERCING';
+        labelColor = '#f87171';
+        break;
+      }
+
+      case ItemType.MULTISHOT: {
+        // Blue triple-shot icon
+        glowColor = '#0ea5e9';
+        glowIntensity = 20;
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#0ea5e9';
+        // Three small circles in a triangle
+        const offsets = [
+          { x: 0, y: -size * 0.7 },
+          { x: -size * 0.6, y: size * 0.4 },
+          { x: size * 0.6, y: size * 0.4 },
+        ];
+        offsets.forEach(o => {
+          ctx.beginPath();
+          ctx.arc(o.x, o.y, size * 0.45, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.fillStyle = '#7dd3fc';
+        offsets.forEach(o => {
+          ctx.beginPath();
+          ctx.arc(o.x, o.y, size * 0.2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        label = '🔷 MULTISHOT';
+        labelColor = '#38bdf8';
+        break;
+      }
+
+      case ItemType.BOMB: {
+        // Dark bomb with fuse
+        glowColor = '#f59e0b';
+        glowIntensity = 15;
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#374151';
+        ctx.beginPath();
+        ctx.arc(0, size * 0.2, size * 1.0, 0, Math.PI * 2);
+        ctx.fill();
+        // Fuse
+        ctx.strokeStyle = '#78716c';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, -size * 0.8);
+        ctx.quadraticCurveTo(size * 0.3, -size * 1.2, size * 0.1, -size * 1.4);
+        ctx.stroke();
+        // Spark
+        ctx.fillStyle = '#fbbf24';
+        ctx.beginPath();
+        ctx.arc(size * 0.1, -size * 1.4, size * 0.2, 0, Math.PI * 2);
+        ctx.fill();
+        label = '💣 BOMB';
+        labelColor = '#fcd34d';
+        break;
+      }
+
+      case ItemType.SCORE: {
+        // Yellow star
+        glowColor = '#facc15';
+        glowIntensity = 18;
+        ctx.rotate(time * 0.5);
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#facc15';
+        drawStar(size * 1.3, size * 0.5, 5);
+        ctx.fill();
+        ctx.fillStyle = '#fef9c3';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+        label = '+100 PTS';
+        labelColor = '#fde047';
+        break;
+      }
+
+      case ItemType.SCORE_MULTIPLIER: {
+        // Gold 2X emblem
+        glowColor = '#d97706';
+        glowIntensity = 22;
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#d97706';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 1.2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#fef3c7';
+        ctx.font = `bold ${Math.round(size * 1.2)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('2X', 0, 0);
+        label = '💯 2X SCORE';
+        labelColor = '#fbbf24';
+        break;
+      }
+
+      case ItemType.AMMO_PACK: {
+        // Green ammo box
+        glowColor = '#22c55e';
+        glowIntensity = 16;
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#166534';
+        ctx.fillRect(-size * 0.9, -size * 0.7, size * 1.8, size * 1.4);
+        ctx.fillStyle = '#22c55e';
+        ctx.fillRect(-size * 0.7, -size * 0.5, size * 1.4, size * 1.0);
+        ctx.fillStyle = '#86efac';
+        ctx.font = `bold ${Math.round(size * 0.7)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('A', 0, 0);
+        const ammoAmt = item.ammoPickupAmount ?? 30;
+        label = `+${ammoAmt} AMMO`;
+        labelColor = '#4ade80';
+        break;
+      }
+
+      case ItemType.WEAPON_CRATE: {
+        // Orange weapon crate
+        glowColor = '#f97316';
+        glowIntensity = 20;
+        ctx.rotate(time * 0.2);
+        if (!isMobile) {
+          ctx.shadowBlur = glowIntensity;
+          ctx.shadowColor = glowColor;
+        }
+        ctx.fillStyle = '#7c2d12';
+        ctx.fillRect(-size * 1.0, -size * 0.8, size * 2.0, size * 1.6);
+        ctx.strokeStyle = '#fed7aa';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-size * 1.0, -size * 0.8, size * 2.0, size * 1.6);
+        ctx.fillStyle = '#fb923c';
+        ctx.font = `bold ${Math.round(size * 0.6)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('W', 0, 0);
+        label = '🔫 WEAPON';
+        labelColor = '#fdba74';
+        break;
+      }
+
+      case ItemType.DEBUFF: {
+        // Danger orb: pulsing dark sphere with colored spikes + ⚠ symbol
+        const dDef = item.debuffId ? DEBUFF_DEFS[item.debuffId] : null;
+        const dColor = dDef?.color ?? '#7c3aed';
+        const dDark = dDef?.tintHex ?? '#3b0764';
+        const pulseScale = 0.9 + Math.sin(time * 3) * 0.12;
+        const orbSize = size * pulseScale;
+
+        if (!isMobile) {
+          ctx.shadowBlur = 24;
+          ctx.shadowColor = dColor;
+        }
+
+        // Outer glow ring
+        ctx.beginPath();
+        ctx.arc(0, 0, orbSize * 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = `${dColor}33`;
+        ctx.fill();
+
+        // Dark body
+        ctx.shadowBlur = 0;
+        ctx.beginPath();
+        ctx.arc(0, 0, orbSize, 0, Math.PI * 2);
+        ctx.fillStyle = dDark;
+        ctx.fill();
+
+        // Colored outer ring stroke
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = dColor;
+        ctx.beginPath();
+        ctx.arc(0, 0, orbSize, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // 8 radiating spikes (danger indicator)
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = dColor;
+        for (let i = 0; i < 8; i++) {
+          const ang = (i / 8) * Math.PI * 2 + time * 0.5;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(ang) * orbSize, Math.sin(ang) * orbSize);
+          ctx.lineTo(Math.cos(ang) * orbSize * 1.55, Math.sin(ang) * orbSize * 1.55);
+          ctx.stroke();
+        }
+
+        // Bright inner core
+        if (!isMobile) {
+          ctx.shadowBlur = 12;
+          ctx.shadowColor = dColor;
+        }
+        ctx.beginPath();
+        ctx.arc(0, 0, orbSize * 0.42, 0, Math.PI * 2);
+        ctx.fillStyle = dColor;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // ⚠ warning symbol
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${Math.round(orbSize * 0.75)}px sans-serif`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('⚠', 0, 1);
+
+        label = dDef ? `☠ ${dDef.name.toUpperCase()}` : '☠ DEBUFF';
+        labelColor = dColor;
+        break;
+      }
+
+      default: {
+        // Fallback: Rotating hexagon
+        ctx.rotate(time * 0.5);
+        if (!isMobile) {
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = item.color;
+        }
+        ctx.fillStyle = item.color;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const ang = (i * Math.PI * 2) / 6;
+          const x = Math.cos(ang) * size;
+          const y = Math.sin(ang) * size;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        label = '🎁 ITEM';
+        labelColor = '#ffffff';
+      }
+    }
+
+    ctx.restore();
+    if (!isMobile) ctx.shadowBlur = 0;
+
+    // ── Draw text label above item ──
+    if (label) {
+      const labelY = drawY + bounce - size * 2.2;
+      const fontSize = isMobile ? 11 : 10;
+      ctx.font = `bold ${fontSize}px 'JetBrains Mono', 'Fira Code', monospace`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+
+      // Semi-transparent background pill
+      const metrics = ctx.measureText(label);
+      const padX = 4;
+      const padY = 2;
+      const bgW = metrics.width + padX * 2;
+      const bgH = fontSize + padY * 2;
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+      ctx.beginPath();
+      ctx.roundRect(drawX - bgW / 2, labelY - bgH + padY, bgW, bgH, 4);
+      ctx.fill();
+
+      // Label text with glow
+      if (!isMobile) {
+        ctx.shadowBlur = 6;
+        ctx.shadowColor = labelColor;
+      }
+      ctx.fillStyle = labelColor;
+      ctx.fillText(label, drawX, labelY);
+      if (!isMobile) ctx.shadowBlur = 0;
+    }
   });
 
   // ── Batch-Render Particles (grouped by color+type to minimize draw calls) ──
@@ -1691,52 +2161,12 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
         ctx.stroke();
         break;
 
-      case EnemyType.BOSS:
-        // Huge menacing dark star (multi-layered)
-        ctx.beginPath();
-        for (let i = 0; i < 16; i++) {
-          const ang = (i * Math.PI * 2) / 16 + time * 0.5;
-          const r = i % 2 === 0 ? radius * 1.5 : radius * 0.9;
-          const px = Math.cos(ang) * r;
-          const py = Math.sin(ang) * r;
-          if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-        ctx.fillStyle = hitIntensity > 0 ? '#ffffff' : '#0f172a'; 
-        ctx.fill();
-        ctx.lineWidth = 6;
-        ctx.strokeStyle = '#ef4444';
-        ctx.stroke();
-
-        // Inner core
-        ctx.beginPath();
-        ctx.arc(0, 0, radius * 0.7, 0, Math.PI * 2);
-        ctx.fillStyle = hitIntensity > 0 ? '#fff' : '#111827';
-        ctx.fill();
-        
-        // Inner pulsing eye
-        ctx.beginPath();
-        const pulseR = radius * 0.4 + Math.sin(time * 5) * radius * 0.1;
-        ctx.arc(0, 0, pulseR, 0, Math.PI * 2);
-        ctx.fillStyle = '#ef4444';
-        ctx.fill();
-
-        // Orbiting defense crystals
-        for (let i = 0; i < 6; i++) {
-           const plateAng = (i * Math.PI * 2 / 6) - time * 1.5;
-           const px = Math.cos(plateAng) * radius * 2.2;
-           const py = Math.sin(plateAng) * radius * 2.2;
-           
-           ctx.beginPath();
-           ctx.moveTo(px + Math.cos(plateAng) * 15, py + Math.sin(plateAng) * 15);
-           ctx.lineTo(px + Math.cos(plateAng + Math.PI/2) * 8, py + Math.sin(plateAng + Math.PI/2) * 8);
-           ctx.lineTo(px + Math.cos(plateAng + Math.PI) * 15, py + Math.sin(plateAng + Math.PI) * 15);
-           ctx.lineTo(px + Math.cos(plateAng - Math.PI/2) * 8, py + Math.sin(plateAng - Math.PI/2) * 8);
-           ctx.closePath();
-           ctx.fillStyle = '#ff4400';
-           ctx.fill();
-        }
+      case EnemyType.BOSS: {
+        // Resolve per-boss visual identity from state.activeBossId
+        const bossDef = BOSS_DEFINITIONS.find((b) => b.id === state.activeBossId);
+        drawBossGeometry(ctx, bossDef?.bossVisualId, radius, time, hitIntensity > 0);
         break;
+      }
 
       case EnemyType.ELITE:
         // Golden Spike Octagon
@@ -2434,6 +2864,109 @@ ctx.fillRect(dx, dy, layer.size / zoom, layer.size / zoom);
     ctx.fillRect(-offsetX, -offsetY, width, height); // compensating for shake offset
     ctx.restore();
   }
+
+  // ── Debuff screen effects ─────────────────────────────────────────────────
+  if (state.activeDebuffs && state.activeDebuffs.length > 0) {
+    const t = Date.now() / 1000;
+
+    for (const db of state.activeDebuffs) {
+      if (db.remaining <= 0) continue;
+      // Pulse fades to 0 in the last 0.5s so the effect visually expires
+      const fadeOut = Math.min(1, db.remaining / 0.5);
+
+      if (db.id === 'blinded') {
+        // Heavy black vignette that pulses, blotting out peripheral vision
+        const blindIntensity = 0.6 * fadeOut + Math.sin(t * 3) * 0.05 * fadeOut;
+        const bv = createSafeRadialGradient(width / 2, height / 2, width * 0.12, width / 2, height / 2, width * 0.65);
+        if (bv) {
+          bv.addColorStop(0, 'transparent');
+          bv.addColorStop(0.6, `rgba(0,0,0,${blindIntensity * 0.4})`);
+          bv.addColorStop(1, `rgba(0,0,0,${blindIntensity})`);
+          ctx.save();
+          ctx.fillStyle = bv;
+          ctx.fillRect(-offsetX, -offsetY, width, height);
+          ctx.restore();
+        }
+      } else if (db.id === 'poisoned') {
+        // Sickly green overlay — subtle pulse
+        const poisonAlpha = (0.12 + Math.sin(t * 2) * 0.04) * fadeOut;
+        ctx.save();
+        ctx.globalCompositeOperation = 'overlay';
+        ctx.fillStyle = `rgba(22, 163, 74, ${poisonAlpha})`;
+        ctx.fillRect(-offsetX, -offsetY, width, height);
+        ctx.restore();
+      } else if (db.id === 'slow') {
+        // Purple-haze leading edge — thin arc around player
+        ctx.save();
+        ctx.strokeStyle = `rgba(124, 58, 237, ${0.55 * fadeOut})`;
+        ctx.lineWidth = 3;
+        const slowArc = t * 0.5;
+        ctx.beginPath();
+        ctx.arc(pDrawX, pDrawY, p.radius * 3.4, slowArc, slowArc + Math.PI * 0.6);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(pDrawX, pDrawY, p.radius * 3.4, slowArc + Math.PI, slowArc + Math.PI * 1.6);
+        ctx.stroke();
+        ctx.restore();
+      } else if (db.id === 'weakened') {
+        // Dark-red desaturation tint
+        const weakAlpha = (0.08 + Math.sin(t * 1.5) * 0.02) * fadeOut;
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.fillStyle = `rgba(180, 30, 30, ${weakAlpha + 0.08})`;
+        ctx.fillRect(-offsetX, -offsetY, width, height);
+        ctx.restore();
+      } else if (db.id === 'cursed') {
+        // Swirling dark-purple particles around player (lightweight: just a rotating arc)
+        ctx.save();
+        ctx.strokeStyle = `rgba(147, 51, 234, ${0.5 * fadeOut})`;
+        ctx.lineWidth = 2;
+        const ca = t * 1.2;
+        for (let ci = 0; ci < 3; ci++) {
+          const off = (ci / 3) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.arc(pDrawX, pDrawY, p.radius * (3.8 + ci * 0.5), ca + off, ca + off + Math.PI * 0.4);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+
+    // ── Debuff icon badges (world-space, just above the player) ──────────────
+    ctx.save();
+    ctx.font = `bold ${Math.round(10 / zoom)}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    const iconSize = Math.round(14 / zoom);
+    const iconGap = Math.round(17 / zoom);
+    const iconBaseY = pDrawY - p.radius - Math.round(20 / zoom);
+    const visibleDebuffs = state.activeDebuffs.filter((d) => d.remaining > 0);
+    const totalW = visibleDebuffs.length * iconGap;
+    visibleDebuffs.forEach((db, idx) => {
+      const ix = pDrawX - totalW / 2 + idx * iconGap + iconGap / 2;
+      const iy = iconBaseY;
+      // Background badge
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.beginPath();
+      ctx.arc(ix, iy, iconSize / 2, 0, Math.PI * 2);
+      ctx.fill();
+      // Timer ring
+      const pct = db.remaining / db.maxDuration;
+      ctx.strokeStyle = db.id === 'poisoned' ? '#4ade80'
+        : db.id === 'blinded' ? '#6b7280'
+        : db.id === 'slow' ? '#a78bfa'
+        : db.id === 'weakened' ? '#f87171'
+        : '#c084fc';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(ix, iy, iconSize / 2, -Math.PI / 2, -Math.PI / 2 + pct * Math.PI * 2);
+      ctx.stroke();
+      // Letter label
+      ctx.fillStyle = '#ffffff';
+      ctx.fillText(db.id[0].toUpperCase(), ix, iy + Math.round(4 / zoom));
+    });
+    ctx.restore();
+  }
+  // ── End debuff effects ────────────────────────────────────────────────────
 
   // Vignette Effect
   const vignette = createSafeRadialGradient(width/2, height/2, width/4, width/2, height/2, width);

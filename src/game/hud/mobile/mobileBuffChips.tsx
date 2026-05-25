@@ -27,7 +27,7 @@ export function buildMobileBuffChips(
 ): React.ReactNode[] {
   const out: React.ReactNode[] = [];
   if (extraLifeCharges > 0) {
-    out.push(chip('LIV', <GameIconFromKey iconKey="Shield" size={12} color="#67e8f9" />));
+    out.push(chip('LIFE', <GameIconFromKey iconKey="Shield" size={12} color="#67e8f9" />));
   }
   if (buffs.overdrive > 0) {
     out.push(chip(`OD`, <GameIconFromKey iconKey="Zap" size={12} color="#fda4af" />));

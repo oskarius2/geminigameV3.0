@@ -53,7 +53,7 @@ export function ActiveBuffChips({ buffs, extraLifeCharges, hudVariant }: ActiveB
 
   if (extraLifeCharges > 0) {
     chips.push(
-      <Chip key="life" icon={<GameIconFromKey iconKey="Shield" size={12} color="#67e8f9" />} label={compact ? 'EXTRA' : 'EXTRA LIV'} tone="cyan" />,
+      <Chip key="life" icon={<GameIconFromKey iconKey="Shield" size={12} color="#67e8f9" />} label={compact ? 'EXTRA' : 'EXTRA LIFE'} tone="cyan" />,
     );
   }
   if (buffs.overdrive > 0) {

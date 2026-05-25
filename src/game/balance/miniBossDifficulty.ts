@@ -11,9 +11,9 @@ const STORAGE_KEY = 'geminigame-survival-difficulty';
 let cachedDifficulty: SurvivalDifficulty | null = null;
 
 export const SURVIVAL_DIFFICULTY_LABELS: Record<SurvivalDifficulty, string> = {
-  easy: 'Lätt',
+  easy: 'Easy',
   normal: 'Normal',
-  hard: 'Svår',
+  hard: 'Hard',
 };
 
 export function getSurvivalDifficulty(): SurvivalDifficulty {
@@ -129,6 +129,9 @@ export function applySurvivalDifficultyToThreat(baseThreat: number): number {
   return Math.min(100, Math.max(0, baseThreat + threatOffset));
 }
 
-export function getSurvivalDifficultyLabelSv(): string {
+export function getSurvivalDifficultyLabel(): string {
   return SURVIVAL_DIFFICULTY_LABELS[getSurvivalDifficulty()];
 }
+
+/** @deprecated Use getSurvivalDifficultyLabel() */
+export const getSurvivalDifficultyLabelSv = getSurvivalDifficultyLabel;

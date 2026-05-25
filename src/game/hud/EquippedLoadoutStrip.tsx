@@ -98,10 +98,10 @@ export function EquippedLoadoutStrip({
                   disabled={locked}
                   aria-label={
                     locked
-                      ? 'Vapen B låst'
+                      ? 'Weapon B locked'
                       : slot === 'CANNON_A'
-                        ? 'Vapen A'
-                        : 'Vapen B'
+                        ? 'Weapon A'
+                        : 'Weapon B'
                   }
                   onClick={(e) => {
                     e.stopPropagation();

@@ -157,7 +157,17 @@ export function connectToSfx(
 export function connectToMusic(node: AudioNode, gain = 1): void {
   const bus = ensureMaster();
   const dest = channelGains.music;
-  if (!bus || !dest || musicMuted) return;
+  if (!bus || !dest || musicMuted) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        '[audioEngine] connectToMusic() bailed — bus:', !!bus,
+        '| dest:', !!dest,
+        '| musicMuted:', musicMuted,
+        '— oscillators will be disconnected from output!',
+      );
+    }
+    return;
+  }
   const g = bus.ac.createGain();
   g.gain.value = gain;
   node.connect(g);

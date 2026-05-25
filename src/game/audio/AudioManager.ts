@@ -286,6 +286,26 @@ function battleKeyForStage(stage: number): MusicKey {
 
 const CROSSFADE_MS = 300;
 
+/** Fade-in and play a track that is confirmed loaded and playable. */
+function doFadeInPlay(track: ManagedSound, key: MusicKey): void {
+  const targetVol = musicGain(track.baseVolume);
+  track.howl.volume(0);
+  try {
+    track.howl.play();
+  } catch {
+    if (currentMusicKey === key) currentMusicKey = null;
+    return;
+  }
+  let elapsed = 0;
+  const step = 16;
+  const fade = setInterval(() => {
+    elapsed += step;
+    const t = Math.min(1, elapsed / CROSSFADE_MS);
+    track.howl.volume(targetVol * t);
+    if (t >= 1) clearInterval(fade);
+  }, step);
+}
+
 function playMusicKey(key: MusicKey): void {
   if (currentMusicKey === key) return;
 
@@ -310,27 +330,35 @@ function playMusicKey(key: MusicKey): void {
 
   currentMusicKey = key;
   const track = MUSIC[key];
-  if (!canPlay(track)) {
+
+  // Track still loading — keep currentMusicKey set and retry once it loads.
+  // This fixes the race where game starts before MP3s finish fetching.
+  if (!track.failed && track.howl != null && !track.loaded) {
+    track.howl.once('load', () => {
+      // Only play if this key is still wanted AND the file is real music
+      // (≥ 5 s). Placeholder stubs are ~0.27 s — let procedural synths play.
+      if (currentMusicKey === key) {
+        if (canPlay(track) && track.howl.duration() >= 5) {
+          doFadeInPlay(track, key);
+        } else {
+          currentMusicKey = null;
+        }
+      }
+    });
+    track.howl.once('loaderror', () => {
+      if (currentMusicKey === key) currentMusicKey = null;
+    });
+    return;
+  }
+
+  // Placeholder stubs are valid but short (< 5 s). Don't play them; the
+  // procedural Web Audio fallback is already running as the real soundtrack.
+  if (!canPlay(track) || track.howl.duration() < 5) {
     currentMusicKey = null;
     return;
   }
 
-  // Fade in the new track.
-  const targetVol = musicGain(track.baseVolume);
-  track.howl.volume(0);
-  try {
-    track.howl.play();
-  } catch {
-    return;
-  }
-  let elapsed = 0;
-  const step = 16;
-  const fade = setInterval(() => {
-    elapsed += step;
-    const t = Math.min(1, elapsed / CROSSFADE_MS);
-    track.howl.volume(targetVol * t);
-    if (t >= 1) clearInterval(fade);
-  }, step);
+  doFadeInPlay(track, key);
 }
 
 export const AudioManager = {
@@ -339,26 +367,38 @@ export const AudioManager = {
   UI_SOUNDS,
   WEAPON_SOUNDS,
 
+  /**
+   * True only when the Howler music pack has REAL audio content.
+   * Placeholder stub files (shipped for dev, ~0.27 s each) load successfully
+   * but must NOT be treated as ready — the procedural Web Audio fallback
+   * should play instead. Threshold: any real music loop is ≥ 5 s.
+   */
   useHowlerMusic(): boolean {
-    return (
-      MUSIC.battleStage1.loaded &&
-      !MUSIC.battleStage1.failed
-    );
+    const t = MUSIC.battleStage1;
+    return t.loaded && !t.failed && t.howl.duration() >= 5;
   },
 
   isMusicPackReady(): boolean {
     return AudioManager.useHowlerMusic();
   },
 
+  /** True when the battle-music file has definitively errored (404 / decode fail). */
+  isMusicPackFailed(): boolean {
+    return MUSIC.battleStage1.failed;
+  },
+
+  /**
+   * True only when weapon WAVs contain real audio (≥ 130 ms).
+   * Dev placeholders are exactly 100 ms of silence; real hit sounds are longer.
+   */
   isWeaponPackReady(): boolean {
-    return (
-      WEAPON_SOUNDS.primary.loaded &&
-      !WEAPON_SOUNDS.primary.failed
-    );
+    const t = WEAPON_SOUNDS.primary;
+    return t.loaded && !t.failed && t.howl.duration() >= 0.13;
   },
 
   isUiPackReady(): boolean {
-    return UI_SOUNDS.click.loaded && !UI_SOUNDS.click.failed;
+    const t = UI_SOUNDS.click;
+    return t.loaded && !t.failed && t.howl.duration() >= 0.13;
   },
 
   playMenuTheme: () => {

@@ -40,7 +40,7 @@ export const MINI_BOSS_DEFINITIONS: Record<MiniBossId, MiniBossDef> = {
   shockwave_sentinel: {
     id: 'shockwave_sentinel',
     name: 'Shockwave Sentinel',
-    displayName: 'Chockvågssköld',
+    displayName: 'Shockwave Sentinel',
     baseHP: 150,
     baseSpeed: 100,
     visualScale: 2,
@@ -61,7 +61,7 @@ export const MINI_BOSS_DEFINITIONS: Record<MiniBossId, MiniBossDef> = {
   eclipse_dasher: {
     id: 'eclipse_dasher',
     name: 'Eclipse Dasher',
-    displayName: 'Eklips-slaktare',
+    displayName: 'Eclipse Dasher',
     baseHP: 120,
     baseSpeed: 140,
     visualScale: 1.8,
@@ -82,7 +82,7 @@ export const MINI_BOSS_DEFINITIONS: Record<MiniBossId, MiniBossDef> = {
   void_harbinger: {
     id: 'void_harbinger',
     name: 'Void Harbinger',
-    displayName: 'Tomhetsbudbärare',
+    displayName: 'Void Harbinger',
     baseHP: 180,
     baseSpeed: 90,
     visualScale: 1.9,
@@ -103,7 +103,7 @@ export const MINI_BOSS_DEFINITIONS: Record<MiniBossId, MiniBossDef> = {
   plasma_splitter: {
     id: 'plasma_splitter',
     name: 'Plasma Splitter',
-    displayName: 'Plasma-delare',
+    displayName: 'Plasma Splitter',
     baseHP: 160,
     baseSpeed: 110,
     visualScale: 1.7,
@@ -124,7 +124,7 @@ export const MINI_BOSS_DEFINITIONS: Record<MiniBossId, MiniBossDef> = {
   chronos_guardian: {
     id: 'chronos_guardian',
     name: 'Chronos Guardian',
-    displayName: 'Kronos-vakt',
+    displayName: 'Chronos Guardian',
     baseHP: 170,
     baseSpeed: 85,
     visualScale: 1.8,
@@ -145,7 +145,7 @@ export const MINI_BOSS_DEFINITIONS: Record<MiniBossId, MiniBossDef> = {
   swarm_overlord: {
     id: 'swarm_overlord',
     name: 'Swarm Overlord',
-    displayName: 'Svärmherre',
+    displayName: 'Swarm Overlord',
     baseHP: 140,
     baseSpeed: 130,
     visualScale: 1.6,
